@@ -1,0 +1,8 @@
+{
+  "receiverAddress": "0x7529845C597E61FCE3eE31A098bE157dbFA2c0b4",
+  "eventAddress": "0x7529845C597E61FCE3eE31A098bE157dbFA2c0b4",
+  "chainSelectorName": "polygon-testnet-amoy",
+  "secretOwner": "0x89fe160bBBe59eAF428f23F095B71E5C0EdCDfa3",
+  "secretNamespace": "main",
+  "workflowVersion": 1
+}

@@ -1,0 +1,8 @@
+{
+  "receiverAddress": "0x0000000000000000000000000000000000000000",
+  "eventAddress": "0x0000000000000000000000000000000000000000",
+  "chainSelectorName": "polygon-testnet-amoy",
+  "secretOwner": "0x0000000000000000000000000000000000000000",
+  "secretNamespace": "main",
+  "workflowVersion": 1
+}

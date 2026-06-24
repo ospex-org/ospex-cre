@@ -1,0 +1,24 @@
+# ==========================================================================
+# CRE WORKFLOW SETTINGS FILE — Ospex verify slice
+# ==========================================================================
+# Workflow-specific settings per CRE CLI target. The on-chain KeystoneForwarder
+# metadata carries a bytes10 workflow name, so keep workflow-name <= 10 bytes if
+# the receiver binds i_workflowName (this slice binds owner + optional id; name
+# binding is left disabled until the bytes10 mapping is confirmed at deploy).
+# ==========================================================================
+staging-settings:
+  user-workflow:
+    workflow-name: "osverify"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.staging.json"
+    secrets-path: "../secrets.yaml"
+
+# ==========================================================================
+production-settings:
+  user-workflow:
+    workflow-name: "osverify"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.production.json"
+    secrets-path: "../secrets.yaml"

@@ -1,0 +1,12 @@
+# Secrets — never commit
+*.env
+.env
+
+# Dependencies
+node_modules/
+
+# CRE build artifacts (regenerate with `cre workflow build`)
+.cre_build_tmp.js
+binary.wasm
+binary.wasm.br.b64
+dist/
