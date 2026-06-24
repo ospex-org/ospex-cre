@@ -4,5 +4,6 @@
   "chainSelectorName": "polygon-testnet-amoy",
   "secretOwner": "0x89fe160bBBe59eAF428f23F095B71E5C0EdCDfa3",
   "secretNamespace": "main",
-  "workflowVersion": 1
+  "workflowVersion": 1,
+  "chainId": 80002
 }
