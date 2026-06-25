@@ -1,10 +1,13 @@
 # ==========================================================================
-# CRE WORKFLOW SETTINGS FILE — Ospex verify slice
+# CRE WORKFLOW SETTINGS FILE — Ospex CRE oracle (verify / market-update / score)
 # ==========================================================================
 # Workflow-specific settings per CRE CLI target. The on-chain KeystoneForwarder
-# metadata carries a bytes10 workflow name, so keep workflow-name <= 10 bytes if
-# the receiver binds i_workflowName (this slice binds owner + optional id; name
-# binding is left disabled until the bytes10 mapping is confirmed at deploy).
+# metadata carries a bytes10 workflow name, which CRE derives as SHA256(name) ->
+# first 10 hex chars -> those ASCII chars as bytes (a HASH, length-independent — so
+# there is NO name-length limit). The receiver binds the workflow OWNER always and
+# the NAME optionally (i_workflowName, enforced when non-zero); the workflow id is
+# never pinned (CRE rotates it on every update). When name binding is enabled, set
+# the receiver's i_workflowName to that SHA256-derived bytes10, not the plaintext.
 # ==========================================================================
 staging-settings:
   user-workflow:
