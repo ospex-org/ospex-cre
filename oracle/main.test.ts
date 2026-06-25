@@ -7,6 +7,7 @@ import {
 	normalizeOdds,
 	extractMarketTicks,
 	isFinalFlag,
+	evmAddressSchema,
 } from "./lib";
 
 describe("parseIsoToUnixSeconds", () => {
@@ -179,5 +180,21 @@ describe("isFinalFlag", () => {
 		expect(isFinalFlag(false)).toBe(false);
 		expect(isFinalFlag("false")).toBe(false);
 		expect(isFinalFlag(undefined)).toBe(false);
+	});
+});
+
+describe("evmAddressSchema", () => {
+	// Synthetic addresses only — fixtures must not pin the public repo to any real operator wallet.
+	test("accepts a valid 20-byte address (any case)", () => {
+		const mixedCase = "0xAbCdeF0123456789AbCdeF0123456789aBcDeF01";
+		expect(evmAddressSchema.parse(mixedCase)).toBe(mixedCase);
+		expect(evmAddressSchema.safeParse("0x1234567890123456789012345678901234567890").success).toBe(true);
+	});
+
+	test("rejects the zero address (unfilled placeholder) and malformed input", () => {
+		expect(evmAddressSchema.safeParse("0x0000000000000000000000000000000000000000").success).toBe(false);
+		expect(evmAddressSchema.safeParse("0x123").success).toBe(false); // too short
+		expect(evmAddressSchema.safeParse("abcdef0123456789abcdef0123456789abcdef01").success).toBe(false); // no 0x
+		expect(evmAddressSchema.safeParse("").success).toBe(false);
 	});
 });

@@ -2,7 +2,7 @@
   "receiverAddress": "0x0000000000000000000000000000000000000000",
   "eventAddress": "0x0000000000000000000000000000000000000000",
   "chainSelectorName": "polygon-testnet-amoy",
-  "secretOwner": "0x89fe160bBBe59eAF428f23F095B71E5C0EdCDfa3",
+  "secretOwner": "0x0000000000000000000000000000000000000000",
   "secretNamespace": "main",
   "workflowVersion": 1,
   "chainId": 80002

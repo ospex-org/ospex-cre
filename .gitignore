@@ -2,6 +2,11 @@
 *.env
 .env
 
+# Operator-filled target configs — copy from the committed config.*.example.json templates
+# and fill in the deploy-specific addresses. The real configs are never committed.
+oracle/config.staging.json
+oracle/config.production.json
+
 # Dependencies
 node_modules/
 
