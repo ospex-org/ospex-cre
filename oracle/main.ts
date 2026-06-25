@@ -1,16 +1,18 @@
 // Ospex CRE oracle — VERIFY / MARKET-UPDATE / SCORE.
 //
 // Trigger: EVM log trigger on CreOracleReceiver.CreOracleRequested(uint256 indexed contestId,
-//          uint8 indexed requestType, string rundownId, string sportspageId, string jsonoddsId).
-//          The handler dispatches on requestType: 0 = verify, 1 = market-update, 2 = score.
+//          uint8 indexed requestType, uint64 requestNonce, string rundownId, string sportspageId,
+//          string jsonoddsId). The handler dispatches on requestType: 0 = verify, 1 = market-update, 2 = score.
 // Work:    confidential-HTTP fetch from the providers, then —
 //          • verify (0): 3-of-3 agreement (TheRundown + Sportspage + JsonOdds) on (league, teams,
 //            hour-rounded start); report the league id + actual (Rundown) start time.
 //          • market (1): single-source JsonOdds odds for the game (sport-filtered to fit the 25KB
 //            consensus cap); report the 8 moneyline/spread/total fields.
 //          • score (2): 3-of-3 agreement on the final score; report away + home scores.
-// Output:  report = abi.encode(uint8 requestType, bytes payload); payload shapes mirror the
-//          CreOracleReceiver handlers (verify/market/score) exactly.
+// Output:  report = abi.encode(uint8 requestType, uint256 chainId, address receiver,
+//          uint64 requestNonce, bytes payload); inner payload shapes mirror the CreOracleReceiver
+//          handlers (verify/market/score) exactly. chainId + receiver are domain separation;
+//          requestNonce is echoed and enforced for market (stale-odds guard).
 //
 // Ported from ospex-source-files-and-other/src/contestCreation.js (the fuller team legend that
 // includes the MLB "Athletics" entry the deployed createContest.js lacks). Date handling is made
@@ -57,6 +59,7 @@ const configSchema = z.object({
 	secretOwner: z.string(), // vault secret owner (CRE deploy wallet)
 	secretNamespace: z.string(),
 	workflowVersion: z.number().int().min(0).max(65535),
+	chainId: z.number().int().positive(), // EVM chain id of the receiver chain (Amoy 80002; Polygon mainnet 137) — bound into the report for domain separation
 });
 type Config = z.infer<typeof configSchema>;
 
@@ -68,12 +71,13 @@ const REQUEST_TYPE_MARKET = 1;
 const REQUEST_TYPE_SCORE = 2;
 
 // event CreOracleRequested(uint256 indexed contestId, uint8 indexed requestType,
-//                          string rundownId, string sportspageId, string jsonoddsId)
-const EVENT_SIG = "CreOracleRequested(uint256,uint8,string,string,string)";
+//                          uint64 requestNonce, string rundownId, string sportspageId, string jsonoddsId)
+const EVENT_SIG = "CreOracleRequested(uint256,uint8,uint64,string,string,string)";
 const TOPIC0: Hex = toEventSelector(EVENT_SIG);
 
-// Non-indexed event args (the three external ids), in declared order, live in log.data.
+// Non-indexed event args (requestNonce + the three external ids), in declared order, live in log.data.
 const NONINDEXED_ARGS = [
+	{ name: "requestNonce", type: "uint64" },
 	{ name: "rundownId", type: "string" },
 	{ name: "sportspageId", type: "string" },
 	{ name: "jsonoddsId", type: "string" },
@@ -415,6 +419,7 @@ function resolveScoreFacts(runtime: Runtime<Config>, log: DecodedRequest): Score
 type DecodedRequest = {
 	contestId: bigint;
 	requestType: number;
+	requestNonce: bigint; // uint64 — echoed back in the report; the receiver enforces it for market
 	rundownId: string;
 	sportspageId: string;
 	jsonoddsId: string;
@@ -423,11 +428,11 @@ type DecodedRequest = {
 function decodeRequest(log: EVMLog): DecodedRequest {
 	const contestId = BigInt(bytesToHex(log.topics[1])); // uint256 (indexed)
 	const requestType = Number(BigInt(bytesToHex(log.topics[2]))); // uint8 (indexed)
-	const [rundownId, sportspageId, jsonoddsId] = decodeAbiParameters(
+	const [requestNonce, rundownId, sportspageId, jsonoddsId] = decodeAbiParameters(
 		NONINDEXED_ARGS,
 		bytesToHex(log.data),
-	) as [string, string, string];
-	return { contestId, requestType, rundownId, sportspageId, jsonoddsId };
+	) as [bigint, string, string, string];
+	return { contestId, requestType, requestNonce, rundownId, sportspageId, jsonoddsId };
 }
 
 // Common tail: wrap the payload in the report envelope, sign it under DON consensus, and write it
@@ -439,8 +444,25 @@ function submitReport(
 	payload: Hex,
 	summary: Record<string, unknown>,
 ): string {
-	// Report envelope — must match CreOracleReceiver.onReport: abi.encode(uint8 requestType, bytes).
-	const report = encodeAbiParameters([{ type: "uint8" }, { type: "bytes" }], [requestType, payload]);
+	// Report envelope — must match CreOracleReceiver.onReport:
+	// abi.encode(uint8 requestType, uint256 chainId, address receiver, uint64 requestNonce, bytes payload).
+	// chainId + receiver are domain separation; requestNonce is echoed (the receiver enforces it for market).
+	const report = encodeAbiParameters(
+		[
+			{ type: "uint8" },
+			{ type: "uint256" },
+			{ type: "address" },
+			{ type: "uint64" },
+			{ type: "bytes" },
+		],
+		[
+			requestType,
+			BigInt(runtime.config.chainId),
+			runtime.config.receiverAddress as Hex,
+			req.requestNonce,
+			payload,
+		],
+	);
 
 	const signed = runtime.report(prepareReportRequest(report)).result();
 	const evmClient = new cre.capabilities.EVMClient(AMOY_SELECTOR);

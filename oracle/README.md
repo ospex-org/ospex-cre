@@ -13,7 +13,7 @@ selected by the event's `requestType`:
   reports the eight odds/line fields.
 - **score** (`2`) — 3-of-3 agreement on the final score; reports away + home scores.
 
-The report envelope is `abi.encode(uint8 requestType, bytes payload)`, fixed to match the receiver.
+The report envelope is `abi.encode(uint8 requestType, uint256 chainId, address receiver, uint64 requestNonce, bytes payload)`, fixed to match the receiver — `chainId` + `receiver` are domain separation, and `requestNonce` is echoed and enforced for market-update (the stale-odds guard). The three inner `payload` shapes mirror the `CreOracleReceiver` verify / market / score handlers exactly.
 
 ## Files
 
