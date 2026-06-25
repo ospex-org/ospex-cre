@@ -1,6 +1,8 @@
-// Pure, deterministic helpers for the Ospex verify workflow. Kept in a separate module so
-// they can be unit-tested (bun test) without violating the CRE rule that the workflow ENTRY
-// module (main.ts) may only export the parameterless `main`.
+// Pure, deterministic helpers for the Ospex CRE oracle workflow, plus the ABI contract and config
+// validators. Kept in a separate module so they can be unit-tested (bun test) without violating the
+// CRE rule that the workflow ENTRY module (main.ts) may only export the parameterless `main`.
+
+import { z } from "zod";
 
 /**
  * Parse an ISO-8601 datetime to unix SECONDS, interpreting a missing timezone as UTC.
@@ -187,3 +189,87 @@ export function extractMarketTicks(odds: RawOdds): MarketTicks {
 export function isFinalFlag(v: unknown): boolean {
 	return v === true || (typeof v === "string" && v.toLowerCase() === "true");
 }
+
+// ──────────────────────────── ABI contract (shared with CreOracleReceiver) ──
+//
+// The on-chain contract with CreOracleReceiver: the CreOracleRequested event and the report
+// envelope/payload shapes. These live HERE (not in the entry module, which may only export `main`)
+// so main.ts and the unit tests share ONE definition — drift on either side fails a test
+// (abi.test.ts). The shapes must stay byte-for-byte symmetric with CreOracleReceiver.onReport and the
+// per-type handlers (_handleVerify / _handleMarket / _handleScore).
+
+/**
+ * CreOracleRequested(uint256 indexed contestId, uint8 indexed requestType, uint64 requestNonce,
+ * string rundownId, string sportspageId, string jsonoddsId). Two indexed args (contestId, requestType)
+ * are topics[1]/topics[2]; the four non-indexed args live in log.data.
+ */
+export const EVENT_SIG = "CreOracleRequested(uint256,uint8,uint64,string,string,string)" as const;
+
+/** Non-indexed event args (requestNonce + the three external ids), in declared order, from log.data. */
+export const NONINDEXED_EVENT_ARGS = [
+	{ name: "requestNonce", type: "uint64" },
+	{ name: "rundownId", type: "string" },
+	{ name: "sportspageId", type: "string" },
+	{ name: "jsonoddsId", type: "string" },
+] as const;
+
+/**
+ * Outer report envelope:
+ * abi.encode(uint8 requestType, uint256 chainId, address receiver, uint64 requestNonce, bytes payload).
+ * chainId + receiver are domain separation; requestNonce is echoed (the receiver enforces it for market).
+ */
+export const REPORT_ENVELOPE_ABI = [
+	{ type: "uint8" },
+	{ type: "uint256" },
+	{ type: "address" },
+	{ type: "uint64" },
+	{ type: "bytes" },
+] as const;
+
+/** verify payload: abi.encode(uint256 contestId, uint8 leagueId, uint32 startTime, uint16 version). */
+export const VERIFY_PAYLOAD_ABI = [
+	{ type: "uint256" },
+	{ type: "uint8" },
+	{ type: "uint32" },
+	{ type: "uint16" },
+] as const;
+
+/**
+ * market payload: abi.encode(uint256 contestId, uint16 mlAway, uint16 mlHome, int32 spreadTicks,
+ * uint16 spreadAway, uint16 spreadHome, int32 totalTicks, uint16 over, uint16 under, uint16 version).
+ * spread/total ticks are SIGNED (int32).
+ */
+export const MARKET_PAYLOAD_ABI = [
+	{ type: "uint256" },
+	{ type: "uint16" },
+	{ type: "uint16" },
+	{ type: "int32" },
+	{ type: "uint16" },
+	{ type: "uint16" },
+	{ type: "int32" },
+	{ type: "uint16" },
+	{ type: "uint16" },
+	{ type: "uint16" },
+] as const;
+
+/** score payload: abi.encode(uint256 contestId, uint32 awayScore, uint32 homeScore, uint16 version). */
+export const SCORE_PAYLOAD_ABI = [
+	{ type: "uint256" },
+	{ type: "uint32" },
+	{ type: "uint32" },
+	{ type: "uint16" },
+] as const;
+
+// ──────────────────────────── Config validation ─────────────────────
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/**
+ * A real, non-zero EVM address. Used by the workflow config schema so an unfilled placeholder (a fresh
+ * copy of config.*.example.json, or a zeroed address) fails fast at config-parse instead of silently
+ * targeting the zero address at writeReport / secret resolution.
+ */
+export const evmAddressSchema = z
+	.string()
+	.regex(/^0x[0-9a-fA-F]{40}$/, "must be a 0x-prefixed 20-byte EVM address")
+	.refine((a) => a.toLowerCase() !== ZERO_ADDRESS, "must not be the zero address");

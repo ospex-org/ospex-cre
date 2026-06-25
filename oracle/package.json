@@ -5,15 +5,19 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "license": "UNLICENSED",
   "dependencies": {
-    "@chainlink/cre-sdk": "^1.13.0",
+    "@chainlink/cre-sdk": "1.13.0",
     "viem": "2.34.0",
     "zod": "3.25.76"
   },
   "devDependencies": {
     "typescript": "5.9.3"
+  },
+  "overrides": {
+    "ws": "8.21.0"
   }
 }

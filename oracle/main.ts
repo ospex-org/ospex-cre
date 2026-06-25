@@ -46,6 +46,13 @@ import {
 	packIdentity,
 	extractMarketTicks,
 	isFinalFlag,
+	EVENT_SIG,
+	NONINDEXED_EVENT_ARGS,
+	REPORT_ENVELOPE_ABI,
+	VERIFY_PAYLOAD_ABI,
+	MARKET_PAYLOAD_ABI,
+	SCORE_PAYLOAD_ABI,
+	evmAddressSchema,
 	type RawOdds,
 	type MarketTicks,
 } from "./lib";
@@ -53,10 +60,10 @@ import {
 // ──────────────────────────── Config ────────────────────────────
 
 const configSchema = z.object({
-	receiverAddress: z.string(), // CreOracleReceiver (writeReport target)
-	eventAddress: z.string(), // contract emitting CreOracleRequested (the receiver)
+	receiverAddress: evmAddressSchema, // CreOracleReceiver (writeReport target)
+	eventAddress: evmAddressSchema, // contract emitting CreOracleRequested (the receiver)
 	chainSelectorName: z.literal("polygon-testnet-amoy"),
-	secretOwner: z.string(), // vault secret owner (CRE deploy wallet)
+	secretOwner: evmAddressSchema, // vault secret owner (CRE deploy wallet)
 	secretNamespace: z.string(),
 	workflowVersion: z.number().int().min(0).max(65535),
 	chainId: z.number().int().positive(), // EVM chain id of the receiver chain (Amoy 80002; Polygon mainnet 137) — bound into the report for domain separation
@@ -70,18 +77,9 @@ const REQUEST_TYPE_VERIFY = 0;
 const REQUEST_TYPE_MARKET = 1;
 const REQUEST_TYPE_SCORE = 2;
 
-// event CreOracleRequested(uint256 indexed contestId, uint8 indexed requestType,
-//                          uint64 requestNonce, string rundownId, string sportspageId, string jsonoddsId)
-const EVENT_SIG = "CreOracleRequested(uint256,uint8,uint64,string,string,string)";
+// The CreOracleRequested event signature + the report-envelope/payload ABI shapes live in ./lib
+// (shared with the abi.test.ts regression tests). TOPIC0 is the log-trigger filter topic for the event.
 const TOPIC0: Hex = toEventSelector(EVENT_SIG);
-
-// Non-indexed event args (requestNonce + the three external ids), in declared order, live in log.data.
-const NONINDEXED_ARGS = [
-	{ name: "requestNonce", type: "uint64" },
-	{ name: "rundownId", type: "string" },
-	{ name: "sportspageId", type: "string" },
-	{ name: "jsonoddsId", type: "string" },
-] as const;
 
 // ──────────────────────────── Legends (ported) ──────────────────
 
@@ -429,7 +427,7 @@ function decodeRequest(log: EVMLog): DecodedRequest {
 	const contestId = BigInt(bytesToHex(log.topics[1])); // uint256 (indexed)
 	const requestType = Number(BigInt(bytesToHex(log.topics[2]))); // uint8 (indexed)
 	const [requestNonce, rundownId, sportspageId, jsonoddsId] = decodeAbiParameters(
-		NONINDEXED_ARGS,
+		NONINDEXED_EVENT_ARGS,
 		bytesToHex(log.data),
 	) as [bigint, string, string, string];
 	return { contestId, requestType, requestNonce, rundownId, sportspageId, jsonoddsId };
@@ -447,22 +445,13 @@ function submitReport(
 	// Report envelope — must match CreOracleReceiver.onReport:
 	// abi.encode(uint8 requestType, uint256 chainId, address receiver, uint64 requestNonce, bytes payload).
 	// chainId + receiver are domain separation; requestNonce is echoed (the receiver enforces it for market).
-	const report = encodeAbiParameters(
-		[
-			{ type: "uint8" },
-			{ type: "uint256" },
-			{ type: "address" },
-			{ type: "uint64" },
-			{ type: "bytes" },
-		],
-		[
-			requestType,
-			BigInt(runtime.config.chainId),
-			runtime.config.receiverAddress as Hex,
-			req.requestNonce,
-			payload,
-		],
-	);
+	const report = encodeAbiParameters(REPORT_ENVELOPE_ABI, [
+		requestType,
+		BigInt(runtime.config.chainId),
+		runtime.config.receiverAddress as Hex,
+		req.requestNonce,
+		payload,
+	]);
 
 	const signed = runtime.report(prepareReportRequest(report)).result();
 	const evmClient = new cre.capabilities.EVMClient(AMOY_SELECTOR);
@@ -496,10 +485,12 @@ const onOracleRequest = (runtime: Runtime<Config>, log: EVMLog): string => {
 	if (req.requestType === REQUEST_TYPE_VERIFY) {
 		runtime.log(`verify request: contest ${req.contestId} (${req.rundownId}/${req.sportspageId}/${req.jsonoddsId})`);
 		const facts = resolveVerifyFacts(runtime, req);
-		const payload = encodeAbiParameters(
-			[{ type: "uint256" }, { type: "uint8" }, { type: "uint32" }, { type: "uint16" }],
-			[req.contestId, facts.leagueId, facts.startTime, runtime.config.workflowVersion],
-		);
+		const payload = encodeAbiParameters(VERIFY_PAYLOAD_ABI, [
+			req.contestId,
+			facts.leagueId,
+			facts.startTime,
+			runtime.config.workflowVersion,
+		]);
 		return submitReport(runtime, req, REQUEST_TYPE_VERIFY, payload, {
 			leagueId: facts.leagueId,
 			startTime: facts.startTime,
@@ -509,42 +500,30 @@ const onOracleRequest = (runtime: Runtime<Config>, log: EVMLog): string => {
 	if (req.requestType === REQUEST_TYPE_MARKET) {
 		runtime.log(`market request: contest ${req.contestId} (jsonodds ${req.jsonoddsId})`);
 		const m = resolveMarketFacts(runtime, req);
-		const payload = encodeAbiParameters(
-			[
-				{ type: "uint256" },
-				{ type: "uint16" },
-				{ type: "uint16" },
-				{ type: "int32" },
-				{ type: "uint16" },
-				{ type: "uint16" },
-				{ type: "int32" },
-				{ type: "uint16" },
-				{ type: "uint16" },
-				{ type: "uint16" },
-			],
-			[
-				req.contestId,
-				m.moneylineAwayOdds,
-				m.moneylineHomeOdds,
-				m.spreadLineTicks,
-				m.spreadAwayOdds,
-				m.spreadHomeOdds,
-				m.totalLineTicks,
-				m.overOdds,
-				m.underOdds,
-				runtime.config.workflowVersion,
-			],
-		);
+		const payload = encodeAbiParameters(MARKET_PAYLOAD_ABI, [
+			req.contestId,
+			m.moneylineAwayOdds,
+			m.moneylineHomeOdds,
+			m.spreadLineTicks,
+			m.spreadAwayOdds,
+			m.spreadHomeOdds,
+			m.totalLineTicks,
+			m.overOdds,
+			m.underOdds,
+			runtime.config.workflowVersion,
+		]);
 		return submitReport(runtime, req, REQUEST_TYPE_MARKET, payload, { ...m });
 	}
 
 	if (req.requestType === REQUEST_TYPE_SCORE) {
 		runtime.log(`score request: contest ${req.contestId} (${req.rundownId}/${req.sportspageId}/${req.jsonoddsId})`);
 		const s = resolveScoreFacts(runtime, req);
-		const payload = encodeAbiParameters(
-			[{ type: "uint256" }, { type: "uint32" }, { type: "uint32" }, { type: "uint16" }],
-			[req.contestId, s.awayScore, s.homeScore, runtime.config.workflowVersion],
-		);
+		const payload = encodeAbiParameters(SCORE_PAYLOAD_ABI, [
+			req.contestId,
+			s.awayScore,
+			s.homeScore,
+			runtime.config.workflowVersion,
+		]);
 		return submitReport(runtime, req, REQUEST_TYPE_SCORE, payload, { ...s });
 	}
 

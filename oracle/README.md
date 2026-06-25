@@ -18,9 +18,9 @@ The report envelope is `abi.encode(uint8 requestType, uint256 chainId, address r
 ## Files
 
 - `main.ts` — entry: log trigger → confidential-HTTP provider fetch → consensus → `runtime.report` → `writeReport`.
-- `lib.ts` — pure, unit-tested helpers: deterministic UTC date parsing, packed cross-provider identity, and the odds-tick / spread math.
-- `main.test.ts` — `bun test` unit tests for `lib.ts`.
-- `config.staging.json` / `config.production.json` — per-target config (receiver + event address, chain selector, secret owner/namespace, workflow version).
+- `lib.ts` — pure, unit-tested helpers (deterministic UTC date parsing, packed cross-provider identity, odds-tick / spread math) **and the ABI contract** (event signature + report-envelope/payload shapes) shared with `CreOracleReceiver`.
+- `main.test.ts` / `abi.test.ts` — `bun test` helper unit tests and ABI regression tests for the event/report encoding.
+- `config.staging.example.json` / `config.production.example.json` — per-target config **templates**. Copy to `config.staging.json` / `config.production.json` (gitignored) and fill the receiver + event address and secret owner. The loader rejects zero/placeholder addresses, so an unfilled copy fails fast.
 - `workflow.yaml` / `../project.yaml` — CRE CLI target settings.
 - `../secrets.yaml` — secret **names** mapped to env vars (no secret values).
 
@@ -28,13 +28,21 @@ The report envelope is `abi.encode(uint8 requestType, uint256 chainId, address r
 
 ```bash
 cd oracle
-bun install
+bun install --frozen-lockfile           # reproducible deps -> stable WASM build hash
 bun run typecheck                       # tsc --noEmit
-bun test                                # lib.ts unit tests
+bun test                                # lib.ts unit + ABI regression tests
 cd .. && cre workflow build ./oracle    # compile to WASM
 ```
 
+Full prerequisites (CRE CLI, `ETH_MAINNET_RPC_URL`, owner / secret-owner keys) are in the [root README](../README.md).
+
 ## Configuration
+
+Copy the target template and fill it in (the real configs are gitignored):
+
+```bash
+cp config.staging.example.json config.staging.json   # fill receiverAddress / eventAddress / secretOwner
+```
 
 API keys (`RAPIDAPI_KEY`, `JSONODDS_KEY`) and the deployer/owner key live in a gitignored `.env`.
 For simulation they are read from `.env`; for a live DON they are uploaded to the CRE Vault with
