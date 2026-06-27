@@ -53,6 +53,8 @@ import {
 	MARKET_PAYLOAD_ABI,
 	SCORE_PAYLOAD_ABI,
 	evmAddressSchema,
+	chainSelectorNameSchema,
+	resolveChainSelector,
 	type RawOdds,
 	type MarketTicks,
 } from "./lib";
@@ -62,16 +64,13 @@ import {
 const configSchema = z.object({
 	receiverAddress: evmAddressSchema, // CreOracleReceiver (writeReport target)
 	eventAddress: evmAddressSchema, // contract emitting CreOracleRequested (the receiver)
-	chainSelectorName: z.literal("polygon-testnet-amoy"),
+	chainSelectorName: chainSelectorNameSchema, // which chain to write to (polygon-testnet-amoy | polygon-mainnet); must agree with chainId
 	secretOwner: evmAddressSchema, // vault secret owner (CRE deploy wallet)
 	secretNamespace: z.string(),
 	workflowVersion: z.number().int().min(0).max(65535),
-	chainId: z.number().int().positive(), // EVM chain id of the receiver chain (Amoy 80002; Polygon mainnet 137) — bound into the report for domain separation
+	chainId: z.number().int().positive(), // EVM chain id of the receiver chain (Amoy 80002; Polygon mainnet 137) — bound into the report for domain separation, cross-checked against chainSelectorName
 });
 type Config = z.infer<typeof configSchema>;
-
-// polygon-testnet-amoy — from EVMClient.SUPPORTED_CHAIN_SELECTORS (cre-sdk 1.13.0)
-const AMOY_SELECTOR = 16281711391670634445n;
 
 const REQUEST_TYPE_VERIFY = 0;
 const REQUEST_TYPE_MARKET = 1;
@@ -454,7 +453,9 @@ function submitReport(
 	]);
 
 	const signed = runtime.report(prepareReportRequest(report)).result();
-	const evmClient = new cre.capabilities.EVMClient(AMOY_SELECTOR);
+	const evmClient = new cre.capabilities.EVMClient(
+		resolveChainSelector(runtime.config.chainSelectorName, runtime.config.chainId),
+	);
 	const reply = evmClient
 		.writeReport(runtime, {
 			receiver: runtime.config.receiverAddress,
@@ -534,7 +535,11 @@ const onOracleRequest = (runtime: Runtime<Config>, log: EVMLog): string => {
 // ──────────────────────────── Wiring ────────────────────────────
 
 const initWorkflow = (config: Config) => {
-	const evmClient = new cre.capabilities.EVMClient(AMOY_SELECTOR);
+	// Resolve (and validate) the target chain ONCE at startup — fails closed if chainSelectorName and
+	// chainId disagree, before any handler is registered.
+	const evmClient = new cre.capabilities.EVMClient(
+		resolveChainSelector(config.chainSelectorName, config.chainId),
+	);
 	return [
 		cre.handler(
 			evmClient.logTrigger(

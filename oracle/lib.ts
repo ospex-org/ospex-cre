@@ -282,3 +282,40 @@ export const evmAddressSchema = z
 	.string()
 	.regex(/^0x[0-9a-fA-F]{40}$/, "must be a 0x-prefixed 20-byte EVM address")
 	.refine((a) => a.toLowerCase() !== ZERO_ADDRESS, "must not be the zero address");
+
+// ──────────────────────────── Target chain (selector ⇄ chainId) ──────────
+//
+// The workflow writes its report to exactly ONE EVM chain, chosen by config. Each entry pins BOTH the
+// CRE chain selector (the writeReport target, used to construct the EVMClient) AND the matching EVM
+// chainId (the report's domain-separation value, bound into the report so the receiver rejects a
+// cross-chain replay). Sourcing both from one table — and asserting the config agrees
+// (resolveChainSelector) — makes it structurally impossible to write the report to one chain while
+// binding it to another. Selectors are from @chainlink/cre-sdk's generated chain-selectors
+// (cre-sdk 1.13.0): generated/chain-selectors/{testnet,mainnet}/evm/polygon-*.js.
+export const CHAINS = {
+	"polygon-testnet-amoy": { selector: 16281711391670634445n, chainId: 80002 },
+	"polygon-mainnet": { selector: 4051577828743386545n, chainId: 137 },
+} as const;
+
+export type ChainSelectorName = keyof typeof CHAINS;
+
+/** zod enum of the supported chain-selector names (derived from CHAINS so the two can't drift). */
+export const chainSelectorNameSchema = z.enum(
+	Object.keys(CHAINS) as [ChainSelectorName, ...ChainSelectorName[]],
+);
+
+/**
+ * Resolve the CRE chain selector (the writeReport target) for the configured chain, asserting that
+ * the config's `chainSelectorName` and `chainId` refer to the SAME chain. Fails CLOSED on a mismatch
+ * so a misconfigured deploy (e.g. the mainnet selector name left next to the Amoy chainId) can't
+ * write the report to one chain while domain-separating it for another.
+ */
+export function resolveChainSelector(chainSelectorName: ChainSelectorName, chainId: number): bigint {
+	const chain = CHAINS[chainSelectorName];
+	if (chain.chainId !== chainId) {
+		throw new Error(
+			`config mismatch: chainSelectorName "${chainSelectorName}" is chainId ${chain.chainId}, but config.chainId is ${chainId}`,
+		);
+	}
+	return chain.selector;
+}

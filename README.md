@@ -12,13 +12,13 @@ three request types, the report ABI contract, the determinism rules, and simulat
 
 - **Polygon Amoy (testnet):** all three request types — verify, market-update, and score — have been
   proven end-to-end through the live DON.
-- **Polygon mainnet:** not yet deployed. The EVM chain target is currently hardcoded to Amoy
-  (`AMOY_SELECTOR`, and `chainSelectorName` is a fixed `"polygon-testnet-amoy"` literal). Mainnet requires
-  widening the chain selection, deriving the EVM client from `chainSelectorName`, and asserting
-  `chainSelectorName ⇄ chainId` at startup. This is a known, tracked pre-mainnet gate. Until it lands,
-  `config.production.example.json` is a **reserved, non-functional template** — it pairs a mainnet
-  `chainId` with the Amoy selector and would fail fast (`WrongChainId`) if filled and run. Use
-  `config.staging.example.json` for the Amoy slice.
+- **Polygon mainnet:** not yet deployed, but the workflow is now mainnet-capable. The EVM target is
+  selected from config (`chainSelectorName`), and the workflow **fails closed** when `chainSelectorName`
+  and `chainId` disagree — it is no longer hardcoded to Amoy. `config.production.example.json` targets
+  `polygon-mainnet` / `chainId` `137`, but remains a **template**: fill `receiverAddress`, `eventAddress`,
+  and `secretOwner` before deploying. Before production, confirm the tenant/DON serves `polygon-mainnet`
+  (`cre workflow supported-chains`) and prove the filled config through the Amoy → mainnet deployment
+  flow. Use `config.staging.example.json` for the Amoy slice.
 
 ## Layout
 
