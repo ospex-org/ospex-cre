@@ -275,14 +275,18 @@ function resolveVerifyFacts(runtime: Runtime<Config>, log: DecodedRequest): Veri
 	const sportspagePacked = packIdentity(spLeague, spEventRounded, spAwayId, spHomeId);
 
 	// --- JsonOdds (fetch only this sport's slate, then find by id) ---
-	// The full /api/odds?oddType=Game feed (~125KB, all sports) exceeds the DON's ~25KB
+	// Host is api.jsonodds.com with the /odds/<sport> route (NOT the legacy /api/odds path).
+	// The apex jsonodds.com 301/307-redirects to api.*, but the CRE enclave refuses redirects
+	// ("redirects are not allowed"), so we hit api.* directly — matching ospex-writer's
+	// production client (ospex-writer/src/lib/jsonodds.ts: BASE_URL https://api.jsonodds.com).
+	// The full /odds?oddType=Game feed (~125KB, all sports) exceeds the DON's ~25KB
 	// consensus-observation cap → "response buffer too small". Filtering to the rundown's
 	// sport keeps the body small (e.g. MLB ~16KB) so it fits through consensus.
 	const joSport = LEAGUE_LEGEND.find((x) => x.id === rLeague)?.league;
 	if (!joSport) throw new Error(`no JsonOdds sport path for league ${rLeague}`);
 	const jsonoddsAll = confidentialGet(
 		runtime,
-		`https://jsonodds.com/api/odds/${joSport}?oddType=Game`,
+		`https://api.jsonodds.com/odds/${joSport}?oddType=Game`,
 		{ "x-api-key": "{{.JSONODDS_KEY}}" },
 		"JSONODDS_KEY",
 	) as JsonOddsGame[];
@@ -332,7 +336,7 @@ function resolveMarketFacts(runtime: Runtime<Config>, log: DecodedRequest): Mark
 
 	const jsonoddsAll = confidentialGet(
 		runtime,
-		`https://jsonodds.com/api/odds/${joSport}?oddType=Game`,
+		`https://api.jsonodds.com/odds/${joSport}?oddType=Game`,
 		{ "x-api-key": "{{.JSONODDS_KEY}}" },
 		"JSONODDS_KEY",
 	) as JsonOddsMarketGame[];
@@ -384,7 +388,7 @@ function resolveScoreFacts(runtime: Runtime<Config>, log: DecodedRequest): Score
 	// --- JsonOdds (per-game results endpoint — small, no 25KB issue) ---
 	const jsonoddsResults = confidentialGet(
 		runtime,
-		`https://jsonodds.com/api/results/${jsonoddsId}`,
+		`https://api.jsonodds.com/results/${jsonoddsId}`,
 		{ "x-api-key": "{{.JSONODDS_KEY}}" },
 		"JSONODDS_KEY",
 	) as JsonOddsResult[];
