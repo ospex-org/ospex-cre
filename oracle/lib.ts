@@ -22,6 +22,14 @@ export function parseIsoToUnixSeconds(input: string): number {
 	const minute = Number(m[5]);
 	const second = m[6] ? Number(m[6]) : 0;
 
+	// Fail CLOSED on regex-shaped but out-of-range components (e.g. month 13, day 40, hour 99): a
+	// deterministic-but-wrong timestamp is worse than a thrown error — every DON node should reject the
+	// same garbage rather than silently agree on a nonsense time. Lower bounds: month/day are 1-based;
+	// hour/minute/second are >= 0 by the \d{2} regex so only upper bounds are needed.
+	if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) {
+		throw new Error(`datetime component out of range: ${input}`);
+	}
+
 	// days from civil (Howard Hinnant), valid across the Gregorian range.
 	const y = month <= 2 ? year - 1 : year;
 	const era = Math.floor((y >= 0 ? y : y - 399) / 400);
@@ -38,6 +46,7 @@ export function parseIsoToUnixSeconds(input: string): number {
 		const sign = tz[0] === "-" ? -1 : 1;
 		const oh = Number(tz.slice(1, 3));
 		const om = Number(tz.slice(tz.length - 2));
+		if (oh > 23 || om > 59) throw new Error(`timezone offset out of range: ${input}`);
 		ts -= sign * (oh * 3600 + om * 60);
 	}
 	return ts;
