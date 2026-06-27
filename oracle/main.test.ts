@@ -8,6 +8,8 @@ import {
 	extractMarketTicks,
 	isFinalFlag,
 	evmAddressSchema,
+	CHAINS,
+	resolveChainSelector,
 } from "./lib";
 
 describe("parseIsoToUnixSeconds", () => {
@@ -196,5 +198,24 @@ describe("evmAddressSchema", () => {
 		expect(evmAddressSchema.safeParse("0x123").success).toBe(false); // too short
 		expect(evmAddressSchema.safeParse("abcdef0123456789abcdef0123456789abcdef01").success).toBe(false); // no 0x
 		expect(evmAddressSchema.safeParse("").success).toBe(false);
+	});
+});
+
+describe("resolveChainSelector / CHAINS", () => {
+	// Selector + chainId values are pinned against @chainlink/cre-sdk's generated chain-selectors.
+	// A wrong mainnet selector would silently route every report to the wrong chain, so guard both.
+	test("CHAINS matches the cre-sdk chain-selectors (selector + chainId)", () => {
+		expect(CHAINS["polygon-testnet-amoy"]).toEqual({ selector: 16281711391670634445n, chainId: 80002 });
+		expect(CHAINS["polygon-mainnet"]).toEqual({ selector: 4051577828743386545n, chainId: 137 });
+	});
+
+	test("resolves the target selector when name and chainId agree", () => {
+		expect(resolveChainSelector("polygon-testnet-amoy", 80002)).toBe(16281711391670634445n);
+		expect(resolveChainSelector("polygon-mainnet", 137)).toBe(4051577828743386545n);
+	});
+
+	test("fails closed when chainSelectorName and chainId disagree", () => {
+		expect(() => resolveChainSelector("polygon-mainnet", 80002)).toThrow(); // mainnet name + Amoy id
+		expect(() => resolveChainSelector("polygon-testnet-amoy", 137)).toThrow(); // Amoy name + mainnet id
 	});
 });
