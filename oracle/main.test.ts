@@ -44,6 +44,21 @@ describe("parseIsoToUnixSeconds", () => {
 	test("throws on garbage", () => {
 		expect(() => parseIsoToUnixSeconds("not-a-date")).toThrow();
 	});
+
+	test("fails closed on regex-shaped but out-of-range components", () => {
+		expect(() => parseIsoToUnixSeconds("2026-13-10T17:00:00Z")).toThrow(); // month 13
+		expect(() => parseIsoToUnixSeconds("2026-09-40T17:00:00Z")).toThrow(); // day 40
+		expect(() => parseIsoToUnixSeconds("2026-00-10T17:00:00Z")).toThrow(); // month 0
+		expect(() => parseIsoToUnixSeconds("2026-09-00T17:00:00Z")).toThrow(); // day 0
+		expect(() => parseIsoToUnixSeconds("2026-09-10T99:00:00Z")).toThrow(); // hour 99
+		expect(() => parseIsoToUnixSeconds("2026-09-10T17:99:00Z")).toThrow(); // minute 99
+		expect(() => parseIsoToUnixSeconds("2026-09-10T17:00:99Z")).toThrow(); // second 99
+		expect(() => parseIsoToUnixSeconds("2026-09-10T17:00:00+99:00")).toThrow(); // tz offset hour 99
+		// boundary-valid values still parse (no false positives)
+		expect(parseIsoToUnixSeconds("2026-12-31T23:59:59Z")).toBe(
+			parseIsoToUnixSeconds("2027-01-01T00:00:00Z") - 1,
+		);
+	});
 });
 
 describe("floorToHour", () => {
