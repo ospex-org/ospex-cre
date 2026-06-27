@@ -71,4 +71,5 @@ Then emit a request (`CreOracleReceiver.createContestAndRequestVerify(...)`,
 
 The workflow runs under DON consensus in a QuickJS/WASM runtime (not Node). All cross-node logic is
 deterministic — integer/string math only, UTC date parsing independent of the host timezone, no
-`Date.now` or `Math.random`. External data is agreed across providers before it is reported.
+`Date.now` or `Math.random`. Verify and score require cross-provider agreement (3-of-3) before
+reporting; market-update is single-source JsonOdds.
