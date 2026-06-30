@@ -12,13 +12,14 @@ three request types, the report ABI contract, the determinism rules, and simulat
 
 - **Polygon Amoy (testnet):** all three request types — verify, market-update, and score — have been
   proven end-to-end through the live DON.
-- **Polygon mainnet:** not yet deployed, but the workflow is now mainnet-capable. The EVM target is
-  selected from config (`chainSelectorName`), and the workflow **fails closed** when `chainSelectorName`
-  and `chainId` disagree — it is no longer hardcoded to Amoy. `config.production.example.json` targets
-  `polygon-mainnet` / `chainId` `137`, but remains a **template**: fill `receiverAddress`, `eventAddress`,
-  and `secretOwner` before deploying. Before production, confirm the tenant/DON serves `polygon-mainnet`
-  (`cre workflow supported-chains`) and prove the filled config through the Amoy → mainnet deployment
-  flow. Use `config.staging.example.json` for the Amoy slice.
+- **Polygon mainnet:** **live (R5).** The CRE oracle has been deployed on Polygon mainnet since
+  2026-06-28, reporting to the `CreOracleReceiver` at `0x06e3470012039797119Ae30e1236169304F9220C`
+  (chain `137`). The EVM target is selected from config (`chainSelectorName`), and the workflow **fails
+  closed** when `chainSelectorName` and `chainId` disagree — it is not hardcoded to a network. The
+  committed `config.production.example.json` targets `polygon-mainnet` / `chainId` `137` and remains a
+  **template**: operators copy it to the gitignored `config.production.json` and fill `receiverAddress`,
+  `eventAddress`, and `secretOwner`. Before a (re)deploy, confirm the tenant/DON serves `polygon-mainnet`
+  (`cre workflow supported-chains`); use `config.staging.example.json` for the Amoy slice.
 
 ## Layout
 
