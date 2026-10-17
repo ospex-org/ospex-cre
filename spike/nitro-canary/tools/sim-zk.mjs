@@ -7,7 +7,8 @@
 //
 // usage: node tools/sim-zk.mjs --rpc <url> --from <address> --fixture <attestation>
 //          --journal <hex file> --seal <hex file> --guest-id <0x..> --automata-out <dir>
-//          [--max-time-diff <seconds>] [--out <json>] [--send]
+//          [--image <0x..>] [--approved-expect <error>] [--max-time-diff <seconds>] [--out <json>]
+// --image overrides the image hash taken from --fixture (use it when only a journal is published).
 import { readFileSync, writeFileSync } from "node:fs";
 import {
   POLYGON_MAX_TX_GAS, calldata, createAddress, creation, decodeRevert, fmt, imageHash, loadAttestation,
@@ -19,7 +20,11 @@ const opt = (name, fallback) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : fallback;
 };
-const need = ["rpc", "from", "fixture", "journal", "seal", "guest-id", "automata-out"];
+const need = ["rpc", "from", "journal", "seal", "guest-id", "automata-out"];
+if (!opt("fixture") && !opt("image")) {
+  console.error("need --fixture or --image");
+  process.exit(2);
+}
 for (const n of need) {
   if (!opt(n)) {
     console.error(`missing --${n}`);
@@ -28,7 +33,7 @@ for (const n of need) {
 }
 const rpc = rpcClient(opt("rpc"));
 const from = opt("from");
-const att = loadAttestation(opt("fixture"));
+const att = opt("fixture") ? loadAttestation(opt("fixture")) : null;
 const hex = (f) => "0x" + readFileSync(f, "utf8").trim().replace(/^0x/, "");
 const journal = hex(opt("journal"));
 const seal = hex(opt("seal"));
@@ -55,7 +60,8 @@ const a = {
   portWrongGuest: createAddress(from, nonce + 5),
   canaryOtherImage: createAddress(from, nonce + 6),
 };
-const img = imageHash(att);
+const img = opt("image") ?? imageHash(att);
+const approvedExpect = opt("approved-expect", "BadPublicKey()");
 const otherImage = "0x" + "11".repeat(32);
 
 const flip = (h, at) => {
@@ -93,8 +99,8 @@ const steps = [
   { kind: "check", label: "port: verify (cold; caches the intermediates)", to: a.port, data: verifyCall(journal, seal) },
   { kind: "check", label: "Automata as shipped: verify (cold)", to: a.automata, data: verifyCall(journal, seal) },
   { kind: "control", label: "canary on the port, another enclave image", to: a.canaryOtherImage, data: joinCall(journal, seal), expect: "WrongImage()" },
-  { kind: "control", label: "canary on the port, approved image", to: a.canaryPort, data: joinCall(journal, seal), expect: "BadPublicKey()" },
-  { kind: "control", label: "canary on Automata's, approved image", to: a.canaryAutomata, data: joinCall(journal, seal), expect: "BadPublicKey()" },
+  { kind: "control", label: "canary on the port, approved image", to: a.canaryPort, data: joinCall(journal, seal), expect: approvedExpect },
+  { kind: "control", label: "canary on Automata's, approved image", to: a.canaryAutomata, data: joinCall(journal, seal), expect: approvedExpect },
 ];
 
 // verify(bytes seal, bytes32 imageId, bytes32 journalDigest) on the RISC Zero verifier.

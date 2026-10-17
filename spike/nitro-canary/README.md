@@ -27,6 +27,7 @@ Nothing here is deployed by default, and nothing here touches mainnet.
 | `prover/` | runs Automata's committed guest ELF on one attestation and writes a Groth16 seal | new; risc0-zkvm `3.0.5` as in Automata's lockfile |
 | `enclave/` | the enclave program for the real-machine run, and the parent's client | new |
 | `fixtures/` | public attestations: Base's January 2026 document (with Base's documented three-byte repair applied), Automata's two samples | from those repos' tests and samples |
+| `fixtures/published/` | the journal and seal of a RISC Zero proof of a real Nitro attestation, published in a Sepolia transaction to Automata's verifier | see its README |
 
 ## Run
 
@@ -38,7 +39,19 @@ node tools/sim-direct.mjs --rpc <polygon-or-amoy-rpc> --from <any address> \
   --fixture fixtures/base-2026-01-03.hex --other fixtures/automata-2023-09-28.report
 ```
 
-The zero-knowledge route needs a proof first (`prover/`, Docker on x86):
+The zero-knowledge route's on-chain check, with the published proof:
+
+```sh
+node tools/sim-zk.mjs --rpc <rpc> --from <any address> \
+  --journal fixtures/published/sepolia-a51069ab.journal.hex \
+  --seal fixtures/published/sepolia-a51069ab.seal.hex \
+  --guest-id 0x3f836c01f54526864b30333d462b252ddfeb8458f13865da287daa9a62d1f963 \
+  --image 0xc3828cd76fded559bffb839d7a083be87ac8c05b123c12b12c7b775da59b80ae \
+  --approved-expect "LeaseOver()" \
+  --automata-out <automata-network/aws-nitro-enclave-attestation at 65c4a42>/contracts/out
+```
+
+A new proof of your own needs the prover first (`prover/`, Docker on x86):
 
 ```sh
 docker build -t nitro-zk-prove prover
@@ -48,3 +61,10 @@ docker run --rm -v <work>:/work nitro-zk-prove execute /work/risc0-verifier.elf 
 `prove` instead of `execute` makes the Groth16 proof; it also needs the Docker socket and
 `RISC0_WORK_DIR` set to a directory the Docker daemon can mount, because RISC Zero's Groth16
 step runs its own prover image.
+
+## Status
+
+Measured so far: both routes' on-chain checks, on fixtures and a published proof, run on a Polygon
+node with `eth_simulateV1`. Not done yet: the run with a real enclave (the join and the score as
+real Amoy transactions, the minutes end to end, the certificate life on a live document, the
+second-image control), and a proof of our own, which needs a GPU; the local CPU attempt was stopped.
