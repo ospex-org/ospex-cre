@@ -1,0 +1,530 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.15;
+
+import {Sha2Ext} from "./Sha2Ext.sol";
+import {Asn1Decode, Asn1Ptr, LibAsn1Ptr} from "./Asn1Decode.sol";
+import {LibBytes} from "./LibBytes.sol";
+import {ICertManager} from "./ICertManager.sol";
+import {IP384Verifier} from "./IP384Verifier.sol";
+
+// adapted from https://github.com/marlinprotocol/NitroProver/blob/f1d368d1f172ad3a55cd2aaaa98ad6a6e7dcde9d/src/CertManager.sol
+
+// Manages a mapping of verified certificates and their metadata.
+// The root of trust is the AWS Nitro root cert.
+//
+// Ownerless port of base/nitro-validator src/CertManager.sol at commit
+// 0ea0d12366b4fa44f9e07e4755f2ad36561cb674. The owner, the revoker and the revocation set are
+// removed, together with everything that only served them (the per-cert revocation identity and
+// its parsing). No account can add, strike or restore a certificate. What remains is the pinned
+// root, the hinted signature checks, the parent pinning and the expiry checks, unchanged.
+contract CertManager is ICertManager {
+    using Asn1Decode for bytes;
+    using LibAsn1Ptr for Asn1Ptr;
+    using LibBytes for bytes;
+
+    error InvalidAsn1Tag();
+    error InvalidExtension();
+    error InvalidBasicConstraints();
+    error InvalidSubjectPublicKey();
+    error InvalidCertAlgorithm();
+    error InvalidCertVersion();
+    error UnsupportedCriticalExtension();
+    error IncompleteCertChain();
+    error DeprecatedEntrypoint();
+
+    event CertVerified(bytes32 indexed certHash);
+
+    // root CA certificate constants (don't store it to reduce contract size)
+    bytes32 public constant ROOT_CA_CERT_HASH = 0x311d96fcd5c5e0ccf72ef548e2ea7d4c0cd53ad7c4cc49e67471aed41d61f185;
+    uint64 public constant ROOT_CA_CERT_NOT_AFTER = 2519044085;
+    int64 public constant ROOT_CA_CERT_MAX_PATH_LEN = -1;
+    bytes32 public constant ROOT_CA_CERT_SUBJECT_HASH =
+        0x3c3e2e5f1dd14dee5db88341ba71521e939afdb7881aa24c9f1e1c007a2fa8b6;
+    bytes public constant ROOT_CA_CERT_PUB_KEY =
+        hex"fc0254eba608c1f36870e29ada90be46383292736e894bfff672d989444b5051e534a4b1f6dbe3c0bc581a32b7b176070ede12d69a3fea211b66e752cf7dd1dd095f6f1370f4170843d9dc100121e4cf63012809664487c9796284304dc53ff4";
+
+    // OID 1.2.840.10045.4.3.3 represents {iso(1) member-body(2) us(840) ansi-x962(10045) signatures(4) ecdsa-with-SHA2(3) ecdsa-with-SHA384(3)}
+    // which essentially means the signature algorithm is Elliptic curve Digital Signature Algorithm (DSA) coupled with the Secure Hash Algorithm 384 (SHA384) algorithm
+    // @dev Sig algo is hardcoded here because the root certificate's sig algorithm is known beforehand
+    // @dev reference article for encoding https://learn.microsoft.com/en-in/windows/win32/seccertenroll/about-object-identifier
+    bytes32 public constant CERT_ALGO_OID = 0x53ce037f0dfaa43ef13b095f04e68a6b5e3f1519a01a3203a1e6440ba915b87e; // keccak256(hex"06082a8648ce3d040303")
+    // https://oid-rep.orange-labs.fr/get/1.2.840.10045.2.1
+    // 1.2.840.10045.2.1 {iso(1) member-body(2) us(840) ansi-x962(10045) keyType(2) ecPublicKey(1)} represents Elliptic curve public key cryptography
+    bytes32 public constant EC_PUB_KEY_OID = 0xb60fee1fd85f867dd7c8d16884a49a20287ebe4c0fb49294e9825988aa8e42b4; // keccak256(hex"2a8648ce3d0201")
+    // https://oid-rep.orange-labs.fr/get/1.3.132.0.34
+    // 1.3.132.0.34 {iso(1) identified-organization(3) certicom(132) curve(0) ansip384r1(34)} represents NIST 384-bit elliptic curve
+    bytes32 public constant SECP_384_R1_OID = 0xbd74344bb507daeb9ed315bc535f24a236ccab72c5cd6945fb0efe5c037e2097; // keccak256(hex"2b81040022")
+
+    // extension OID certificate constants
+    bytes32 public constant BASIC_CONSTRAINTS_OID = 0x6351d72a43cb42fb9a2531a28608c278c89629f8f025b5f5dc705f3fe45e950a; // keccak256(hex"551d13")
+    bytes32 public constant KEY_USAGE_OID = 0x45529d8772b07ebd6d507a1680da791f4a2192882bf89d518801579f7a5167d2; // keccak256(hex"551d0f")
+
+    // certHash -> VerifiedCert. The root is keyed by ROOT_CA_CERT_HASH; every non-root cert is keyed
+    // by keccak256(tbsCertificate), excluding the outer malleable ECDSA signature bytes.
+    mapping(bytes32 => bytes) public verified;
+    // certHash -> parent cert hash used during cold verification.
+    // A cached cert is pinned to the parent it was FIRST verified under: warm reuse requires the
+    // caller to present this exact parent (see the mismatch check in `_verifyCert`). This is
+    // intentional — warm reuse skips signature verification, so it must reflect the precise chain
+    // that was cryptographically checked. A same-key CA renewal (new DER, new parent hash) cannot
+    // re-bind an already-cached descendant until its cache entry expires; harmless for Nitro because
+    // leaves are short-lived. See docs/hinted-p384-nitro-attestation.md "First-verified parent pinning".
+    mapping(bytes32 => bytes32) internal verifiedParent;
+
+    IP384Verifier public immutable p384Verifier;
+
+    constructor(IP384Verifier p384Verifier_) {
+        require(address(p384Verifier_) != address(0), "missing P384 verifier");
+        p384Verifier = p384Verifier_;
+        _saveVerified(
+            ROOT_CA_CERT_HASH,
+            VerifiedCert({
+                ca: true,
+                notAfter: ROOT_CA_CERT_NOT_AFTER,
+                maxPathLen: ROOT_CA_CERT_MAX_PATH_LEN,
+                subjectHash: ROOT_CA_CERT_SUBJECT_HASH,
+                pubKey: ROOT_CA_CERT_PUB_KEY
+            })
+        );
+    }
+
+    /// @inheritdoc ICertManager
+    function verifyCACert(bytes memory, bytes32) external pure returns (bytes32) {
+        revert DeprecatedEntrypoint();
+    }
+
+    /// @inheritdoc ICertManager
+    function verifyClientCert(bytes memory, bytes32) external pure returns (VerifiedCert memory) {
+        revert DeprecatedEntrypoint();
+    }
+
+    /// @inheritdoc ICertManager
+    function verifyCACertWithHints(bytes memory cert, bytes32 parentCertHash, bytes memory signatureHints)
+        external
+        returns (bytes32)
+    {
+        bytes32 certHash = _certCacheKey(cert);
+        _verifyCert(cert, certHash, true, parentCertHash, signatureHints);
+        return certHash;
+    }
+
+    /// @inheritdoc ICertManager
+    function verifyClientCertWithHints(bytes memory cert, bytes32 parentCertHash, bytes memory signatureHints)
+        external
+        returns (VerifiedCert memory)
+    {
+        return _verifyCert(cert, _certCacheKey(cert), false, parentCertHash, signatureHints);
+    }
+
+    /// @inheritdoc ICertManager
+    function loadVerified(bytes32 certHash) external view returns (VerifiedCert memory) {
+        return _loadVerified(certHash);
+    }
+
+    function _requireCachedChainValid(bytes32 certHash) internal view {
+        while (certHash != bytes32(0)) {
+            VerifiedCert memory cert = _loadVerified(certHash);
+            if (cert.pubKey.length == 0) revert IncompleteCertChain();
+            require(!_certificateExpired(cert.notAfter), "cert expired");
+            if (certHash == ROOT_CA_CERT_HASH) {
+                return;
+            }
+            certHash = verifiedParent[certHash];
+        }
+        // Fail closed: a chain that terminates at bytes32(0) without reaching the pinned root is
+        // broken and must not be treated as valid. Reverting here instead of returning silently
+        // means cached-chain validity never depends on upstream guards.
+        revert IncompleteCertChain();
+    }
+
+    function _verifyCert(
+        bytes memory certificate,
+        bytes32 certHash,
+        bool ca,
+        bytes32 parentCertHash,
+        bytes memory signatureHints
+    ) internal returns (VerifiedCert memory) {
+        VerifiedCert memory parent;
+        if (certHash != ROOT_CA_CERT_HASH) {
+            parent = _loadVerified(parentCertHash);
+            require(parent.pubKey.length > 0, "parent cert unverified");
+            _requireCachedChainValid(parentCertHash);
+            require(parent.ca, "parent cert is not a CA");
+            require(!ca || parent.maxPathLen != 0, "maxPathLen exceeded");
+        }
+
+        // skip verification if already verified
+        VerifiedCert memory cert = _loadVerified(certHash);
+        if (cert.pubKey.length != 0) {
+            require(!_certificateExpired(cert.notAfter), "cert expired");
+            require(cert.ca == ca, "cert is not a CA");
+            if (certHash != ROOT_CA_CERT_HASH) {
+                require(verifiedParent[certHash] == parentCertHash, "parent cert mismatch");
+            }
+            return cert;
+        }
+
+        cert = _verifyUncachedCert(certificate, ca, parent, signatureHints);
+        // The pinned root is already present under ROOT_CA_CERT_HASH. Do not allow a signature
+        // malleability twin of that same trust anchor to become a second cached parent key.
+        require(!_isPinnedRootAlias(certHash, cert), "root cert alias");
+        _saveVerified(certHash, cert);
+        verifiedParent[certHash] = parentCertHash;
+
+        emit CertVerified(certHash);
+
+        return cert;
+    }
+
+    function _certCacheKey(bytes memory certificate) internal pure returns (bytes32) {
+        bytes32 rawCertHash = keccak256(certificate);
+        if (rawCertHash == ROOT_CA_CERT_HASH) {
+            return ROOT_CA_CERT_HASH;
+        }
+
+        Asn1Ptr root = certificate.root();
+        _requireAsn1Tag(certificate, root, 0x30);
+        if (root.totalLength() != certificate.length) revert Asn1Decode.InvalidAsn1Length();
+        Asn1Ptr tbsCertPtr = certificate.firstChildOf(root);
+        _requireAsn1Tag(certificate, tbsCertPtr, 0x30);
+        return certificate.keccak(tbsCertPtr.header(), tbsCertPtr.totalLength());
+    }
+
+    function _requireAsn1Tag(bytes memory der, Asn1Ptr ptr, bytes1 tag) internal pure {
+        if (der[ptr.header()] != tag) revert InvalidAsn1Tag();
+    }
+
+    function _isPinnedRootAlias(bytes32 certHash, VerifiedCert memory cert) internal pure returns (bool) {
+        return certHash != ROOT_CA_CERT_HASH && cert.ca && cert.subjectHash == ROOT_CA_CERT_SUBJECT_HASH
+            && cert.pubKey.length == ROOT_CA_CERT_PUB_KEY.length
+            && keccak256(cert.pubKey) == keccak256(ROOT_CA_CERT_PUB_KEY);
+    }
+
+    function _verifyUncachedCert(
+        bytes memory certificate,
+        bool ca,
+        VerifiedCert memory parent,
+        bytes memory signatureHints
+    ) internal view returns (VerifiedCert memory cert) {
+        Asn1Ptr root = certificate.root();
+        if (root.totalLength() != certificate.length) revert Asn1Decode.InvalidAsn1Length();
+        Asn1Ptr tbsCertPtr = certificate.firstChildOf(root);
+        (uint64 notAfter, int64 maxPathLen, bytes32 issuerHash, bytes32 subjectHash, bytes memory pubKey) =
+            _parseTbs(certificate, tbsCertPtr, ca);
+
+        require(parent.subjectHash == issuerHash, "issuer / subject mismatch");
+
+        // constrain maxPathLen to parent's maxPathLen-1
+        if (parent.maxPathLen > 0 && (maxPathLen < 0 || maxPathLen >= parent.maxPathLen)) {
+            maxPathLen = parent.maxPathLen - 1;
+        }
+
+        _verifyCertSignatureWithHints(certificate, tbsCertPtr, parent.pubKey, signatureHints);
+
+        cert = VerifiedCert({
+            ca: ca, notAfter: notAfter, maxPathLen: maxPathLen, subjectHash: subjectHash, pubKey: pubKey
+        });
+    }
+
+    function _parseTbs(bytes memory certificate, Asn1Ptr ptr, bool ca)
+        internal
+        view
+        returns (uint64 notAfter, int64 maxPathLen, bytes32 issuerHash, bytes32 subjectHash, bytes memory pubKey)
+    {
+        _requireAsn1Tag(certificate, ptr, 0x30);
+        Asn1Ptr sigAlgoPtr;
+        {
+            Asn1Ptr versionPtr = certificate.firstChildOf(ptr);
+            _requireAsn1Tag(certificate, versionPtr, 0xa0);
+            Asn1Ptr serialPtr = certificate.nextSiblingOf(versionPtr);
+            _requireAsn1Tag(certificate, serialPtr, 0x02);
+            sigAlgoPtr = certificate.nextSiblingOf(serialPtr);
+
+            // as extensions are used in cert, version should be 3 (value 2) as per https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.1
+            Asn1Ptr versionValuePtr = certificate.firstChildOf(versionPtr);
+            if (versionValuePtr.content() + versionValuePtr.length() != versionPtr.content() + versionPtr.length()) {
+                revert Asn1Decode.InvalidAsn1Length();
+            }
+            if (certificate.uintAt(versionValuePtr) != 2) revert InvalidCertVersion();
+        }
+        _requireAsn1Tag(certificate, sigAlgoPtr, 0x30);
+
+        if (certificate.keccak(sigAlgoPtr.content(), sigAlgoPtr.length()) != CERT_ALGO_OID) {
+            revert InvalidCertAlgorithm();
+        }
+
+        (notAfter, maxPathLen, issuerHash, subjectHash, pubKey) =
+            _parseTbsInner(certificate, sigAlgoPtr, ca, ptr.content() + ptr.length());
+    }
+
+    function _parseTbsInner(bytes memory certificate, Asn1Ptr sigAlgoPtr, bool ca, uint256 tbsEnd)
+        internal
+        view
+        returns (uint64 notAfter, int64 maxPathLen, bytes32 issuerHash, bytes32 subjectHash, bytes memory pubKey)
+    {
+        Asn1Ptr issuerPtr = certificate.nextSiblingOf(sigAlgoPtr);
+        _requireAsn1Tag(certificate, issuerPtr, 0x30);
+        issuerHash = certificate.keccak(issuerPtr.content(), issuerPtr.length());
+        Asn1Ptr validityPtr = certificate.nextSiblingOf(issuerPtr);
+        _requireAsn1Tag(certificate, validityPtr, 0x30);
+        Asn1Ptr subjectPtr = certificate.nextSiblingOf(validityPtr);
+        _requireAsn1Tag(certificate, subjectPtr, 0x30);
+        subjectHash = certificate.keccak(subjectPtr.content(), subjectPtr.length());
+        Asn1Ptr subjectPublicKeyInfoPtr = certificate.nextSiblingOf(subjectPtr);
+        _requireAsn1Tag(certificate, subjectPublicKeyInfoPtr, 0x30);
+        Asn1Ptr extensionsPtr = certificate.nextSiblingOf(subjectPublicKeyInfoPtr);
+
+        if (certificate[extensionsPtr.header()] == 0x81) {
+            // skip optional issuerUniqueID
+            extensionsPtr = certificate.nextSiblingOf(extensionsPtr);
+        }
+        if (certificate[extensionsPtr.header()] == 0x82) {
+            // skip optional subjectUniqueID
+            extensionsPtr = certificate.nextSiblingOf(extensionsPtr);
+        }
+        if (extensionsPtr.content() + extensionsPtr.length() != tbsEnd) revert Asn1Decode.InvalidAsn1Length();
+
+        notAfter = _verifyValidity(certificate, validityPtr);
+        maxPathLen = _verifyExtensions(certificate, extensionsPtr, ca);
+        pubKey = _parsePubKey(certificate, subjectPublicKeyInfoPtr);
+    }
+
+    function _parsePubKey(bytes memory certificate, Asn1Ptr subjectPublicKeyInfoPtr)
+        internal
+        pure
+        returns (bytes memory subjectPubKey)
+    {
+        Asn1Ptr pubKeyAlgoPtr = certificate.firstChildOf(subjectPublicKeyInfoPtr);
+        _requireAsn1Tag(certificate, pubKeyAlgoPtr, 0x30);
+        Asn1Ptr pubKeyAlgoIdPtr = certificate.firstChildOf(pubKeyAlgoPtr);
+        Asn1Ptr algoParamsPtr = certificate.nextSiblingOf(pubKeyAlgoIdPtr);
+        Asn1Ptr subjectPublicKeyPtr = certificate.nextSiblingOf(pubKeyAlgoPtr);
+        Asn1Ptr subjectPubKeyPtr = certificate.bitstring(subjectPublicKeyPtr);
+
+        _requireAsn1Tag(certificate, pubKeyAlgoIdPtr, 0x06);
+        _requireAsn1Tag(certificate, algoParamsPtr, 0x06);
+
+        if (
+            algoParamsPtr.header() + algoParamsPtr.totalLength() != pubKeyAlgoPtr.header() + pubKeyAlgoPtr.totalLength()
+                || subjectPublicKeyPtr.header() + subjectPublicKeyPtr.totalLength()
+                    != subjectPublicKeyInfoPtr.header() + subjectPublicKeyInfoPtr.totalLength()
+        ) {
+            revert InvalidSubjectPublicKey();
+        }
+
+        if (certificate.keccak(pubKeyAlgoIdPtr.content(), pubKeyAlgoIdPtr.length()) != EC_PUB_KEY_OID) {
+            revert InvalidSubjectPublicKey();
+        }
+        if (certificate.keccak(algoParamsPtr.content(), algoParamsPtr.length()) != SECP_384_R1_OID) {
+            revert InvalidSubjectPublicKey();
+        }
+
+        uint256 keyStart = subjectPubKeyPtr.content();
+        uint256 keyLength = subjectPubKeyPtr.length();
+        if (keyLength != 97 || keyStart + keyLength > certificate.length || certificate[keyStart] != 0x04) {
+            revert InvalidSubjectPublicKey();
+        }
+        subjectPubKey = certificate.slice(keyStart + 1, 96);
+    }
+
+    function _verifyValidity(bytes memory certificate, Asn1Ptr validityPtr) internal view returns (uint64 notAfter) {
+        Asn1Ptr notBeforePtr = certificate.firstChildOf(validityPtr);
+        Asn1Ptr notAfterPtr = certificate.nextSiblingOf(notBeforePtr);
+
+        uint256 notBefore = certificate.timestampAt(notBeforePtr);
+        notAfter = uint64(certificate.timestampAt(notAfterPtr));
+
+        require(notBefore <= block.timestamp, "certificate not valid yet");
+        require(!_certificateExpired(notAfter), "certificate not valid anymore");
+    }
+
+    function _certificateExpired(uint256 notAfter) internal view virtual returns (bool) {
+        return notAfter < block.timestamp;
+    }
+
+    function _verifyExtensions(bytes memory certificate, Asn1Ptr extensionsPtr, bool ca)
+        internal
+        pure
+        returns (int64 maxPathLen)
+    {
+        if (certificate[extensionsPtr.header()] != 0xa3) revert InvalidExtension();
+        uint256 end = extensionsPtr.content() + extensionsPtr.length();
+        extensionsPtr = certificate.firstChildOf(extensionsPtr);
+        _requireAsn1Tag(certificate, extensionsPtr, 0x30);
+        if (extensionsPtr.content() + extensionsPtr.length() != end) revert InvalidExtension();
+        Asn1Ptr extensionPtr = certificate.firstChildOf(extensionsPtr);
+        bool basicConstraintsFound = false;
+        bool keyUsageFound = false;
+        maxPathLen = -1;
+
+        while (true) {
+            uint256 extensionEnd = extensionPtr.content() + extensionPtr.length();
+            if (extensionEnd > end) revert InvalidExtension();
+            _requireAsn1Tag(certificate, extensionPtr, 0x30);
+            Asn1Ptr oidPtr = certificate.firstChildOf(extensionPtr);
+            _requireAsn1Tag(certificate, oidPtr, 0x06);
+            bytes32 oid = certificate.keccak(oidPtr.content(), oidPtr.length());
+            bool recognized = oid == BASIC_CONSTRAINTS_OID || oid == KEY_USAGE_OID;
+
+            Asn1Ptr valuePtr = certificate.nextSiblingOf(oidPtr);
+
+            if (certificate[valuePtr.header()] == 0x01) {
+                if (valuePtr.length() != 1) revert InvalidExtension();
+                uint8 critical = uint8(certificate[valuePtr.content()]);
+                if (critical != 0x00 && critical != 0xff) revert InvalidExtension();
+                if (!recognized && critical == 0xff) revert UnsupportedCriticalExtension();
+                valuePtr = certificate.nextSiblingOf(valuePtr);
+            }
+
+            if (valuePtr.content() + valuePtr.length() != extensionEnd) revert InvalidExtension();
+
+            if (recognized) {
+                valuePtr = certificate.octetString(valuePtr);
+
+                if (oid == BASIC_CONSTRAINTS_OID) {
+                    if (basicConstraintsFound) revert InvalidExtension();
+                    basicConstraintsFound = true;
+                    maxPathLen = _verifyBasicConstraintsExtension(certificate, valuePtr, ca);
+                } else {
+                    if (keyUsageFound) revert InvalidExtension();
+                    keyUsageFound = true;
+                    _verifyKeyUsageExtension(certificate, valuePtr, ca);
+                }
+            }
+
+            if (extensionEnd == end) {
+                break;
+            }
+            extensionPtr = certificate.nextSiblingOf(extensionPtr);
+        }
+
+        if (!basicConstraintsFound || !keyUsageFound || (!ca && maxPathLen != -1)) revert InvalidExtension();
+    }
+
+    function _verifyBasicConstraintsExtension(bytes memory certificate, Asn1Ptr valuePtr, bool ca)
+        internal
+        pure
+        returns (int64 maxPathLen)
+    {
+        if (certificate[valuePtr.header()] != 0x30) revert InvalidBasicConstraints();
+
+        maxPathLen = -1;
+        bool isCA;
+        uint256 end = valuePtr.content() + valuePtr.length();
+        uint256 cursor = valuePtr.content();
+
+        if (cursor < end) {
+            Asn1Ptr basicConstraintsPtr = certificate.firstChildOf(valuePtr);
+            cursor = _requireAsn1ChildWithin(basicConstraintsPtr, end);
+
+            if (certificate[basicConstraintsPtr.header()] == 0x01) {
+                if (basicConstraintsPtr.length() != 1) revert InvalidBasicConstraints();
+                uint8 caByte = uint8(certificate[basicConstraintsPtr.content()]);
+                if (caByte != 0x00 && caByte != 0xff) revert InvalidBasicConstraints();
+                isCA = caByte == 0xff;
+
+                if (cursor == end) {
+                    if (ca != isCA) revert InvalidBasicConstraints();
+                    return maxPathLen;
+                }
+
+                basicConstraintsPtr = certificate.nextSiblingOf(basicConstraintsPtr);
+                cursor = _requireAsn1ChildWithin(basicConstraintsPtr, end);
+            }
+
+            if (ca != isCA) revert InvalidBasicConstraints();
+
+            if (certificate[basicConstraintsPtr.header()] == 0x02) {
+                if (basicConstraintsPtr.length() == 0) revert InvalidBasicConstraints();
+                uint256 pathLen = certificate.uintAt(basicConstraintsPtr);
+                if (pathLen > uint256(uint64(type(int64).max))) revert InvalidBasicConstraints();
+                maxPathLen = int64(uint64(pathLen));
+            } else {
+                revert InvalidBasicConstraints();
+            }
+
+            if (cursor != end) revert InvalidBasicConstraints();
+            return maxPathLen;
+        }
+
+        if (ca != isCA) revert InvalidBasicConstraints();
+    }
+
+    function _requireAsn1ChildWithin(Asn1Ptr ptr, uint256 parentEnd) internal pure returns (uint256 childEnd) {
+        childEnd = ptr.header() + ptr.totalLength();
+        if (childEnd > parentEnd) revert InvalidBasicConstraints();
+    }
+
+    function _verifyKeyUsageExtension(bytes memory certificate, Asn1Ptr valuePtr, bool ca) internal pure {
+        uint256 value = certificate.bitstringUintAt(valuePtr);
+        // X.509 KeyUsage bits are MSB-first. bitstringUintAt keeps the first KeyUsage octet in the
+        // low byte, so these masks continue to target the same bits for one- or multi-octet values.
+        if (ca) {
+            if (value & 0x04 != 0x04) revert InvalidExtension();
+        } else {
+            if (value & 0x80 != 0x80) revert InvalidExtension();
+        }
+    }
+
+    function _verifyCertSignatureWithHints(
+        bytes memory certificate,
+        Asn1Ptr ptr,
+        bytes memory pubKey,
+        bytes memory signatureHints
+    ) internal view {
+        Asn1Ptr sigAlgoPtr = certificate.nextSiblingOf(ptr);
+        _requireAsn1Tag(certificate, sigAlgoPtr, 0x30);
+        if (certificate.keccak(sigAlgoPtr.content(), sigAlgoPtr.length()) != CERT_ALGO_OID) {
+            revert InvalidCertAlgorithm();
+        }
+        Asn1Ptr sigPtr = certificate.nextSiblingOf(sigAlgoPtr);
+        if (sigPtr.header() + sigPtr.totalLength() != certificate.length) revert Asn1Decode.InvalidAsn1Length();
+
+        bytes memory hash = Sha2Ext.sha384(certificate, ptr.header(), ptr.totalLength());
+        bytes memory sigPacked = _certSignature(certificate, sigPtr);
+
+        require(p384Verifier.verifyP384SignatureWithHints(hash, sigPacked, pubKey, signatureHints), "invalid sig");
+    }
+
+    function _certSignature(bytes memory certificate, Asn1Ptr sigPtr) internal pure returns (bytes memory sigPacked) {
+        Asn1Ptr sigBPtr = certificate.bitstring(sigPtr);
+        Asn1Ptr sigRoot = certificate.rootOf(sigBPtr);
+        _requireAsn1Tag(certificate, sigRoot, 0x30);
+        Asn1Ptr sigRPtr = certificate.firstChildOf(sigRoot);
+        Asn1Ptr sigSPtr = certificate.nextSiblingOf(sigRPtr);
+        if (
+            sigRoot.header() + sigRoot.totalLength() != sigBPtr.content() + sigBPtr.length()
+                || sigSPtr.header() + sigSPtr.totalLength() != sigRoot.content() + sigRoot.length()
+        ) {
+            revert InvalidAsn1Tag();
+        }
+        (uint128 rhi, uint256 rlo) = certificate.uint384At(sigRPtr);
+        (uint128 shi, uint256 slo) = certificate.uint384At(sigSPtr);
+        sigPacked = abi.encodePacked(rhi, rlo, shi, slo);
+    }
+
+    function _saveVerified(bytes32 certHash, VerifiedCert memory cert) internal {
+        verified[certHash] = abi.encodePacked(cert.ca, cert.notAfter, cert.maxPathLen, cert.subjectHash, cert.pubKey);
+    }
+
+    function _loadVerified(bytes32 certHash) internal view returns (VerifiedCert memory) {
+        bytes memory packed = verified[certHash];
+        if (packed.length == 0) {
+            return VerifiedCert({ca: false, notAfter: 0, maxPathLen: 0, subjectHash: 0, pubKey: ""});
+        }
+        uint8 ca;
+        uint64 notAfter;
+        int64 maxPathLen;
+        bytes32 subjectHash;
+        assembly {
+            ca := mload(add(packed, 0x1))
+            notAfter := mload(add(packed, 0x9))
+            maxPathLen := mload(add(packed, 0x11))
+            subjectHash := mload(add(packed, 0x31))
+        }
+        bytes memory pubKey = packed.slice(0x31, packed.length - 0x31);
+        return VerifiedCert({
+            ca: ca != 0, notAfter: notAfter, maxPathLen: maxPathLen, subjectHash: subjectHash, pubKey: pubKey
+        });
+    }
+}

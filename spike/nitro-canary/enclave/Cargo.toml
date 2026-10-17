@@ -1,0 +1,21 @@
+[package]
+name = "canary-enclave"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Runs inside an AWS Nitro Enclave. One secp256k1 key per boot, held only in enclave memory.
+# On request over vsock: asks the Nitro Security Module for an attestation document carrying
+# that key, and signs the canary's fixed-score digest with it.
+[dependencies]
+aws-nitro-enclaves-nsm-api = "=0.4.0"
+k256 = { version = "=0.13.4", features = ["ecdsa"] }
+sha3 = "=0.10.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_bytes = "0.11"
+hex = "0.4"
+vsock = "=0.5.1"
+
+[profile.release]
+opt-level = 3

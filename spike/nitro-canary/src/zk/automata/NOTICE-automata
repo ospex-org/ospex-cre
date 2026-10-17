@@ -1,0 +1,13 @@
+Copyright 2025 Automata. All Rights Reserved.
+
+This project includes code derived from the aws-nitro-enclaves-cose project,
+developed by Amazon.com, Inc. or its affiliates and licensed under the Apache License, Version 2.0.
+
+The incorporated code exists in the file:
+  crates/verifier/src/cose.rs
+
+The original copyright notice:
+  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+Source project:
+  https://github.com/awslabs/aws-nitro-enclaves-cose

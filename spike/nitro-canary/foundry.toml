@@ -1,0 +1,15 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+# Same compiler settings as base/nitro-validator at 0ea0d12, so the direct-route gas compares.
+optimizer = true
+optimizer_runs = 10000
+solc_version = "0.8.26"
+fs_permissions = [{ access = "read", path = "./fixtures" }]
+remappings = [
+  "forge-std/=lib/forge-std/src/",
+  "risc0/=lib/risc0-ethereum/contracts/src/",
+  "openzeppelin/=lib/risc0-ethereum/lib/openzeppelin-contracts/",
+]
