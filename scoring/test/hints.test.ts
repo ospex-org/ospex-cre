@@ -98,7 +98,8 @@ describe("seat 3 is read by its hint (ruled 10/22)", () => {
 
 	test("an id the seat has no result for reads silent, never no final: an unknown id, and ids 78 to 156 days old", () => {
 		// The seat answers [] for each, the same bytes for an id that never existed as for a game
-		// from May. Measured 22 Oct: by id, a result 2.6 days old still answers (next test); these do not.
+		// from May. Measured 22 Oct: by id, a result about four days old still answers (next test);
+		// these do not.
 		for (const old of [
 			"00000000-0000-4000-8000-000000000000",
 			"038769a6-0023-45d9-a6af-0774268a2804", // 5 Aug
@@ -111,8 +112,9 @@ describe("seat 3 is read by its hint (ruled 10/22)", () => {
 	});
 
 	test("seat 3 checks no teams: a hint naming another game reads that game, so verification must check the hint", () => {
-		// A finished NFL result at least 2.6 days old (from the seat's five-day list, which names no
-		// teams), read under the Lakers' game: the reading is that other game's 26-19.
+		// A finished NFL result from the seat's five-day list, which names no teams: not Sunday
+		// night's 23-13 nor Monday night's 23-17, so a Sunday afternoon game about four days old.
+		// Read under the Lakers' game, the reading is that other game's 26-19.
 		const lakers = byName("nba final").game;
 		expect(read(3, { ...lakers, hints: [{ seat: 3, id: "2c0b5786-b4f2-48de-8178-567ea27c9dbd" }] })).toEqual({
 			kind: "final",

@@ -51,8 +51,8 @@ which has both, drops a game once the game is final.
   record of the two teams inside the window is the game.
 * **Seat 3, by hint.** One request: the feed's result for the game's seat 3 id. The hint rides in
   the creation event on chain, so anyone can re-run the match while the feed answers for that id.
-  Measured 22 Oct: it answers a result 2.6 days old, and nothing for ids 78 to 156 days old (the
-  feed says five days). With no team names or time to read, seat 3's points are the feed's own
+  Measured 22 Oct: it answers a result about four days old, and nothing for ids 78 to 156 days
+  old (the feed says five days). With no team names or time to read, seat 3's points are the feed's own
   home and away, bound to the game by the hint; checking that binding against the feed's board
   while the game is listed belongs to verification. No hint, two hints, or a hint that is not a
   seat 3 id, and seat 3 is silent without asking.
