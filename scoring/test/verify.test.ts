@@ -13,7 +13,7 @@ import { runSync } from "../src/run";
 import type { Game, Reading, Seat } from "../src/types";
 import { START_SPREAD, decideStart } from "../src/verify";
 import { NOW } from "./cases";
-import { KEY, at, copy, saved, type Derive } from "./fixtures";
+import { KEY, at, copy, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, chainOf } from "./rule-helpers";
 
 const KEYS = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
@@ -80,6 +80,16 @@ describe("the start's rule, on the real saved answers", () => {
 		const v = verify(unverified("nhl not final"));
 		expect([v.action, v.why, v.report]).toEqual(["wait", "seat 1 is silent: http 401", null]);
 	});
+
+	test("seat 2 silent, or not listing the game, writes nothing either; the spare never stands in for seats 1 or 2", () => {
+		const t = saved(undefined, NOW);
+		const o = scoreGameSync(unverified("nfl not final"), KEYS, PAYOUT, NOW, (q) => (locate(q)?.seat === 2 ? { status: 503, body: "" } : t.send(q)));
+		expect([o.decision.action, o.decision.why, o.report]).toEqual(["wait", "seat 2 is silent: http 503", null]);
+		// Seat 2 answers, but lists no game of the two teams: it answered, and it does not list the game.
+		const empty: Derive = (s, p, b) => (s === 2 && p.startsWith("/games?league=NFL") ? { ...(b as object), results: [] } : b);
+		const v = verify(unverified("nfl not final"), empty);
+		expect([v.action, v.why]).toEqual(["wait", "seat 2 does not list the game within n of its date"]);
+	});
 });
 
 describe("seat 3's hint, checked against its board (ruling 2)", () => {
@@ -88,6 +98,8 @@ describe("seat 3's hint, checked against its board (ruling 2)", () => {
 		["the hint's row lists the teams the other way round", board("NFL", BEARS, flip), "home and away the other way round"],
 		["the hint's row is gone from the board", board("NFL", BEARS, () => null), "hint not on the board"],
 		["the hint's row names two other teams", board("NFL", BEARS, (r) => ({ ...r, HomeTeam: "Detroit Lions", AwayTeam: "Green Bay Packers" })), "other teams"],
+		["the hint's row has the home team right and another away team", board("NFL", BEARS, (r) => ({ ...r, AwayTeam: "Green Bay Packers" })), "other teams"],
+		["the hint's row has the away team right and another home team", board("NFL", BEARS, (r) => ({ ...r, HomeTeam: "Detroit Lions" })), "other teams"],
 		["the hint's row has no time", board("NFL", BEARS, (r) => ({ ...r, MatchTime: null })), "no time"],
 		["the hint's row is listed twice", (s, p, b) => (s === 3 && p === "/odds/NFL?oddType=Game" ? [...(b as unknown[]), (b as Record<string, unknown>[]).find((r) => r.ID === BEARS)] : b), "hint listed twice on the board"],
 		["the hint's row is more than an hour from seats 1 and 2", board("NFL", BEARS, (r) => ({ ...r, MatchTime: "2026-10-23T01:16:00" })), "board time not at the start"],
@@ -180,6 +192,17 @@ describe("the start's time (ruling 3)", () => {
 		const t1 = r1.record!.time!;
 		const d = decideStart({ date: t1 + 86_400 + 1, n: 86_400 }, { 1: r1, 2: read(2), 3: failed, 4: read(4) });
 		expect([d.action, d.why]).toEqual(["wait", "seat 1 does not list the game within n of its date"]);
+	});
+
+	test("seat 3's board time within the hour but more than n from the date never sets the start", () => {
+		// Seats 1 and 2 at 01:30 and 01:50, the date exactly n after 01:30. The board's 01:20 is within
+		// the hour of both but outside [date - n, date + n]: writing it would be refused, so seat 3 stands down.
+		const r1 = read(1);
+		const t1 = r1.record!.time!;
+		const g = { date: t1 + 86_400, n: 86_400 };
+		const d = decideStart(g, { 1: r1, 2: read(2), 3: { kind: "listed", id: "x", time: t1 - 600 }, 4: read(4) });
+		expect([d.action, d.action === "start" ? iso(d.start) : null, d.readings[2].detail]).toEqual(["start", "2026-10-21T01:30:00Z", "silent for the game: board time not at the start"]);
+		expect(d.action === "start" && d.start >= g.date - g.n).toBe(true);
 	});
 });
 
