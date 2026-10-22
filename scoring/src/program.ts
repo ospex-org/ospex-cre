@@ -26,7 +26,7 @@ import { countingFor, decide, decideDay7, silentForGame } from "./rule";
 import { MAX_REQUESTS, runAsync, runSync, silent } from "./run";
 import { leagueRow } from "./table";
 import type { Game, HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
-import { decideStart } from "./verify";
+import { START_BOUND, decideStart } from "./verify";
 
 /** One step of a run: read one seat, or check seat 3's board. */
 type Job = { readonly kind: "read"; readonly seat: Seat; readonly run: ReaderRun } | { readonly kind: "board"; readonly run: BoardRun };
@@ -102,10 +102,10 @@ function* readAll(game: ChainGame, start: number, keys: Keys, now: number, down:
 	return out;
 }
 
-/** Verification: seats 1, 2 and 4 read by team within n of the date, nearest it; seat 3's board checked. */
+/** Verification: seats 1, 2 and 4 read by team within a day of the date, nearest it; seat 3's board checked. */
 function* verifying(game: ChainGame, keys: Keys, now: number): Plan {
-	// The range the games set accepts a start in: [date - n, date + n], both ends in.
-	const probe: Game = { league: game.league, home: game.home, away: game.away, start: game.date - game.n, n: 2 * game.n + 1, hints: game.hints };
+	// The range the games set accepts a start in: [date - START_BOUND, date + START_BOUND], both ends in.
+	const probe: Game = { league: game.league, home: game.home, away: game.away, start: game.date - START_BOUND, n: 2 * START_BOUND + 1, hints: game.hints };
 	const byTeam = function* (seat: Seat): Generator<Job, Reading, Done> {
 		const key = keyFor(keys, seat);
 		if (key === null) return silent(seat, "no key");
@@ -120,7 +120,7 @@ function* verifying(game: ChainGame, keys: Keys, now: number): Plan {
 	else if (key3 === null) board = { kind: "silent", why: "no key" };
 	else board = (yield { kind: "board", run: checkBoard({ game: probe, now, key: key3 }) }) as BoardCheck;
 	const r4 = yield* byTeam(4);
-	return decideStart({ date: game.date, n: game.n }, { 1: r1, 2: r2, 3: board, 4: r4 });
+	return decideStart({ date: game.date }, { 1: r1, 2: r2, 3: board, 4: r4 });
 }
 
 function boardSync(run: BoardRun, send: (req: HttpRequest) => HttpResponse): BoardCheck {
