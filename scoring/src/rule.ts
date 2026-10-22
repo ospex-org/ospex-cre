@@ -47,17 +47,17 @@ export const AGREE = deepFreeze({
 } as const);
 
 /**
- * The seat that is silent for the whole game, if one is: seat 3, when the game was created without
- * a usable seat 3 hint, or when verification found its hint did not match seat 3's board and the
- * start report recorded seat 3 silent (Vince, 10/22, ruling 2: "silent for that game, never wrong").
- * Seats 1 and 2 are read by team and must list the game before its start is written, so neither is
- * ever silent for a whole game.
+ * The seat that is silent for the whole game, if one is: seat 3, unless the game was created with a
+ * usable seat 3 hint and the start report shows seat 3 passed its board check (an answer without a
+ * final: "listed on the board"). A hint that failed the check makes seat 3 silent for that game,
+ * never wrong (Vince, 10/22, ruling 2), and so does any start report that doesn't show the pass:
+ * seat 3's points are bound to the game only by that check. Seats 1 and 2 are read by team and must
+ * list the game before its start is written, so neither is ever silent for a whole game.
  */
 export function silentForGame(game: Pick<ChainGame, "hints" | "startReadings">): Seat | null {
 	if ("none" in hintOf(game.hints)) return 3;
 	const atStart = game.startReadings?.find((r) => r.seat === 3);
-	if (atStart !== undefined && atStart.kind === READING_KIND.silent) return 3;
-	return null;
+	return atStart !== undefined && atStart.kind === READING_KIND.noFinal ? null : 3;
 }
 
 /**

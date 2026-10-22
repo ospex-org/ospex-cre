@@ -8,9 +8,9 @@ import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../src/chain";
 import { readerFor } from "../src/index";
 import { scoreGameSync } from "../src/program";
-import type { BoardCheck } from "../src/readers/board3";
+import { checkBoard, type BoardCheck } from "../src/readers/board3";
 import { runSync } from "../src/run";
-import type { Game, Reading, Seat } from "../src/types";
+import type { Game, HttpResponse, Reading, Seat } from "../src/types";
 import { START_SPREAD, decideStart } from "../src/verify";
 import { NOW } from "./cases";
 import { KEY, at, copy, locate, saved, type Derive } from "./fixtures";
@@ -114,6 +114,22 @@ describe("seat 3's hint, checked against its board (ruling 2)", () => {
 	test("a team name the lists don't know fails the check: it is never read as the game", () => {
 		const v = verify(unverified("nfl not final"), board("NFL", BEARS, (r) => ({ ...r, HomeTeam: "Chicago Bearz" })));
 		expect([v.action, v.seats[2], v.report?.readings[2]]).toEqual(["start", "3:silent for the game: a team name the lists don't know", [3, 0]]);
+	});
+
+	test("the board check on its own: a game whose own teams the lists don't know is never bound to a row", () => {
+		// In a run, seats 1 and 2 refuse such a game first; the check keeps its own guard all the same.
+		const check = (home: string, away: string): BoardCheck => {
+			const t = saved(undefined, NOW);
+			const game: Game = { league: "nfl", home, away, start: at("2026-10-22T00:15:00Z"), n: 2 * 86_400 + 1, hints: [{ seat: 3, id: BEARS }] };
+			const run = checkBoard({ game, now: NOW, key: KEY });
+			let step = run.next(undefined as unknown as HttpResponse);
+			while (!step.done) step = run.next(t.send(step.value));
+			expect(t.misses).toEqual([]);
+			return step.value;
+		};
+		expect(check("Chicago Bears", "New England Patriots")).toMatchObject({ kind: "listed" });
+		expect(check("Chicago Bearz", "New England Patriots")).toEqual({ kind: "fails", why: "game teams unknown" });
+		expect(check("Chicago Bears", "Chicago Bears")).toEqual({ kind: "fails", why: "game teams unknown" });
 	});
 
 	test("a board row that isn't readable makes the run wait; it never stands seat 3 down", () => {

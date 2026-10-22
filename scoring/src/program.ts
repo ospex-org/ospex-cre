@@ -60,6 +60,8 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
 
 	const start = game.start;
 	if (start === null || !wholeSeconds(start)) return nothing("no start on chain");
+	// Which seats count rests on the start report's readings; without them, nothing is decided.
+	if (game.startReadings === null) return nothing("no start report on chain");
 	const down = silentForGame(game);
 
 	if (game.status === "verified") {
