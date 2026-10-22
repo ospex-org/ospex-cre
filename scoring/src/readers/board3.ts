@@ -9,9 +9,18 @@
 //
 // Three outcomes, kept apart because they lead to different places:
 //   listed   the hint's row names the game's teams in the game's order, with a time;
-//   fails    the board answered and the hint does not pass: seat 3 is silent for the whole game;
-//   silent   the board could not be read this time (no key, a refused or failed request, an answer
-//            that does not parse): nothing is learned about the hint, and verification waits.
+//   fails    the board answered, every row of it readable, and the hint can't be bound to the game:
+//            not on the board, listed twice, other teams, the teams the other way round, a team
+//            name the team lists don't know, or no time. Seat 3 is silent for the whole game, and
+//            the spare stands in;
+//   silent   the board could not be read this time (no key, a refused or failed request, a body or
+//            a row that is not JSON of the board's shape): nothing is learned about the hint, and
+//            verification waits.
+//
+// An unknown team name fails the check here, where D1's readers would read the seat silent for the
+// run. The difference is deliberate: verification is the one moment the binding can be checked, and
+// a run that waits on a spelling the program will never learn waits for good, while standing seat 3
+// down leaves the game three counting seats and is never wrong.
 
 import { resolveTeam } from "../teams";
 import { leagueRow } from "../table";
@@ -62,6 +71,7 @@ export function* checkBoard(ask: Ask): BoardRun {
 	if (home === null || away === null || home === away) return { kind: "fails", why: "game teams unknown" };
 	const boardHome = resolveTeam(league, rows[0].HomeTeam);
 	const boardAway = resolveTeam(league, rows[0].AwayTeam);
+	if (boardHome === null || boardAway === null) return { kind: "fails", why: "a team name the lists don't know" };
 	if (boardHome === away && boardAway === home) return { kind: "fails", why: "home and away the other way round" };
 	if (boardHome !== home || boardAway !== away) return { kind: "fails", why: "other teams" };
 

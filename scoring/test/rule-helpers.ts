@@ -3,6 +3,12 @@
 // A sweep gives each of the four seats one of four states: silent, answered without a final, or
 // answered with one of two different finals. Every combination is decided, so a property is
 // checked against the whole space, never a sample.
+//
+// The values are chosen so a careless comparison can't pass. B is A with the teams' points swapped:
+// the same total and the same pair of numbers, so a rule comparing finals by total or as an
+// unordered pair reads them as one final. An answer without a final carries A's points, as a game
+// still on, or a record kept from a run before, can, so a rule that counts points without checking
+// "final" reads it as agreeing with A. (rule-pairs.test.ts holds the other ways two finals differ.)
 
 import type { ChainGame, ReportReading } from "../src/chain";
 import type { Reading, Seat } from "../src/types";
@@ -11,19 +17,22 @@ import { CASES } from "./cases";
 export type State = "silent" | "none" | "A" | "B";
 export const STATES: readonly State[] = ["silent", "none", "A", "B"];
 
-/** The two finals: different points, the same two teams. */
-export const POINTS: Readonly<Record<"A" | "B", readonly [number, number]>> = { A: [27, 20], B: [27, 21] };
+/** The two finals: the same two teams, the points swapped. */
+export const POINTS: Readonly<Record<"A" | "B", readonly [number, number]>> = { A: [27, 20], B: [20, 27] };
+
+/** The points an answer without a final carries: A's. */
+export const LIVE: readonly [number, number] = POINTS.A;
 
 export function reading(seat: Seat, s: State): Reading {
 	if (s === "silent") return { seat, kind: "silent", home: null, away: null, recorded: null, detail: "silent", record: null };
-	if (s === "none") return { seat, kind: "no_final", home: 0, away: 0, recorded: null, detail: "scheduled", record: null };
+	if (s === "none") return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: null };
 	const [home, away] = POINTS[s];
 	return { seat, kind: "final", home, away, recorded: null, detail: "final", record: null };
 }
 
 export function reportReading(seat: Seat, s: State): ReportReading {
 	if (s === "silent") return { seat, kind: 0, homeScore: 0, awayScore: 0 };
-	if (s === "none") return { seat, kind: 1, homeScore: 0, awayScore: 0 };
+	if (s === "none") return { seat, kind: 1, homeScore: LIVE[0], awayScore: LIVE[1] };
 	const [homeScore, awayScore] = POINTS[s];
 	return { seat, kind: 2, homeScore, awayScore };
 }

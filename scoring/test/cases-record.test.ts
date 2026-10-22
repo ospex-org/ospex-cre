@@ -39,7 +39,11 @@ describe("the cases record", () => {
 		expect(fewer.unlisted).toEqual([`seat ${c.payloads[0].seat} ${c.payloads[0].path}`]);
 		const extra = replay({ ...c, payloads: [...c.payloads, { seat: 4, path: "/never/asked", sha256: c.payloads[0].sha256 }] });
 		expect(extra.unasked).toEqual(["seat 4 /never/asked"]);
-		// The outcome is compared whole: a void written down as a score fails.
-		expect(replay(c).outcome).not.toEqual({ ...c.outcome, action: "score" });
+		// The outcome is compared whole, down to one reading's kind: a case that wrote the spare as
+		// answered when the run read it silent would not match.
+		const report = c.outcome.report!;
+		const misread = { ...c.outcome, report: { ...report, readings: report.readings.map((r) => (r[0] === 4 ? ([4, 1, 0, 0] as const) : r)) } };
+		expect(replay(c).outcome).toEqual(c.outcome);
+		expect(replay(c).outcome).not.toEqual(misread);
 	});
 });
