@@ -1,0 +1,30 @@
+{
+  "case": "2026-06-11-mlb-rainout",
+  "what": "Atlanta at the Chicago White Sox, 11 Jun 2026, rained out and made up on 20 Aug.",
+  "game": {
+    "league": "mlb",
+    "home": "Chicago White Sox",
+    "away": "Atlanta Braves",
+    "date": "2026-06-11T23:40:00Z",
+    "hints": [],
+    "n": 86400,
+    "day7": 604800,
+    "status": "verified",
+    "start": "2026-06-11T23:40:00Z",
+    "startReadings": [[1, 1], [2, 1], [3, 0], [4, 1]]
+  },
+  "run": "2026-10-22T17:30:00Z",
+  "payloads": [
+    { "seat": 1, "path": "/mlb/v1/games?dates[]=2026-06-10&per_page=100", "sha256": "dad240fdee01967062e59a374cd6ed4edb3cd9f6bdf6d4dd3c42aa9f44c1a67a" },
+    { "seat": 1, "path": "/mlb/v1/games?dates[]=2026-06-11&per_page=100", "sha256": "fa659b25afbc9a591088748fc967fe79757d938fc6290dfcfc4dd103f274bfc4" },
+    { "seat": 1, "path": "/mlb/v1/games?dates[]=2026-06-12&per_page=100", "sha256": "2f4adc82ed98ebd67cb00784654898978eef47d832b75c94313228dba6c53efd" },
+    { "seat": 2, "path": "/games?league=MLB&date=2026-06-10", "sha256": "30afd3b8a29b176470f2e90de6de0883c818d4f535d1643687e2b9ced410bbc6" },
+    { "seat": 2, "path": "/games?league=MLB&date=2026-06-11", "sha256": "9d95d9665f08578b7f4945a0914af92898bb659d01f76bc4f2717c0299e77006" },
+    { "seat": 2, "path": "/games?league=MLB&date=2026-06-12", "sha256": "ced21b2f60fcc56ee4007ff42df4614cbaa3ddd07fb05d60d81c7204a62aa45c" }
+  ],
+  "outcome": {
+    "action": "void",
+    "report": { "kind": 3, "start": 0, "home": 0, "away": 0, "readings": [[1, 1, 0, 0], [2, 1, 0, 0], [3, 0, 0, 0], [4, 0, 0, 0]] }
+  },
+  "logic": "Seat 1 reads the game postponed and seat 2 cancelled, each at the game's own time. The game was created without a seat 3 hint, so the spare counts in seat 3's place, and on the run's date the spare is past the three days it keeps. After n, two counting seats answer, neither with a final, and no seat shows one: the hour-24 void. The makeup on 20 Aug is listed at its own time, outside this game's window, and never scores it."
+}
