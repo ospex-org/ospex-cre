@@ -15,3 +15,6 @@ node_modules/
 binary.wasm
 binary.wasm.br.b64
 dist/
+
+# The fingerprint script's output (bun build/fingerprint.ts)
+build/out/
