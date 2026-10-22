@@ -1,0 +1,147 @@
+nba: seat 4 "Golden State Warriors Blue" joins no team
+nba: seat 4 "Golden State Warriors Gold" joins no team
+mlb: seat 4 "American League" joins no team
+mlb: seat 4 "National League" joins no team
+nhl: seat 4 "Arizona Coyotes" joins no team
+ncaaf: seat 4 "Occidental Tigers" joins no team
+ncaaf: seat 4 "Savannah State Tigers" joins no team
+ncaaf: seat 4 "Wisconsin-Whitewater Warhawks" joins no team
+ncaaf: seat 4 "Youngstown St Penguins" joined youngstown-state-penguins by the shortening rule
+ncaab: seat 2 "West Florida" joins no team (in a saved answer)
+ncaab: seat 2 "Stonehill College" joined stonehill-skyhawks by the shortening rule
+ncaab: seat 2 "SUNY-Old Westbury" joins no team (in a saved answer)
+ncaab: seat 2 "Morris College" joins no team (in a saved answer)
+ncaab: seat 2 "Ottawa (KS)" joins no team (in a saved answer)
+ncaab: seat 2 "Miami-Middletown" joins no team (in a saved answer)
+ncaab: seat 2 "Reinhardt" joins no team (in a saved answer)
+ncaab: seat 2 "Fisk" joins no team (in a saved answer)
+ncaab: seat 2 "St. Joseph's (NY)" joins no team (in a saved answer)
+ncaab: seat 2 "Saint Joseph's Long Island" joins no team (in a saved answer)
+ncaab: seat 2 "North American University" joins no team (in a saved answer)
+ncaab: seat 2 "Carnegie Mellon" joins no team (in a saved answer)
+ncaab: seat 2 "St. Francis (IL)" joins no team (in a saved answer)
+ncaab: seat 2 "Virginia University-Lynchburg" joins no team (in a saved answer)
+ncaab: seat 2 "Paul Quinn" joins no team (in a saved answer)
+ncaab: seat 2 "Southeastern Baptist College" joins no team (in a saved answer)
+ncaab: seat 2 "Mount Marty" joins no team (in a saved answer)
+ncaab: seat 2 "Berry" joins no team (in a saved answer)
+ncaab: seat 2 "Rhode Island College" joined rhode-island-rams by the shortening rule
+ncaab: seat 2 "Dallas Christian" joins no team (in a saved answer)
+ncaab: seat 2 "Mount Olive" joins no team (in a saved answer)
+ncaab: seat 2 "Cheyney" joins no team (in a saved answer)
+ncaab: seat 2 "Eureka" joins no team (in a saved answer)
+ncaab: seat 2 "Paine" joins no team (in a saved answer)
+ncaab: seat 2 "Indiana-Kokomo" joins no team (in a saved answer)
+ncaab: seat 2 "MIT" joins no team (in a saved answer)
+ncaab: seat 2 "Curry College" joins no team (in a saved answer)
+ncaab: seat 2 "Coast Guard" joins no team (in a saved answer)
+ncaab: seat 2 "Notre Dame of Maryland" joins no team (in a saved answer)
+ncaab: seat 2 "Rivier" joins no team (in a saved answer)
+ncaab: seat 2 "Bridgewater" joins no team (in a saved answer)
+ncaab: seat 2 "Schreiner" joins no team (in a saved answer)
+ncaab: seat 2 "Midway" joins no team (in a saved answer)
+ncaab: seat 2 "St. Vincent" joins no team (in a saved answer)
+ncaab: seat 2 "Kentucky Christian" joins no team (in a saved answer)
+ncaab: seat 2 "New College of Florida" joins no team (in a saved answer)
+ncaab: seat 2 "Lyon College" joins no team (in a saved answer)
+ncaab: seat 2 "LaGrange College" joins no team (in a saved answer)
+ncaab: seat 2 "Pfeiffer" joins no team (in a saved answer)
+ncaab: seat 2 "Lawrence University" joins no team (in a saved answer)
+ncaab: seat 2 "Oakwood" joins no team (in a saved answer)
+ncaab: seat 2 "Lane College" joins no team (in a saved answer)
+ncaab: seat 2 "Adams State" joins no team (in a saved answer)
+ncaab: seat 2 "Willamette" joins no team (in a saved answer)
+ncaab: seat 2 "Minnesota-Crookston" joins no team (in a saved answer)
+ncaab: seat 2 "Regent University" joins no team (in a saved answer)
+ncaab: seat 2 "Maryville-Tennesee" joins no team (in a saved answer)
+ncaab: seat 2 "Monmouth (IL)" joins no team (in a saved answer)
+ncaab: seat 2 "Western Colorado University" joins no team (in a saved answer)
+ncaab: seat 2 "Mid-America Christian" joins no team (in a saved answer)
+ncaab: seat 2 "North Texas-Dallas" joins no team (in a saved answer)
+ncaab: seat 2 "Cameron" joins no team (in a saved answer)
+ncaab: seat 2 "Tougaloo" joins no team (in a saved answer)
+ncaab: seat 2 "Maryville University" joins no team (in a saved answer)
+ncaab: seat 2 "Texas A&M-Kingsville" joins no team (in a saved answer)
+ncaab: seat 2 "Southwestern Christian University" joins no team (in a saved answer)
+ncaab: seat 2 "San Francisco State" joins no team (in a saved answer)
+ncaab: seat 2 "Fresno Pacific" joins no team (in a saved answer)
+ncaab: seat 2 "Biola" joins no team (in a saved answer)
+ncaab: seat 2 "Colorado College" joined colorado-buffaloes by the shortening rule
+ncaab: seat 2 "George Fox" joins no team (in a saved answer)
+ncaab: seat 2 "La Verne" joins no team (in a saved answer)
+ncaab: seat 2 "William Jessup" joins no team (in a saved answer)
+ncaab: seat 2 "Whittier" joins no team (in a saved answer)
+ncaab: seat 2 "West Coast Baptist" joins no team (in a saved answer)
+ncaab: seat 2 "Cal State-San Marcos" joins no team (in a saved answer)
+ncaab: seat 2 "Bethesda" joins no team (in a saved answer)
+ncaab: seat 2 "Milligan" joins no team (in a saved answer)
+ncaab: seat 2 "Warren Wilson" joins no team (in a saved answer)
+ncaab: seat 2 "Louisiana Christian" joins no team (in a saved answer)
+ncaab: seat 2 "Lincoln (MO)" joins no team (in a saved answer)
+ncaab: seat 2 "Cornell College" joined cornell-big-red by the shortening rule
+ncaab: seat 2 "Regis University" joins no team (in a saved answer)
+ncaab: seat 2 "Western New Mexico" joins no team (in a saved answer)
+ncaab: seat 2 "Lewis & Clark" joins no team (in a saved answer)
+ncaab: seat 2 "Chapman" joins no team (in a saved answer)
+ncaab: seat 4 "Alabama St Hornets" joined alabama-state-hornets by the shortening rule
+ncaab: seat 4 "Alcorn St Braves" joined alcorn-state-braves by the shortening rule
+ncaab: seat 4 "Arizona St Sun Devils" joined arizona-state-sun-devils by the shortening rule
+ncaab: seat 4 "Arkansas St Red Wolves" joined arkansas-state-red-wolves by the shortening rule
+ncaab: seat 4 "Baldwin Wallace Yellow Jackets" joins no team
+ncaab: seat 4 "Boston Univ. Terriers" joined boston-university-terriers by the shortening rule
+ncaab: seat 4 "Brescia Bearcats" joins no team
+ncaab: seat 4 "Chicago St Cougars" joined chicago-state-cougars by the shortening rule
+ncaab: seat 4 "Cincinnati Clermont" joins no team
+ncaab: seat 4 "Cleveland St Vikings" joined cleveland-state-vikings by the shortening rule
+ncaab: seat 4 "Clinton Bears" joins no team
+ncaab: seat 4 "Colorado St Rams" joined colorado-state-rams by the shortening rule
+ncaab: seat 4 "Coppin St Eagles" joined coppin-state-eagles by the shortening rule
+ncaab: seat 4 "Defiance College Yellow Jackets" joins no team
+ncaab: seat 4 "Delaware St Hornets" joined delaware-state-hornets by the shortening rule
+ncaab: seat 4 "East Tennessee St Buccaneers" joined east-tennessee-state-buccaneers by the shortening rule
+ncaab: seat 4 "Florida St Seminoles" joined florida-state-seminoles by the shortening rule
+ncaab: seat 4 "Fresno St Bulldogs" joined fresno-state-bulldogs by the shortening rule
+ncaab: seat 4 "Gallaudet Bison" joins no team
+ncaab: seat 4 "Georgia Southwestern State Hurricanes" joins no team
+ncaab: seat 4 "Georgia St Panthers" joined georgia-state-panthers by the shortening rule
+ncaab: seat 4 "Illinois St Redbirds" joined illinois-state-redbirds by the shortening rule
+ncaab: seat 4 "Immaculata Mighty Macs" joins no team
+ncaab: seat 4 "Indiana St Sycamores" joined indiana-state-sycamores by the shortening rule
+ncaab: seat 4 "Jackson St Tigers" joined jackson-state-tigers by the shortening rule
+ncaab: seat 4 "Jacksonville St Gamecocks" joined jacksonville-state-gamecocks by the shortening rule
+ncaab: seat 4 "John Jay College Bloodhounds" joins no team
+ncaab: seat 4 "Johnson And Wales (NC) Wildcats" joins no team
+ncaab: seat 4 "Kansas Christian Falcons" joins no team
+ncaab: seat 4 "Kansas St Wildcats" joined kansas-state-wildcats by the shortening rule
+ncaab: seat 4 "Kennesaw St Owls" joined kennesaw-state-owls by the shortening rule
+ncaab: seat 4 "Michigan St Spartans" joined michigan-state-spartans by the shortening rule
+ncaab: seat 4 "Mississippi St Bulldogs" joined mississippi-state-bulldogs by the shortening rule
+ncaab: seat 4 "Missouri St Bears" joined missouri-state-bears by the shortening rule
+ncaab: seat 4 "Montana St Bobcats" joined montana-state-bobcats by the shortening rule
+ncaab: seat 4 "Morehead St Eagles" joined morehead-state-eagles by the shortening rule
+ncaab: seat 4 "Morgan St Bears" joined morgan-state-bears by the shortening rule
+ncaab: seat 4 "Murray St Racers" joined murray-state-racers by the shortening rule
+ncaab: seat 4 "New Mexico St Aggies" joined new-mexico-state-aggies by the shortening rule
+ncaab: seat 4 "Norfolk St Spartans" joined norfolk-state-spartans by the shortening rule
+ncaab: seat 4 "North American Stallions" joins no team
+ncaab: seat 4 "North Dakota St Bison" joined north-dakota-state-bison by the shortening rule
+ncaab: seat 4 "Northwestern St Demons" joined northwestern-state-demons by the shortening rule
+ncaab: seat 4 "Oklahoma St Cowboys" joined oklahoma-state-cowboys by the shortening rule
+ncaab: seat 4 "Oregon St Beavers" joined oregon-state-beavers by the shortening rule
+ncaab: seat 4 "Pfeiffer Falcons" joins no team
+ncaab: seat 4 "Portland St Vikings" joined portland-state-vikings by the shortening rule
+ncaab: seat 4 "Regent University Royals" joins no team
+ncaab: seat 4 "Sacramento St Hornets" joined sacramento-state-hornets by the shortening rule
+ncaab: seat 4 "San Diego St Aztecs" joined san-diego-state-aztecs by the shortening rule
+ncaab: seat 4 "San José St Spartans" joined san-jose-state-spartans by the shortening rule
+ncaab: seat 4 "Savannah St Tigers" joined savannah-state-tigers by the shortening rule
+ncaab: seat 4 "Sonoma State Seawolves" joins no team
+ncaab: seat 4 "South Carolina St Bulldogs" joined south-carolina-state-bulldogs by the shortening rule
+ncaab: seat 4 "South Dakota St Jackrabbits" joined south-dakota-state-jackrabbits by the shortening rule
+ncaab: seat 4 "Spalding Golden Eagles" joins no team
+ncaab: seat 4 "Tennessee St Tigers" joined tennessee-state-tigers by the shortening rule
+ncaab: seat 4 "Washington St Cougars" joined washington-state-cougars by the shortening rule
+ncaab: seat 4 "Western State Colorado Mountaineers" joins no team
+ncaab: seat 4 "Wichita St Shockers" joined wichita-state-shockers by the shortening rule
+ncaab: seat 4 "Wright St Raiders" joined wright-state-raiders by the shortening rule
+ncaab: seat 4 "Youngstown St Penguins" joined youngstown-state-penguins by the shortening rule

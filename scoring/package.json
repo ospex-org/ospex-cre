@@ -1,0 +1,16 @@
+{
+  "name": "ospex-scoring",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "The v3 scoring script: the feed table and the four readers. Imports nothing from Chainlink.",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "capture": "bun capture/capture.ts"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

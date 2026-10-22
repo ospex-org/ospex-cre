@@ -31,6 +31,7 @@ three request types, the report ABI contract, the determinism rules, and simulat
 | `oracle/config.*.example.json` | per-target config templates — copy to `config.*.json` and fill |
 | `oracle/workflow.yaml`, `project.yaml` | CRE CLI target settings |
 | `secrets.yaml` | secret **names** mapped to env vars (no secret values) |
+| `scoring/` | v3: the scoring program's feed table and its four readers, which import nothing from Chainlink — see [`scoring/README.md`](./scoring/README.md) |
 
 ## Prerequisites
 
