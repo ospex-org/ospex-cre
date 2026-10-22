@@ -131,8 +131,8 @@ inside the fingerprint. For a game whose start is written:
   * Its final counts toward a disagreement like any other seat's.
   * Its answer without a final never blocks a score.
   * It **stands in for seat 3 for a game whose seat 3 is silent for the whole game**: a game
-    created without a usable seat 3 hint, or one whose hint failed the check at verification. Then
-    seats 1, 2 and 4 count, inside n and after.
+    created without a usable seat 3 hint, or one whose start report doesn't show seat 3 passed its
+    board check. Then seats 1, 2 and 4 count, inside n and after.
   * A seat silent on one run is just silent on that run; the spare does not stand in for it.
 
 ## The start

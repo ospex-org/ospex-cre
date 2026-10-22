@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../src/chain";
 import { scoreGameAsync, scoreGameSync } from "../src/program";
+import { silentForGame } from "../src/rule";
 import { CASES, NOW } from "./cases";
 import { KEY, at, copy, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, chainOf } from "./rule-helpers";
@@ -30,6 +31,7 @@ describe("one run", () => {
 			["no day-7 clock", { ...g, day7: 0 }, NOW, "the game's clocks are not readable"],
 			["no start", { ...g, start: null }, NOW, "no start on chain"],
 			["a zero start", { ...g, start: 0 }, NOW, "no start on chain"],
+			["no start report", { ...g, startReadings: null }, NOW, "no start report on chain"],
 			["disputed, no record", { ...g, status: "disputed", dispute: null }, NOW, "no dispute record on chain"],
 			["disputed, a record at zero", { ...g, status: "disputed", dispute: { ...record, at: 0 } }, NOW, "no dispute record on chain"],
 		];
@@ -65,6 +67,19 @@ describe("one run", () => {
 		const g = chainOf("nba not final");
 		expect(asked(g, g.start! - 1)).toMatchObject({ action: "wait", why: "before the start", seats: [] });
 		expect(asked(g, g.start!).seats.length).toBeGreaterThan(0);
+	});
+
+	test("seat 3 counts only when the start report shows it passed its board check", () => {
+		const hint = [{ seat: 3, id: "00000000-0000-4000-8000-000000000000" }];
+		const at = (kind: 0 | 1 | 2) => [{ seat: 3, kind, homeScore: 0, awayScore: 0 }];
+		expect([
+			silentForGame({ hints: hint, startReadings: at(1) }), // passed: counts
+			silentForGame({ hints: hint, startReadings: at(0) }), // failed: silent for the game
+			silentForGame({ hints: hint, startReadings: at(2) }), // never a board check's answer
+			silentForGame({ hints: hint, startReadings: [] }), // no seat 3 reading
+			silentForGame({ hints: hint, startReadings: null }),
+			silentForGame({ hints: [], startReadings: at(1) }), // no usable hint
+		]).toEqual([null, 3, 3, 3, 3, 3]);
 	});
 
 	test("a seat silent for the game is never asked; every other seat is, in seat order", () => {
