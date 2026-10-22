@@ -136,4 +136,16 @@ describe("never: a score on fewer than two agreeing finals, fewer than three ins
 		// The same answers a minute after the window closes: two agreeing finals, the third silent.
 		expect(silenced(at("2026-10-23T02:01:00Z"))).toBe("kind 2 127-105");
 	});
+
+	test("end to end: the window's last second is inside n; start + n itself is after", () => {
+		const why = (now: number) => {
+			const t = saved(undefined, now);
+			const out = scoreGameSync(lakers, KEYS, PAYOUT, now, (req) => (locate(req)?.seat === 1 ? { status: 503, body: "" } : t.send(req)));
+			expect(t.misses).toEqual([]);
+			return out.decision.why;
+		};
+		const end = lakers.start! + lakers.n;
+		expect(why(end - 1)).toBe("inside n: a counting seat is silent");
+		expect(why(end)).toBe("after n: two counting seats or more, the same final, the rest silent");
+	});
 });
