@@ -2,7 +2,8 @@
 // rule, and build the report. Everything it takes from outside is handed in here: the game (read
 // from the chain), the run's clock, a transport, each seat's key and the payout address. Which
 // seats are asked, which of them count and how many must agree all come from the table and the
-// rule, inside the fingerprint.
+// rule, inside the fingerprint. The clock picks inside n or after, so it must be the chain's time
+// (see rule.ts); a clock that is not a whole, positive, safe number of seconds decides nothing.
 //
 //   unverified   the start's rule (verify.ts): seats 1, 2 and 4 read by team near the creator's
 //                date, seat 3's board checked against its hint.
@@ -75,7 +76,12 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
 	return decideDay7(fresh, record.readings, seatsFor(game.league));
 }
 
-/** Every seat in the table, in seat order, read in the game's window. A seat silent for the game is not asked. */
+/**
+ * Every seat in the table, in seat order, read in the game's window: four readings, always ("the
+ * program always asks four feeds"). A seat silent for the game reads silent without a request, as
+ * D1's seat 3 reader already does for a game created without a hint, so a final it might give for
+ * a hint that failed verification can never count.
+ */
 function* readAll(game: ChainGame, start: number, keys: Keys, now: number, down: Seat | null): Generator<Job, Reading[], Done> {
 	const g: Game = { league: game.league, home: game.home, away: game.away, start, n: game.n, hints: game.hints };
 	const out: Reading[] = [];

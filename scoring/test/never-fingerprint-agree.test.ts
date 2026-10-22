@@ -105,7 +105,16 @@ describe("never: how many must agree, or which seats count, from outside the fin
 	});
 
 	test("a payout that is not a usable address writes nothing, and decides nothing either", () => {
-		for (const bad of ["", "0x", "0x0000000000000000000000000000000000000000", "0x12", "1111111111111111111111111111111111111111", "0xGGGG000000000000000000000000000000000000"]) {
+		for (const bad of [
+			"",
+			"0x",
+			"0x0000000000000000000000000000000000000000",
+			"0x12",
+			"1111111111111111111111111111111111111111",
+			"0xGGGG000000000000000000000000000000000000",
+			`${PAYOUT}ff`, // an address with more after it
+			` ${PAYOUT}`,
+		]) {
 			const t = saved(seat3Final, NOW);
 			expect({ bad, threw: throws(() => scoreGameSync(lakers3, ALL, bad, NOW, t.send)) }).toEqual({ bad, threw: true });
 		}

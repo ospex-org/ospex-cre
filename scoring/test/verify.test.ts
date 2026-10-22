@@ -111,6 +111,29 @@ describe("seat 3's hint, checked against its board (ruling 2)", () => {
 		});
 	}
 
+	test("a team name the lists don't know fails the check: it is never read as the game", () => {
+		const v = verify(unverified("nfl not final"), board("NFL", BEARS, (r) => ({ ...r, HomeTeam: "Chicago Bearz" })));
+		expect([v.action, v.seats[2], v.report?.readings[2]]).toEqual(["start", "3:silent for the game: a team name the lists don't know", [3, 0]]);
+	});
+
+	test("a board row that isn't readable makes the run wait; it never stands seat 3 down", () => {
+		const nulled: Derive = (s, p, b) => (s === 3 && p === "/odds/NFL?oddType=Game" ? (b as Record<string, unknown>[]).map((r) => (r.ID === BEARS ? null : r)) : b);
+		const v = verify(unverified("nfl not final"), nulled);
+		expect([v.action, v.why, v.report]).toEqual(["wait", "seat 3's board is silent: unreadable record", null]);
+	});
+
+	test("the board's own ways of writing an id and a time still bind the hint", () => {
+		const forms: [string, (r: Record<string, unknown>) => Record<string, unknown>, string][] = [
+			["the id in capitals", (r) => ({ ...r, ID: BEARS.toUpperCase() }), "2026-10-23T00:15:00Z"],
+			["a time with its zone", (r) => ({ ...r, MatchTime: "2026-10-22T20:15:00-04:00" }), "2026-10-23T00:15:00Z"],
+			["a time with a trailing space", (r) => ({ ...r, MatchTime: "2026-10-23T00:10:00 " }), "2026-10-23T00:10:00Z"],
+		];
+		for (const [what, change, start] of forms) {
+			const v = verify(unverified("nfl not final"), board("NFL", BEARS, change));
+			expect({ what, got: [v.action, v.start, v.report?.readings[2]] }).toEqual({ what, got: ["start", start, [3, 1]] });
+		}
+	});
+
 	test("the control: a board time within the hour passes, and an earlier one sets the start", () => {
 		const v = verify(unverified("nfl not final"), board("NFL", BEARS, (r) => ({ ...r, MatchTime: "2026-10-23T00:05:00" })));
 		expect([v.action, v.start, v.seats[2]]).toEqual(["start", "2026-10-23T00:05:00Z", "3:2026-10-23T00:05:00Z"]);
@@ -160,6 +183,42 @@ describe("the start's time (ruling 3)", () => {
 		const shift = (r: Reading, by: number): Reading => ({ ...r, record: { id: r.record!.id, time: r.record!.time! + by } });
 		const d = decideStart({ date: r1.record!.time!, n: 86_400 }, { 1: r1, 2: read(2), 3: failed, 4: shift(read(4), -40 * 60) });
 		expect([d.action, d.action === "start" ? iso(d.start) : null]).toEqual(["start", "2026-10-21T01:30:00Z"]);
+	});
+
+	test("the hour is measured across every counting seat: seat 3 and the spare must each be within it of both seats 1 and 2", () => {
+		// The real times: seat 1 at 01:30, seat 2 at 01:50. A time can be inside the hour of one and outside it of the other.
+		const r1 = read(1);
+		const r2 = read(2);
+		const t1 = r1.record!.time!;
+		const g = { date: t1, n: 86_400 };
+		const board = (minutes: number): BoardCheck => ({ kind: "listed", id: "x", time: t1 + minutes * 60 });
+		const run = (b: BoardCheck, r4: Reading = read(4)) => {
+			const d = decideStart(g, { 1: r1, 2: r2, 3: b, 4: r4 });
+			return [d.action, d.action === "start" ? iso(d.start) : null, d.readings[2].kind];
+		};
+		expect(run(board(-20))).toEqual(["start", "2026-10-21T01:10:00Z", "no_final"]); // 20 and 40 minutes: passes, and sets the start
+		expect(run(board(55))).toEqual(["start", "2026-10-21T01:30:00Z", "no_final"]); // 55 and 35 minutes: passes
+		expect(run(board(-45))).toEqual(["start", "2026-10-21T01:30:00Z", "silent"]); // 45 minutes from seat 1, 65 from seat 2
+		expect(run(board(75))).toEqual(["start", "2026-10-21T01:30:00Z", "silent"]); // 55 minutes from seat 2, 75 from seat 1
+		// The spare standing in, the same way.
+		const spare = (minutes: number): Reading => ({ ...read(4), record: { id: "x", time: t1 + minutes * 60 } });
+		const down: BoardCheck = { kind: "fails", why: "hint not on the board" };
+		expect(run(down, spare(-45))[0]).toBe("wait");
+		expect(run(down, spare(75))[0]).toBe("wait");
+		expect(run(down, spare(55))).toEqual(["start", "2026-10-21T01:30:00Z", "silent"]);
+	});
+
+	test("both ends of the games set's range are in: a time at exactly date - n or date + n lists the game", () => {
+		const r1 = read(1);
+		const t1 = r1.record!.time!;
+		const at = (t: number): Reading => ({ ...r1, record: { id: "x", time: t } });
+		for (const [date, n] of [
+			[t1 - 86_400, 86_400],
+			[t1 + 86_400, 86_400],
+		]) {
+			const d = decideStart({ date, n }, { 1: at(t1), 2: { ...read(2), record: { id: "y", time: t1 } }, 3: { kind: "listed", id: "z", time: t1 }, 4: read(4) });
+			expect({ date: iso(date), got: [d.action, d.action === "start" ? iso(d.start) : null, d.readings[2].kind] }).toEqual({ date: iso(date), got: ["start", "2026-10-21T01:30:00Z", "no_final"] });
+		}
 	});
 
 	test("an hour apart is the most: at 3600 seconds the earliest is written, at 3601 nothing is", () => {

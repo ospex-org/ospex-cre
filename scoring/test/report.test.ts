@@ -1,7 +1,8 @@
 // The report the program builds is the games set's one shape (B2). The field names, their order
 // and the enum numbers below are copied as literals from ospex-contracts-v2,
 // src/games/IOspexGames.sol, on PR #37 at 3b23239 (`struct Report`, `struct Reading`, `enum
-// ReportKind`, `enum ReadingKind`), so a change on either side shows here.
+// ReportKind`, `enum ReadingKind`). A change on this side shows here. A change in B2 shows only
+// when these literals are copied again: nothing here reads the other repository.
 
 import { describe, expect, test } from "bun:test";
 import { READING_KIND, REPORT_KIND, type Decision } from "../src/chain";
@@ -46,9 +47,9 @@ describe("the report, in B2's shape", () => {
 		const r = toReport("7", { action: "dispute", readings, why: "" }, PAYOUT)!;
 		expect(r.readings).toEqual([
 			{ seat: 1, kind: 2, homeScore: 27, awayScore: 20 },
-			{ seat: 2, kind: 1, homeScore: 0, awayScore: 0 },
+			{ seat: 2, kind: 1, homeScore: 27, awayScore: 20 }, // answered without a final, with the points it gave
 			{ seat: 3, kind: 0, homeScore: 0, awayScore: 0 },
-			{ seat: 4, kind: 1, homeScore: 0, awayScore: 0 },
+			{ seat: 4, kind: 1, homeScore: 0, awayScore: 0 }, // answered without a final and without points
 		]);
 		// A seat that answered without a final, with points: the points as it gave them.
 		expect(toReportReading({ ...reading(2, "none"), home: 3, away: 1 })).toEqual({ seat: 2, kind: 1, homeScore: 3, awayScore: 1 });

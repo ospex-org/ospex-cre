@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../src/chain";
 import { scoreGameAsync, scoreGameSync } from "../src/program";
 import { CASES, NOW } from "./cases";
-import { KEY, at, locate, saved } from "./fixtures";
+import { KEY, at, copy, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, chainOf } from "./rule-helpers";
 
 const KEYS = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
@@ -19,19 +19,46 @@ function asked(game: ChainGame, now = NOW) {
 describe("one run", () => {
 	test("an ended game, an unoffered league, unreadable clocks, a missing start or record: nothing is asked or written", () => {
 		const g = chainOf("nba final");
-		const rows: [string, ChainGame, string][] = [
-			["scored", { ...g, status: "scored" }, "the game has ended"],
-			["voided", { ...g, status: "voided" }, "the game has ended"],
-			["released", { ...g, status: "released" }, "the game has ended"],
-			["unoffered", { ...g, league: "wnba" }, "league not offered"],
-			["no n", { ...g, n: 0 }, "the game's clocks are not readable"],
-			["fractional date", { ...g, date: g.date + 0.5 }, "the game's clocks are not readable"],
-			["no start", { ...g, start: null }, "no start on chain"],
-			["disputed, no record", { ...g, status: "disputed", dispute: null }, "no dispute record on chain"],
+		const record = { at: g.start! + 3600, readings: [] };
+		const rows: [string, ChainGame, number, string][] = [
+			["scored", { ...g, status: "scored" }, NOW, "the game has ended"],
+			["voided", { ...g, status: "voided" }, NOW, "the game has ended"],
+			["released", { ...g, status: "released" }, NOW, "the game has ended"],
+			["unoffered", { ...g, league: "wnba" }, NOW, "league not offered"],
+			["no n", { ...g, n: 0 }, NOW, "the game's clocks are not readable"],
+			["fractional date", { ...g, date: g.date + 0.5 }, NOW, "the game's clocks are not readable"],
+			["no day-7 clock", { ...g, day7: 0 }, NOW, "the game's clocks are not readable"],
+			["no start", { ...g, start: null }, NOW, "no start on chain"],
+			["a zero start", { ...g, start: 0 }, NOW, "no start on chain"],
+			["disputed, no record", { ...g, status: "disputed", dispute: null }, NOW, "no dispute record on chain"],
+			["disputed, a record at zero", { ...g, status: "disputed", dispute: { ...record, at: 0 } }, NOW, "no dispute record on chain"],
 		];
-		for (const [what, game, why] of rows) {
-			expect({ what, ...asked(game) }).toEqual({ what, action: "wait", why, report: null, seats: [], misses: [] });
+		// The run's clock picks the count, three inside n or two after, so a clock that can't be read
+		// decides nothing: read as a number it would put a game inside its window after n.
+		for (const now of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1, NOW + 0.5, Number.MAX_SAFE_INTEGER + 2]) {
+			rows.push([`the run's clock ${now}`, g, now, "the game's clocks are not readable"]);
 		}
+		for (const [what, game, now, why] of rows) {
+			expect({ what, ...asked(game, now) }).toEqual({ what, action: "wait", why, report: null, seats: [], misses: [] });
+		}
+	});
+
+	test("a seat with no key is still in the report: silent, one reading per seat asked", () => {
+		const g = chainOf("nba final");
+		const after = g.start! + g.n + 60;
+		const t = saved(undefined, after);
+		const o = scoreGameSync(g, { 1: KEY, 2: KEY }, PAYOUT, after, t.send);
+		expect(t.misses).toEqual([]);
+		expect([o.report?.kind, o.report?.readings.map((r) => [r.seat, r.kind])]).toEqual([
+			2,
+			[
+				[1, 2],
+				[2, 2],
+				[3, 0],
+				[4, 0],
+			],
+		]);
+		expect(o.decision.readings.map((r) => r.detail)).toEqual(["final", "final", "silent for the game", "no key"]);
 	});
 
 	test("before the start, nothing is asked", () => {
@@ -61,35 +88,46 @@ describe("one run", () => {
 		expect(v.misses).toEqual([]);
 	});
 
-	test("the synchronous and asynchronous runs decide the same, on every real game and every state the suite reads", async () => {
-		const states: ((c: ChainGame) => ChainGame)[] = [
-			(c) => c,
-			(c) => ({ ...c, status: "unverified", start: null, startReadings: null }),
+	test("the synchronous and asynchronous runs decide the same, on every real game, verified, unverified and disputed", async () => {
+		// The real answers all agree, so the last pass derives a disagreement: every final seat 2 gives
+		// has one more home point.
+		const seat2Off: Derive = (seat, _path, body) => {
+			if (seat !== 2) return body;
+			const b = copy(body) as { results?: Record<string, any>[] };
+			for (const g of b.results ?? []) if (g.status === "final" && g.scoreboard?.score) g.scoreboard.score.home += 1;
+			return b;
+		};
+		const states: [(c: ChainGame) => ChainGame, Derive | undefined][] = [
+			[(c) => c, undefined],
+			[(c) => ({ ...c, status: "unverified", start: null, startReadings: null }), undefined],
+			[
+				(c) => ({
+					...c,
+					status: "disputed",
+					dispute: { at: NOW - 7 * 86_400, readings: [1, 2, 3, 4].map((seat) => ({ seat, kind: 2 as const, homeScore: 3, awayScore: 2 })) },
+				}),
+				undefined,
+			],
+			[(c) => c, seat2Off],
 		];
+		const actions = new Set<string>();
 		let compared = 0;
 		for (const c of CASES) {
-			for (const toState of states) {
+			for (const [toState, derive] of states) {
 				const game = toState(chainOf(c.name));
-				const t1 = saved(undefined, NOW);
-				const t2 = saved(undefined, NOW);
-				let sync: unknown;
-				try {
-					sync = scoreGameSync(game, KEYS, PAYOUT, NOW, t1.send);
-				} catch (e) {
-					sync = String(e);
-				}
-				let async_: unknown;
-				try {
-					async_ = await scoreGameAsync(game, KEYS, PAYOUT, NOW, async (q) => t2.send(q));
-				} catch (e) {
-					async_ = String(e);
-				}
+				const t1 = saved(derive, NOW);
+				const t2 = saved(derive, NOW);
+				const sync = scoreGameSync(game, KEYS, PAYOUT, NOW, t1.send);
+				const async_ = await scoreGameAsync(game, KEYS, PAYOUT, NOW, async (q) => t2.send(q));
 				expect({ name: c.name, out: async_ }).toEqual({ name: c.name, out: sync });
 				expect(t2.asked.map((q) => q.url)).toEqual(t1.asked.map((q) => q.url));
+				actions.add(sync.decision.action);
 				compared++;
 			}
 		}
-		expect(compared).toBe(CASES.length * 2);
+		expect(compared).toBe(CASES.length * 4);
+		// The comparison covered every kind of decision, not one kind sixteen times.
+		expect([...actions].sort()).toEqual(["dispute", "score", "start", "void", "wait"]);
 	});
 
 	test("a transport that throws makes that seat silent, never the run's decision", async () => {

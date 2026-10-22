@@ -22,7 +22,7 @@ import { scoreGameSync } from "../src/program";
 import { decideDay7 } from "../src/rule";
 import type { Seat } from "../src/types";
 import { NOW } from "./cases";
-import { KEY, at, saved } from "./fixtures";
+import { KEY, at, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, SEATS4, STATES, chainOf, reading, reportReading, type State } from "./rule-helpers";
 
 const KEYS = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
@@ -119,10 +119,55 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 			scores: [23, 17],
 			sources: ["1:final/final", "2:final/final", "3:final/recorded at the dispute", "4:final/recorded at the dispute"],
 		});
-		// Before the day-7 clock has run, nothing is read and nothing is written.
+		// Before the day-7 clock has run, nothing is read and nothing is written; at its instant, day 7 runs.
 		const t = saved(undefined, DAY7_RUN);
 		const early = scoreGameSync(hinted, KEYS, PAYOUT, DISPUTED_AT + 7 * 86_400 - 1, t.send);
 		expect({ action: early.decision.action, why: early.decision.why, asked: t.asked.length }).toEqual({ action: "wait", why: "before day 7", asked: 0 });
+		const t2 = saved(undefined, DAY7_RUN);
+		const onTime = scoreGameSync(hinted, KEYS, PAYOUT, DISPUTED_AT + 7 * 86_400, t2.send);
+		expect([onTime.decision.action, onTime.report?.kind]).toEqual(["score", 2]);
+	});
+
+	test("end to end: a seat silent for the game is not asked on day 7, so a final it might give never counts", () => {
+		// Created with a seat 3 hint that failed the board check: the start report recorded seat 3
+		// silent. Seat 3's answer for the hint is derived as finished at the game's score. If seat 3
+		// were asked, four sources would agree; it is not, so day 7 has a silent fourth and voids.
+		const base = chainOf("nfl final");
+		const id = "00000000-0000-4000-8000-000000000000";
+		const failed = {
+			...base,
+			hints: [{ seat: 3, id }],
+			startReadings: base.startReadings!.map((r) => (r.seat === 3 ? { ...r, kind: READING_KIND.silent } : r)),
+			status: "disputed" as const,
+			dispute: { at: DISPUTED_AT, readings: [reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), spareFinal] },
+		};
+		const seat3Final: Derive = (s, p, b) =>
+			s === 3 && p === `/results/${id}` ? [{ ID: id, OddType: "Game", Final: true, FinalType: "Finished", HomeScore: "23", AwayScore: "17" }] : b;
+		const t = saved(seat3Final, DAY7_RUN);
+		const o = scoreGameSync(failed, KEYS, PAYOUT, DAY7_RUN, t.send);
+		expect(t.asked.filter((q) => locate(q)?.seat === 3)).toEqual([]);
+		expect([o.decision.action, o.decision.why, o.report?.readings.map((r) => [r.seat, r.kind])]).toEqual([
+			"void",
+			"day 7: a source is silent",
+			[
+				[1, 2],
+				[2, 2],
+				[3, 0],
+				[4, 2],
+			],
+		]);
+	});
+
+	test("a recorded answer without a final keeps its points in day 7's readings, and still dissents", () => {
+		const d = decideDay7(
+			[reading(1, "A"), reading(2, "A"), reading(3, "A"), reading(4, "silent")],
+			[reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), { seat: 4, kind: 1, homeScore: 14, awayScore: 10 }],
+			SEATS4,
+		);
+		expect([d.action, d.readings[3]]).toEqual([
+			"score",
+			{ seat: 4, kind: "no_final", home: 14, away: 10, recorded: null, detail: "recorded at the dispute", record: null },
+		]);
 	});
 
 	test("end to end: the same game created without a seat 3 hint voids on day 7, as a league with three feeds does", () => {

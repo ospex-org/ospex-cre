@@ -1,8 +1,11 @@
 // The agreement rule: what one run's readings add up to for a game whose start is written.
 //
 // From the spec (docs/spec-v3.md in ospex-contracts-v2, "The scoring program" and "How a game
-// ends"), as this file reads it. Every count below is a constant here, inside the fingerprint;
-// nothing handed in at runtime reaches one.
+// ends"), as this file reads it. Every count below is a constant here, inside the fingerprint, and
+// nothing handed in at runtime changes one. The run's clock does pick which count applies, three
+// inside n or two after, and the games set stores no reading to check it against: so the clock
+// must be the chain's time, taken by the workflow from its runtime and never from a setting, and
+// program.ts decides nothing on a clock it can't read.
 //
 //   Inside n   Every counting seat answers with a final, and the finals are the same: the same
 //              points for both teams. A silent counting seat blocks, and so does one that has not
