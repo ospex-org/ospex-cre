@@ -15,9 +15,9 @@
 //
 // As built:
 //
-//   * Seats 1 and 2 must each list the game, by team, within n of the creator's date (the range
-//     the games set accepts a start in). Silent, or not listing it, and nothing is written: the run
-//     waits, and a later run tries again.
+//   * Seats 1 and 2 must each list the game, by team, within a day of the creator's date
+//     (START_BOUND, the range the games set accepts a start in). Silent, or not listing it, and
+//     nothing is written: the run waits, and a later run tries again.
 //   * Their two times must lie within START_SPREAD of each other.
 //   * Seat 3 passes when its hint's row names the game's teams in the game's order, at a time within
 //     START_SPREAD of seats 1 and 2. A board it could not read this time makes the run wait. A hint
@@ -47,6 +47,14 @@ import type { Reading, Seat } from "./types";
  */
 export const START_SPREAD = 3600;
 
+/**
+ * How far from the creator's date a start may be, either way, in seconds: the games set's own
+ * START_BOUND (ospex-contracts-v2, src/games/OspexGames.sol, a fixed 24 hours, not the game's n). The
+ * games set refuses any other start, so a seat listing the game further from the date does not list
+ * it, and verification never builds a start the games set would refuse.
+ */
+export const START_BOUND = 86_400;
+
 /** What verification saw: seats 1, 2 and 4 read by team near the date; seat 3's board checked. */
 export interface Seen {
 	readonly 1: Reading;
@@ -55,17 +63,20 @@ export interface Seen {
 	readonly 4: Reading;
 }
 
-/** The game as verification needs it. */
+/** The game as verification needs it: the date its creator gave. */
 export interface Verifying {
 	readonly date: number;
-	readonly n: number;
 }
 
-/** The time a reading lists the game at, when it lists it within n of the date. */
+/** True when a time is within START_BOUND of the date, both ends in. */
+function inRange(t: number, g: Verifying): boolean {
+	return t >= g.date - START_BOUND && t <= g.date + START_BOUND;
+}
+
+/** The time a reading lists the game at, when it lists it within START_BOUND of the date. */
 function listedAt(r: Reading, g: Verifying): number | null {
 	if (r.kind === "silent" || r.record === null || r.record.time === null) return null;
-	const t = r.record.time;
-	return t >= g.date - g.n && t <= g.date + g.n ? t : null;
+	return inRange(r.record.time, g) ? r.record.time : null;
 }
 
 function within(times: readonly number[]): boolean {
@@ -84,7 +95,7 @@ export function decideStart(g: Verifying, seen: Seen): Decision {
 	for (const seat of [1, 2] as const) {
 		const r = seen[seat];
 		if (r.kind === "silent") return wait(`seat ${seat} is silent: ${r.detail}`);
-		if (listedAt(r, g) === null) return wait(`seat ${seat} does not list the game within n of its date`);
+		if (listedAt(r, g) === null) return wait(`seat ${seat} does not list the game within a day of its date`);
 	}
 	const t1 = listedAt(seen[1], g) as number;
 	const t2 = listedAt(seen[2], g) as number;
@@ -92,8 +103,7 @@ export function decideStart(g: Verifying, seen: Seen): Decision {
 
 	const board = seen[3];
 	if (board.kind === "silent") return wait(`seat 3's board is silent: ${board.why}`);
-	const inRange = (t: number): boolean => t >= g.date - g.n && t <= g.date + g.n;
-	if (board.kind === "listed" && inRange(board.time) && within([t1, t2, board.time])) {
+	if (board.kind === "listed" && inRange(board.time, g) && within([t1, t2, board.time])) {
 		return { action: "start", start: Math.min(t1, t2, board.time), readings: readings(), why: "seats 1, 2 and 3 list the game within an hour" };
 	}
 
@@ -106,7 +116,7 @@ export function decideStart(g: Verifying, seen: Seen): Decision {
 	const t4 = listedAt(r4, g);
 	const settled = (why: string): Decision => ({ action: "wait", readings: [seen[1], seen[2], down, r4], why });
 	if (r4.kind === "silent") return settled(`seat 3 is silent for the game and the spare is silent: ${r4.detail}`);
-	if (t4 === null) return settled("seat 3 is silent for the game and the spare does not list the game within n of its date");
+	if (t4 === null) return settled("seat 3 is silent for the game and the spare does not list the game within a day of its date");
 	if (!within([t1, t2, t4])) return settled("seat 3 is silent for the game and the spare lists the game more than an hour from seats 1 and 2");
 	return { action: "start", start: Math.min(t1, t2), readings: [seen[1], seen[2], down, r4], why: "seats 1 and 2 list the game within an hour, and the spare stands in for seat 3" };
 }

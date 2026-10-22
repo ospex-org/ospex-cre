@@ -1,12 +1,12 @@
 // The report the program builds is the games set's one shape (B2). The field names, their order
 // and the enum numbers below are copied as literals from ospex-contracts-v2,
-// src/games/IOspexGames.sol, on PR #37 at 3b23239 (`struct Report`, `struct Reading`, `enum
+// src/games/IOspexGames.sol, on PR #37 at 3e9d549, unchanged from 3b23239 (`struct Report`, `struct Reading`, `enum
 // ReportKind`, `enum ReadingKind`). A change on this side shows here. A change in B2 shows only
 // when these literals are copied again: nothing here reads the other repository.
 
 import { describe, expect, test } from "bun:test";
 import { READING_KIND, REPORT_KIND, type Decision } from "../src/chain";
-import { toReport, toReportReading } from "../src/report";
+import { NO_PAYOUT, toReport, toReportReading } from "../src/report";
 import type { Reading } from "../src/types";
 import { PAYOUT, SEATS4, reading } from "./rule-helpers";
 
@@ -36,10 +36,10 @@ describe("the report, in B2's shape", () => {
 		}
 		// Each kind fills only its own fields; the rest are zero, as B2 requires.
 		expect(got.map((r) => [r.gameId, r.kind, r.start, r.homeScore, r.awayScore, r.payout])).toEqual([
-			["7", 1, 1_792_000_000, 0, 0, PAYOUT],
+			["7", 1, 1_792_000_000, 0, 0, NO_PAYOUT], // a start pays nothing: B2 refuses any other payout
 			["7", 2, 0, 27, 20, PAYOUT],
 			["7", 3, 0, 0, 0, PAYOUT],
-			["7", 4, 0, 0, 0, PAYOUT],
+			["7", 4, 0, 0, 0, NO_PAYOUT], // a dispute record credits nothing
 		]);
 	});
 

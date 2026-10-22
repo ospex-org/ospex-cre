@@ -11,7 +11,7 @@ import { scoreGameSync } from "../src/program";
 import { checkBoard, type BoardCheck } from "../src/readers/board3";
 import { runSync } from "../src/run";
 import type { Game, HttpResponse, Reading, Seat } from "../src/types";
-import { START_SPREAD, decideStart } from "../src/verify";
+import { START_BOUND, START_SPREAD, decideStart } from "../src/verify";
 import { NOW } from "./cases";
 import { KEY, at, copy, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, chainOf } from "./rule-helpers";
@@ -88,7 +88,7 @@ describe("the start's rule, on the real saved answers", () => {
 		// Seat 2 answers, but lists no game of the two teams: it answered, and it does not list the game.
 		const empty: Derive = (s, p, b) => (s === 2 && p.startsWith("/games?league=NFL") ? { ...(b as object), results: [] } : b);
 		const v = verify(unverified("nfl not final"), empty);
-		expect([v.action, v.why]).toEqual(["wait", "seat 2 does not list the game within n of its date"]);
+		expect([v.action, v.why]).toEqual(["wait", "seat 2 does not list the game within a day of its date"]);
 	});
 });
 
@@ -190,14 +190,14 @@ describe("the start's time (ruling 3)", () => {
 	test("the real times: 01:30 and 01:50 differ by minutes, the earliest is written, and the spare's 01:52:15 never sets it", () => {
 		const seen = { 1: read(1), 2: read(2), 3: failed, 4: read(4) };
 		expect([1, 2, 4].map((s) => iso(seen[s as 1 | 2 | 4].record!.time!))).toEqual(["2026-10-21T01:30:00Z", "2026-10-21T01:50:00Z", "2026-10-21T01:52:15Z"]);
-		const d = decideStart({ date: at("2026-10-21T01:30:00Z"), n: 86_400 }, seen);
+		const d = decideStart({ date: at("2026-10-21T01:30:00Z") }, seen);
 		expect([d.action, d.action === "start" ? iso(d.start) : null]).toEqual(["start", "2026-10-21T01:30:00Z"]);
 	});
 
 	test("the spare's time never sets the start, even when it is the earliest", () => {
 		const r1 = read(1);
 		const shift = (r: Reading, by: number): Reading => ({ ...r, record: { id: r.record!.id, time: r.record!.time! + by } });
-		const d = decideStart({ date: r1.record!.time!, n: 86_400 }, { 1: r1, 2: read(2), 3: failed, 4: shift(read(4), -40 * 60) });
+		const d = decideStart({ date: r1.record!.time! }, { 1: r1, 2: read(2), 3: failed, 4: shift(read(4), -40 * 60) });
 		expect([d.action, d.action === "start" ? iso(d.start) : null]).toEqual(["start", "2026-10-21T01:30:00Z"]);
 	});
 
@@ -206,7 +206,7 @@ describe("the start's time (ruling 3)", () => {
 		const r1 = read(1);
 		const r2 = read(2);
 		const t1 = r1.record!.time!;
-		const g = { date: t1, n: 86_400 };
+		const g = { date: t1 };
 		const board = (minutes: number): BoardCheck => ({ kind: "listed", id: "x", time: t1 + minutes * 60 });
 		const run = (b: BoardCheck, r4: Reading = read(4)) => {
 			const d = decideStart(g, { 1: r1, 2: r2, 3: b, 4: r4 });
@@ -224,24 +224,45 @@ describe("the start's time (ruling 3)", () => {
 		expect(run(down, spare(55))).toEqual(["start", "2026-10-21T01:30:00Z", "silent"]);
 	});
 
-	test("both ends of the games set's range are in: a time at exactly date - n or date + n lists the game", () => {
+	test("both ends of the games set's range are in: a time at exactly date - START_BOUND or date + START_BOUND lists the game", () => {
+		// START_BOUND is the games set's own fixed 24 hours (OspexGames.START_BOUND), not the game's n.
+		expect(START_BOUND).toBe(86_400);
 		const r1 = read(1);
 		const t1 = r1.record!.time!;
 		const at = (t: number): Reading => ({ ...r1, record: { id: "x", time: t } });
-		for (const [date, n] of [
-			[t1 - 86_400, 86_400],
-			[t1 + 86_400, 86_400],
-		]) {
-			const d = decideStart({ date, n }, { 1: at(t1), 2: { ...read(2), record: { id: "y", time: t1 } }, 3: { kind: "listed", id: "z", time: t1 }, 4: read(4) });
+		for (const date of [t1 - START_BOUND, t1 + START_BOUND]) {
+			const d = decideStart({ date }, { 1: at(t1), 2: { ...read(2), record: { id: "y", time: t1 } }, 3: { kind: "listed", id: "z", time: t1 }, 4: read(4) });
 			expect({ date: iso(date), got: [d.action, d.action === "start" ? iso(d.start) : null, d.readings[2].kind] }).toEqual({ date: iso(date), got: ["start", "2026-10-21T01:30:00Z", "no_final"] });
 		}
+		// One second further, and seat 1 no longer lists the game.
+		const past = decideStart({ date: t1 + START_BOUND + 1 }, { 1: at(t1), 2: { ...read(2), record: { id: "y", time: t1 } }, 3: { kind: "listed", id: "z", time: t1 }, 4: read(4) });
+		expect([past.action, past.why]).toEqual(["wait", "seat 1 does not list the game within a day of its date"]);
+	});
+
+	test("the range is the games set's fixed day, whatever the game's n: a game with a longer n is held to the same day", () => {
+		// The game's n doesn't reach verification at all: the run builds its own range from START_BOUND.
+		const long: ChainGame = { ...unverified("nfl not final"), n: 3 * 86_400 };
+		const v = verify(long);
+		expect([v.action, v.start]).toEqual(["start", "2026-10-23T00:15:00Z"]);
+		// The date a day and a minute before the real 00:15: inside this game's n, outside the games set's day.
+		const t = saved(undefined, NOW);
+		const far = scoreGameSync({ ...long, date: at("2026-10-23T00:15:00Z") - START_BOUND - 60, hints: [] }, KEYS, PAYOUT, NOW, t.send);
+		expect(t.misses).toEqual([]);
+		expect([far.decision.action, far.decision.why]).toEqual(["wait", "seat 1 does not list the game within a day of its date"]);
+	});
+
+	test("a start report carries the zero address as its payout, whatever payout is handed in: a start pays nothing", () => {
+		const v = verify(unverified("nfl not final"));
+		const t = saved(undefined, NOW);
+		const o = scoreGameSync(unverified("nfl not final"), KEYS, PAYOUT, NOW, t.send);
+		expect([v.action, o.report?.payout]).toEqual(["start", "0x0000000000000000000000000000000000000000"]);
 	});
 
 	test("an hour apart is the most: at 3600 seconds the earliest is written, at 3601 nothing is", () => {
 		const r1 = read(1);
 		const t1 = r1.record!.time!;
 		const at2 = (by: number): Reading => ({ ...read(2), record: { id: "340478", time: t1 + by } });
-		const run = (by: number) => decideStart({ date: t1, n: 86_400 }, { 1: r1, 2: at2(by), 3: failed, 4: { ...read(4), record: { id: "x", time: t1 } } });
+		const run = (by: number) => decideStart({ date: t1 }, { 1: r1, 2: at2(by), 3: failed, 4: { ...read(4), record: { id: "x", time: t1 } } });
 		expect(START_SPREAD).toBe(3600);
 		expect([run(3600).action, run(3601).action, run(3601).why]).toEqual(["start", "wait", "seats 1 and 2 list the game more than an hour apart"]);
 		expect([run(-3600).action, run(-3601).action]).toEqual(["start", "wait"]);
@@ -250,7 +271,7 @@ describe("the start's time (ruling 3)", () => {
 	test("with seat 3 silent for the game, the spare must list the game within the hour, and is checked, never written", () => {
 		const r1 = read(1);
 		const t1 = r1.record!.time!;
-		const g = { date: t1, n: 86_400 };
+		const g = { date: t1 };
 		const four = (r: Reading) => decideStart(g, { 1: r1, 2: read(2), 3: failed, 4: r });
 		const r4 = read(4);
 		expect(four({ ...r4, record: { id: "x", time: t1 + 3600 } }).action).toBe("start");
@@ -259,25 +280,25 @@ describe("the start's time (ruling 3)", () => {
 			"seat 3 is silent for the game and the spare lists the game more than an hour from seats 1 and 2",
 		]);
 		expect(four({ ...r4, kind: "silent", detail: "past retention", record: null, home: null, away: null }).why).toBe("seat 3 is silent for the game and the spare is silent: past retention");
-		expect(four({ ...r4, kind: "no_final", detail: "absent", record: null, home: null, away: null }).why).toBe("seat 3 is silent for the game and the spare does not list the game within n of its date");
+		expect(four({ ...r4, kind: "no_final", detail: "absent", record: null, home: null, away: null }).why).toBe("seat 3 is silent for the game and the spare does not list the game within a day of its date");
 	});
 
-	test("a seat listing the game more than n from the creator's date does not list it: the games set would refuse that start", () => {
+	test("a seat listing the game more than a day (START_BOUND) from the creator's date does not list it: the games set would refuse that start", () => {
 		const r1 = read(1);
 		const t1 = r1.record!.time!;
-		const d = decideStart({ date: t1 + 86_400 + 1, n: 86_400 }, { 1: r1, 2: read(2), 3: failed, 4: read(4) });
-		expect([d.action, d.why]).toEqual(["wait", "seat 1 does not list the game within n of its date"]);
+		const d = decideStart({ date: t1 + 86_400 + 1 }, { 1: r1, 2: read(2), 3: failed, 4: read(4) });
+		expect([d.action, d.why]).toEqual(["wait", "seat 1 does not list the game within a day of its date"]);
 	});
 
-	test("seat 3's board time within the hour but more than n from the date never sets the start", () => {
+	test("seat 3's board time within the hour but more than a day from the date never sets the start", () => {
 		// Seats 1 and 2 at 01:30 and 01:50, the date exactly n after 01:30. The board's 01:20 is within
 		// the hour of both but outside [date - n, date + n]: writing it would be refused, so seat 3 stands down.
 		const r1 = read(1);
 		const t1 = r1.record!.time!;
-		const g = { date: t1 + 86_400, n: 86_400 };
+		const g = { date: t1 + 86_400 };
 		const d = decideStart(g, { 1: r1, 2: read(2), 3: { kind: "listed", id: "x", time: t1 - 600 }, 4: read(4) });
 		expect([d.action, d.action === "start" ? iso(d.start) : null, d.readings[2].detail]).toEqual(["start", "2026-10-21T01:30:00Z", "silent for the game: board time not at the start"]);
-		expect(d.action === "start" && d.start >= g.date - g.n).toBe(true);
+		expect(d.action === "start" && d.start >= g.date - START_BOUND).toBe(true);
 	});
 });
 
