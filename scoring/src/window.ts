@@ -2,8 +2,13 @@
 //
 // The window is the game's n and nothing else: [start, start + n). A feed's final counts only if
 // the feed's own game time for that record is inside it, so a makeup game, which a feed lists at
-// its new time, never scores the original game. The end is open: a makeup played at the same
-// clock time the next day sits at exactly start + 24 h and stays out.
+// its new time, never scores the original game. The start instant is in; the end is open: a makeup
+// played at the same clock time the next day sits at exactly start + 24 h and stays out.
+//
+// The start is the scheduled start, written at verification from the counting seats (Vince, 10/22,
+// ruling 2). Seat 4 gives a game's actual start once it has begun, up to 22 minutes after the
+// scheduled one in the saved answers; that time never sets the start and serves only seat 4's
+// own check against this window. Seat 3 is read by hint and has no time to check.
 
 import type { Game } from "./types";
 

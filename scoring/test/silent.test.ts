@@ -10,7 +10,10 @@ import { KEY, copy, readSaved, saved, type Derive } from "./fixtures";
 
 const byName = (prefix: string) => CASES.find((c) => c.name.startsWith(prefix))!;
 const lakers = byName("nba final");
+const sixers = byName("nba not final"); // has a seat 3 hint, so seat 3 asks
 const SEATS: Seat[] = [1, 2, 3, 4];
+/** A real game every seat asks about: seat 3 reads by hint, the others by team and window. */
+const gameFor = (seat: Seat): Game => (seat === 3 ? sixers.game : lakers.game);
 
 function readWith(seat: Seat, game: Game, send: (req: HttpRequest) => HttpResponse) {
 	return runSync(seat, readerFor(seat)({ game, now: NOW, key: KEY }), send);
@@ -34,7 +37,7 @@ describe("silent", () => {
 				[200, "null", "unreadable"],
 				[200, '"a string"', "unreadable"],
 			] as const) {
-				const r = readWith(seat, lakers.game, () => ({ status, body }));
+				const r = readWith(seat, gameFor(seat), () => ({ status, body }));
 				expect({ seat, status, body, kind: r.kind, detail: r.detail }).toEqual({ seat, status, body, kind: "silent", detail });
 			}
 		}
@@ -42,15 +45,15 @@ describe("silent", () => {
 
 	test("a transport that throws or never resolves its promise into an answer", async () => {
 		for (const seat of SEATS) {
-			expect(readWith(seat, lakers.game, () => { throw new Error("boom"); })).toMatchObject({ kind: "silent", detail: "transport" });
-			const r = await runAsync(seat, readerFor(seat)({ game: lakers.game, now: NOW, key: KEY }), async () => { throw new Error("boom"); });
+			expect(readWith(seat, gameFor(seat), () => { throw new Error("boom"); })).toMatchObject({ kind: "silent", detail: "transport" });
+			const r = await runAsync(seat, readerFor(seat)({ game: gameFor(seat), now: NOW, key: KEY }), async () => { throw new Error("boom"); });
 			expect(r).toMatchObject({ kind: "silent", detail: "transport" });
 		}
 	});
 
 	test("an answer of the wrong shape, or a record the reader cannot read", () => {
 		const wrongShape: Derive = () => ({ unexpected: true });
-		for (const seat of SEATS) expect({ seat, ...detailOf(seat, lakers.game, wrongShape) }).toEqual({ seat, kind: "silent", detail: "unreadable" });
+		for (const seat of SEATS) expect({ seat, ...detailOf(seat, gameFor(seat), wrongShape) }).toEqual({ seat, kind: "silent", detail: "unreadable" });
 		const badRecord: Derive = (seat, _p, body) => {
 			const b = copy(body) as Record<string, unknown> | unknown[];
 			if (seat === 1) ((b as { data: unknown[] }).data[0] as Record<string, unknown>).id = null;
@@ -60,7 +63,7 @@ describe("silent", () => {
 			return b;
 		};
 		for (const seat of SEATS) {
-			expect({ seat, ...detailOf(seat, lakers.game, badRecord) }).toEqual({ seat, kind: "silent", detail: "unreadable record" });
+			expect({ seat, ...detailOf(seat, gameFor(seat), badRecord) }).toEqual({ seat, kind: "silent", detail: "unreadable record" });
 		}
 	});
 
@@ -78,15 +81,15 @@ describe("silent", () => {
 		expect(page2.reading).toMatchObject({ kind: "no_final", detail: "scheduled", record: { id: "342256" } });
 	});
 
-	test("a seat past what it keeps", () => {
+	test("seat 4 past what it keeps", () => {
+		// Seat 3 has no such bound: it is read by id, and an id it no longer keeps answers [] and
+		// reads silent (see hints.test.ts).
 		const old = { ...lakers.game, start: NOW - 5 * 86400 };
-		for (const seat of [3, 4] as Seat[]) {
-			const t = saved();
-			const r = readWith(seat, old, t.send);
-			expect({ seat, kind: r.kind, detail: r.detail, asked: t.asked.length }).toEqual({ seat, kind: "silent", detail: "past retention", asked: 0 });
-		}
-		// The control: inside what each keeps, both ask.
-		for (const seat of [3, 4] as Seat[]) expect(readSaved(seat, lakers.game, NOW).asked.length).toBeGreaterThan(0);
+		const t = saved();
+		const r = readWith(4, old, t.send);
+		expect({ kind: r.kind, detail: r.detail, asked: t.asked.length }).toEqual({ kind: "silent", detail: "past retention", asked: 0 });
+		// The control: inside what it keeps, it asks.
+		expect(readSaved(4, lakers.game, NOW).asked.length).toBeGreaterThan(0);
 	});
 
 	test("a record with no game time the window can hold it to", () => {

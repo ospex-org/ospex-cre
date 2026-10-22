@@ -1,15 +1,19 @@
 // The real games the suite reads, and what each seat must say about each, frozen as literals.
 //
-// Every game is real and every answer is a saved fixture. The clock is one instant after the last
-// capture (16:30 UTC on 22 Oct 2026), so a game that had not finished then reads "no final", and
-// seats 3 and 4 are silent about games older than they keep.
+// Every game is real and every answer is a saved fixture. The clock is one instant after the
+// afternoon's last capture (17:30 UTC on 22 Oct 2026), so a game that had not finished then reads
+// "no final", and seat 4 is silent about games older than it keeps.
+//
+// Seat 3 is read by the game's seat 3 hint (ruled 10/22). The games still on its board at capture
+// carry the id it listed them under; the finished games here were created without one, so seat 3
+// reads them silent.
 //
 // The points are the real results, by team, and the seats that answered agree on every one.
 
 import type { Game, Seat } from "../src/types";
 import { at } from "./fixtures";
 
-export const NOW = at("2026-10-22T16:30:00Z");
+export const NOW = at("2026-10-22T17:30:00Z");
 
 export interface Expected {
 	readonly kind: "silent" | "no_final" | "final";
@@ -27,13 +31,13 @@ export interface Case {
 }
 
 const DAY = 86_400;
-const g = (league: string, home: string, away: string, start: string): Game => ({
+const g = (league: string, home: string, away: string, start: string, seat3?: string): Game => ({
 	league,
 	home,
 	away,
 	start: at(start),
 	n: DAY,
-	hints: [],
+	hints: seat3 === undefined ? [] : [{ seat: 3, id: seat3 }],
 });
 const final = (home: number, away: number, id: string): Expected => ({ kind: "final", home, away, recorded: null, detail: "final", id });
 const noFinal = (detail: string, id: string | null, home: number | null = null, away: number | null = null): Expected => ({
@@ -46,9 +50,8 @@ const noFinal = (detail: string, id: string | null, home: number | null = null, 
 });
 const silent = (detail: string): Expected => ({ kind: "silent", home: null, away: null, recorded: null, detail, id: null });
 
-// Seat 3 drops a game from its board once the game is final, and its results carry no teams and
-// no time, so a finished game cannot be checked by team or by window there: it reads silent.
-const SEAT3_FINISHED = silent("results without teams or time");
+// Created without a seat 3 hint: seat 3 has nothing to read by.
+const NO_HINT = silent("no hint");
 
 export const CASES: readonly Case[] = [
 	{
@@ -57,13 +60,13 @@ export const CASES: readonly Case[] = [
 		expect: {
 			1: final(23, 17, "1392308"),
 			2: final(23, 17, "340168"),
-			3: SEAT3_FINISHED,
+			3: NO_HINT,
 			4: final(23, 17, "f122527f003276d3bca19efa48c902c1"),
 		},
 	},
 	{
 		name: "nfl not final: New England at Chicago",
-		game: g("nfl", "Chicago Bears", "New England Patriots", "2026-10-23T00:15:00Z"),
+		game: g("nfl", "Chicago Bears", "New England Patriots", "2026-10-23T00:15:00Z", "edcfd41f-1773-4bc9-a349-aa50931a0278"),
 		expect: {
 			1: noFinal("scheduled", "1392309"),
 			2: noFinal("scheduled", "340175"),
@@ -77,13 +80,13 @@ export const CASES: readonly Case[] = [
 		expect: {
 			1: final(127, 105, "21717859"),
 			2: final(127, 105, "340490"),
-			3: SEAT3_FINISHED,
+			3: NO_HINT,
 			4: final(127, 105, "6fff70f4bf196dba25060a5775a03b54"),
 		},
 	},
 	{
 		name: "nba not final: Cleveland at Philadelphia",
-		game: g("nba", "Philadelphia 76ers", "Cleveland Cavaliers", "2026-10-22T23:00:00Z"),
+		game: g("nba", "Philadelphia 76ers", "Cleveland Cavaliers", "2026-10-22T23:00:00Z", "cc394a49-c3d1-4b8c-bba2-8ebbb8326c09"),
 		expect: {
 			1: noFinal("scheduled", "21717860", 0, 0),
 			2: noFinal("scheduled", "340484"),
@@ -97,13 +100,13 @@ export const CASES: readonly Case[] = [
 		expect: {
 			1: final(7, 3, "15467429"),
 			2: final(7, 3, "349200"),
-			3: SEAT3_FINISHED,
+			3: NO_HINT,
 			4: final(7, 3, "be50f6c59c20efa430eec6f146a0fcb1"),
 		},
 	},
 	{
 		name: "mlb not final: Tampa Bay at Milwaukee",
-		game: g("mlb", "Milwaukee Brewers", "Tampa Bay Rays", "2026-10-24T00:00:00Z"),
+		game: g("mlb", "Milwaukee Brewers", "Tampa Bay Rays", "2026-10-24T00:00:00Z", "122d7737-bc9a-4f7a-a444-c9cee9a7e750"),
 		expect: {
 			1: noFinal("scheduled", "15467432", 0, 0),
 			2: noFinal("scheduled", "349332"),
@@ -117,7 +120,7 @@ export const CASES: readonly Case[] = [
 		expect: {
 			1: noFinal("postponed", "5058800", 0, 0),
 			2: noFinal("canceled", "336995", 0, 0),
-			3: silent("past retention"),
+			3: NO_HINT,
 			4: silent("past retention"),
 		},
 	},
@@ -138,18 +141,28 @@ export const CASES: readonly Case[] = [
 		},
 	},
 	{
+		name: "mlb final, 11 Jun: Houston at the Angels, 3-2; seat 3's result for its hint has aged out",
+		game: g("mlb", "Los Angeles Angels", "Houston Astros", "2026-06-11T01:38:00Z", "acc4e59b-999e-469b-9137-a2ed1b45aab2"),
+		expect: {
+			1: final(3, 2, "5058792"),
+			2: final(3, 2, "336983"),
+			3: silent("no result for the hint"),
+			4: silent("past retention"),
+		},
+	},
+	{
 		name: "nhl final: Winnipeg at St. Louis, 2-1",
 		game: g("nhl", "St. Louis Blues", "Winnipeg Jets", "2026-10-21T00:00:00Z"),
 		expect: {
 			1: silent("http 401"),
 			2: final(2, 1, "347306"),
-			3: SEAT3_FINISHED,
+			3: NO_HINT,
 			4: final(2, 1, "50c81d9967c2341f2117c57685000dee"),
 		},
 	},
 	{
 		name: "nhl not final: Nashville at Boston",
-		game: g("nhl", "Boston Bruins", "Nashville Predators", "2026-10-22T23:00:00Z"),
+		game: g("nhl", "Boston Bruins", "Nashville Predators", "2026-10-22T23:00:00Z", "2fef41ed-51ca-4693-985f-5eb74b5f4875"),
 		expect: {
 			2: noFinal("scheduled", "347313"),
 			3: noFinal("NotFinished", "2fef41ed-51ca-4693-985f-5eb74b5f4875"),
@@ -162,13 +175,13 @@ export const CASES: readonly Case[] = [
 		expect: {
 			1: silent("http 401"),
 			2: final(61, 38, "339591"),
-			3: SEAT3_FINISHED,
+			3: NO_HINT,
 			4: final(61, 38, "dc65142bf9a0e7652a252b2074037efa"),
 		},
 	},
 	{
 		name: "ncaaf not final: James Madison at Appalachian State",
-		game: g("ncaaf", "Appalachian State", "James Madison", "2026-10-22T23:00:00Z"),
+		game: g("ncaaf", "Appalachian State", "James Madison", "2026-10-22T23:00:00Z", "1ecc09e9-a306-4846-9a3c-b8dd63f2bb84"),
 		expect: {
 			2: noFinal("scheduled", "339609"),
 			3: noFinal("NotFinished", "1ecc09e9-a306-4846-9a3c-b8dd63f2bb84"),
@@ -181,7 +194,7 @@ export const CASES: readonly Case[] = [
 		expect: {
 			1: silent("http 401"),
 			2: final(89, 84, "338824"),
-			3: silent("past retention"),
+			3: NO_HINT,
 			4: silent("past retention"),
 		},
 	},
@@ -190,7 +203,7 @@ export const CASES: readonly Case[] = [
 		game: g("ncaab", "Iowa State", "Memphis", "2026-11-03T00:00:00Z"),
 		expect: {
 			2: noFinal("scheduled", "341752"),
-			3: noFinal("absent", null),
+			3: NO_HINT,
 			4: noFinal("absent", null),
 		},
 	},
@@ -211,9 +224,10 @@ export const PENDING: Readonly<Record<Seat, Readonly<Record<string, string>>>> =
 		postponed: "the seat has no postponed word: the 11 Jun rainout reads canceled at its own time",
 	},
 	3: {
-		final: "the seat drops a game from its board when it is final, and its results carry no teams or time: no final can be read by team or window (raised on the PR)",
-		ncaab: "the league had not started: the seat's answers were empty",
-		postponed: "no postponed game in the seat's five days at capture",
+		final: "read by hint (ruled 10/22): the finals come from tonight's games, read by the id the seat listed them under before they started",
+		mlb: "the one game still listed, World Series game 1, ends Friday night; its final is read then",
+		ncaab: "the league had not started: the seat listed no game",
+		postponed: "no postponed game in the seat's five days at capture, and results older than that answer nothing by id",
 		canceled: "no cancelled game in the seat's five days at capture",
 	},
 	4: {

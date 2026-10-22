@@ -38,8 +38,11 @@ export interface Reading {
 	readonly recorded: "postponed" | "canceled" | null;
 	/** Why the reading is what it is, in a word or two, for the record and the tests. */
 	readonly detail: string;
-	/** The feed's record the reading rests on: its id and its own game time (unix seconds). */
-	readonly record: { readonly id: string; readonly time: number } | null;
+	/**
+	 * The feed's record the reading rests on: its id, and its own game time in unix seconds (null
+	 * for seat 3, whose results carry no time).
+	 */
+	readonly record: { readonly id: string; readonly time: number | null } | null;
 }
 
 /** One HTTP request a reader asks for. The key sits where the feed table says. */

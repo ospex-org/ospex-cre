@@ -1,105 +1,82 @@
-// Seat 3's reader.
+// Seat 3's reader: read by the game's hint (Vince, 10/22, ruling 1 on the Built report).
 //
-// The feed splits a game across two answers. Its board (the league's games with prices) gives
-// each game's id, two teams and game time, and only while the game is listed there. Its results
-// give each game's id, points and status, with no teams and no time, for five days after the
-// game's start. The reader asks for both and joins them by id. A result the board no longer
-// lists can't be checked by team or by window, so it is held back: if it might be the game, the
-// feed is silent, never "no final".
+// The feed's results give a game's points and status, but no team names and no game time, and
+// its board, which has both, drops a game once the game is final. So seat 3 is not found by team
+// and window like the other three. It is read by the seat 3 id given at the game's creation: the
+// hint rides in the creation event on chain, so anyone can re-run the match for as long as the
+// feed answers for that id. No seat 3 hint, or one that is not a seat 3 id, and the seat is
+// silent without asking.
 //
-// Status: final only when `Final` is true and `FinalType` is "Finished". The feed sets `Final`
-// true on postponed and cancelled games too, so `Final` alone never makes a final. "Postponed"
-// and "Canceled" are recorded; everything else is not final. Only each game's "Game" row is
-// read; the feed's rows for halves and innings are not.
+// What that means for the two never-lines this seat cannot check itself:
+//   by team   The result has no team names, so its points are read in the feed's own home and
+//             away order. The hint binds that order to the game; checking the binding against
+//             the feed's board while the game is listed (teams in the game's own home and away
+//             order) belongs to verification, before the start is written.
+//   window    The result has no game time. A makeup is kept from scoring the original by the
+//             feed marking the original id postponed, and by the agreement rule, not by the
+//             window.
 //
-// Retention: results stay five days after a game's start. Past four days the reader does not
-// ask, and the feed is silent: a missing result then could be age, not absence.
+// Status: final only when `Final` is true and `FinalType` is "Finished"; the feed sets `Final` true
+// on postponed and cancelled games too, so `Final` alone never makes a final. "Postponed" and
+// "Canceled" are recorded; everything else is not final. Only the game's own "Game" row is read,
+// never its rows for halves or innings.
 
-import { pick, points, type FeedRecord } from "../pick";
+import { points } from "../pick";
 import { silent } from "../run";
 import { leagueRow } from "../table";
-import type { Ask, ReaderRun, Seat } from "../types";
-import { parseIsoSeconds } from "../window";
+import type { Ask, Reading, ReaderRun, Seat } from "../types";
 import { jsonOf, obj, request, str } from "./request";
 
 const SEAT: Seat = 3;
-const RETENTION = 4 * 86400;
 
-/** The feed writes its game times in UTC with no zone. */
-function boardTime(v: unknown): number | null {
-	const s = str(v);
-	if (s === null || /(Z|[+-]\d{2}:?\d{2})$/.test(s.trim())) return null;
-	return parseIsoSeconds(`${s.trim()}Z`);
-}
+/** The feed's ids are UUIDs; nothing else is ever put in a request path. */
+const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isFinalFlag(v: unknown): boolean {
 	return v === true || v === "true" || v === "True";
 }
 
-interface Result {
-	readonly state: FeedRecord["state"];
-	readonly status: string;
-	readonly home: number | null;
-	readonly away: number | null;
-}
-
-function resultOf(r: Record<string, unknown>): Result {
-	const type = typeof r.FinalType === "string" ? r.FinalType : "";
-	const state: FeedRecord["state"] =
-		isFinalFlag(r.Final) && type === "Finished"
-			? "final"
-			: type === "Postponed"
-				? "postponed"
-				: type === "Canceled"
-					? "canceled"
-					: "not_final";
-	return { state, status: type, home: points(r.HomeScore), away: points(r.AwayScore) };
+/** The seat 3 id the game was created with, or why there is none to read. */
+export function hintOf(hints: Ask["game"]["hints"]): { id: string } | { none: string } {
+	const ids = [...new Set(hints.filter((h) => h.seat === SEAT).map((h) => h.id))];
+	if (ids.length === 0) return { none: "no hint" };
+	if (ids.length > 1) return { none: "two hints" };
+	if (!ID.test(ids[0])) return { none: "hint is not a seat 3 id" };
+	return { id: ids[0].toLowerCase() };
 }
 
 export function* read(ask: Ask): ReaderRun {
-	const row = leagueRow(ask.game.league);
-	if (row === null) return silent(SEAT, "league not offered");
-	if (ask.now - ask.game.start > RETENTION) return silent(SEAT, "past retention");
-	const code = encodeURIComponent(row[SEAT]);
+	if (leagueRow(ask.game.league) === null) return silent(SEAT, "league not offered");
+	const hint = hintOf(ask.game.hints);
+	if ("none" in hint) return silent(SEAT, hint.none);
 
-	const boardRes = jsonOf(yield request(SEAT, `/odds/${code}?oddType=Game`, ask.key));
-	if (!boardRes.ok) return silent(SEAT, boardRes.detail);
-	const resultsRes = jsonOf(yield request(SEAT, `/results/${code}`, ask.key));
-	if (!resultsRes.ok) return silent(SEAT, resultsRes.detail);
-	if (!Array.isArray(boardRes.value) || !Array.isArray(resultsRes.value)) return silent(SEAT, "unreadable");
+	const res = jsonOf(yield request(SEAT, `/results/${hint.id}`, ask.key));
+	if (!res.ok) return silent(SEAT, res.detail);
+	if (!Array.isArray(res.value)) return silent(SEAT, "unreadable");
 
-	const results = new Map<string, Result>();
-	for (const item of resultsRes.value) {
+	const rows: Record<string, unknown>[] = [];
+	for (const item of res.value) {
 		const r = obj(item);
 		if (r === null) return silent(SEAT, "unreadable record");
 		const id = str(r.ID);
-		if (id === null || r.OddType !== "Game" || r.EventID !== id) continue;
-		if (results.has(id)) return silent(SEAT, "duplicate result");
-		results.set(id, resultOf(r));
+		if (id !== null && id.toLowerCase() === hint.id) rows.push(r);
 	}
+	if (rows.length === 0) return silent(SEAT, "no result for the hint");
+	if (rows.length > 1) return silent(SEAT, "duplicate result");
+	// A hint naming a row for a half or for innings would read a part of the game as its final.
+	if (rows[0].OddType !== "Game") return silent(SEAT, "hint names a part of the game");
+	return readingOf(rows[0], hint.id);
+}
 
-	const records: FeedRecord[] = [];
-	const placed = new Set<string>();
-	for (const item of boardRes.value) {
-		const e = obj(item);
-		if (e === null) return silent(SEAT, "unreadable record");
-		const id = str(e.ID);
-		if (id === null) return silent(SEAT, "unreadable record");
-		const result = results.get(id);
-		const home = str(e.HomeTeam);
-		const away = str(e.AwayTeam);
-		records.push({
-			id,
-			time: boardTime(e.MatchTime),
-			teams: [
-				{ names: home === null ? [] : [home], points: result?.home ?? null },
-				{ names: away === null ? [] : [away], points: result?.away ?? null },
-			],
-			state: result?.state ?? "not_final",
-			status: result?.status ?? "no result yet",
-		});
-		placed.add(id);
+function readingOf(r: Record<string, unknown>, id: string): Reading {
+	const type = typeof r.FinalType === "string" ? r.FinalType : "";
+	const home = points(r.HomeScore);
+	const away = points(r.AwayScore);
+	const record = { id, time: null };
+	if (isFinalFlag(r.Final) && type === "Finished") {
+		if (home === null || away === null) return silent(SEAT, "final without points");
+		return { seat: SEAT, kind: "final", home, away, recorded: null, detail: "final", record };
 	}
-	const unplaced = new Set([...results.keys()].filter((id) => !placed.has(id)));
-	return pick(SEAT, ask.game, records, unplaced);
+	const recorded = type === "Postponed" ? "postponed" : type === "Canceled" ? "canceled" : null;
+	return { seat: SEAT, kind: "no_final", home, away, recorded, detail: recorded ?? type, record };
 }

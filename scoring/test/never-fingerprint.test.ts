@@ -21,8 +21,9 @@ import { locate } from "./fixtures";
 const OFFERED = ["mlb", "nba", "ncaab", "ncaaf", "nfl", "nhl"];
 const ALL_KEYS: Keys = { 1: "k1", 2: "k2", 3: "k3", 4: "k4" };
 
+// A seat 3 hint, so seat 3 (read by hint) has something to ask about like the other three.
 function game(league: string): Game {
-	return { league, home: "Home", away: "Away", start: 1_792_000_000, n: 86_400, hints: [] };
+	return { league, home: "Home", away: "Away", start: 1_792_000_000, n: 86_400, hints: [{ seat: 3, id: "00000000-0000-4000-8000-000000000000" }] };
 }
 
 /** A transport that refuses everything, recording which seats were asked, in order. */

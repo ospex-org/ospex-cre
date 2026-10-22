@@ -4,7 +4,10 @@
 //   bun capture/capture.ts <plan.json>
 //
 // The plan lists games to read on given seats ("asks") and extra paths to fetch as they are
-// ("lists", the seats' team lists). Every request is the reader's own, built with the
+// ("lists": the seats' team lists, and seat 3 results by id). A path already saved is served from
+// its saved answer, unless the plan says "fresh": then it is asked again and the new answer is saved
+// beside the old one, named for its capture time, so a game read before and after it ends keeps
+// both answers. Every request is the reader's own, built with the
 // placeholder SEATKEY in place of the key; the real key is put in only at the moment of sending
 // and is never printed or written. A fixture keeps the answer's exact bytes; the index beside
 // it (fixtures/index.json) keeps the seat, the path, the status and when, never the host, so no
@@ -38,6 +41,7 @@ export interface Entry {
 interface Plan {
 	asks?: { seat: Seat; game: Game; now?: number }[];
 	lists?: { seat: Seat; league: string; path: string; follow?: "cursor" }[];
+	fresh?: boolean;
 }
 
 function keyOf(seat: Seat): string {
@@ -52,7 +56,7 @@ function pathOf(seat: Seat, url: string): string {
 	return url.slice(prefix.length);
 }
 
-function fileFor(seat: Seat, league: string, path: string): string {
+function fileFor(seat: Seat, league: string, path: string, at: string | null): string {
 	const row = seatRow(seat);
 	const keyParam = "query" in row.key ? `${row.key.query}=${PLACEHOLDER}` : null;
 	const slug = (keyParam === null ? path : path.replace(`?${keyParam}`, "").replace(`&${keyParam}`, ""))
@@ -60,18 +64,20 @@ function fileFor(seat: Seat, league: string, path: string): string {
 		.replace(/[^A-Za-z0-9]+/g, "-")
 		.replace(/^-+|-+$/g, "")
 		.toLowerCase();
-	return `seat${seat}/${league}/${slug}.json`;
+	return `seat${seat}/${league}/${slug}${at === null ? "" : `-at-${at.replace(/[-:]/g, "").slice(0, 13)}z`}.json`;
 }
 
 const index: Entry[] = existsSync(INDEX) ? JSON.parse(readFileSync(INDEX, "utf8")) : [];
-const byPath = new Map(index.map((e) => [`${e.seat} ${e.path}`, e]));
+const byPath = new Map(index.map((e) => [`${e.seat} ${e.path}`, e])); // the latest answer per path
+let fresh = false;
+const thisRun = new Set<string>(); // paths fetched in this run: fresh means newer than earlier runs
 const last: Partial<Record<Seat, number>> = {};
 const calls: Record<Seat, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
 
 async function send(seat: Seat, league: string, req: HttpRequest): Promise<HttpResponse> {
 	const path = pathOf(seat, req.url);
 	const known = byPath.get(`${seat} ${path}`);
-	if (known) {
+	if (known && (!fresh || thisRun.has(`${seat} ${path}`))) {
 		const body = readFileSync(join(ROOT, known.file), "utf8");
 		return { status: known.status, body };
 	}
@@ -91,7 +97,8 @@ async function send(seat: Seat, league: string, req: HttpRequest): Promise<HttpR
 		throw new Error("transport");
 	}
 	const bytes = new Uint8Array(await res.arrayBuffer());
-	const file = fileFor(seat, league, path);
+	const capturedAt = new Date().toISOString();
+	const file = fileFor(seat, league, path, known ? capturedAt : null);
 	mkdirSync(dirname(join(ROOT, file)), { recursive: true });
 	writeFileSync(join(ROOT, file), bytes);
 	const entry: Entry = {
@@ -101,10 +108,11 @@ async function send(seat: Seat, league: string, req: HttpRequest): Promise<HttpR
 		file,
 		sha256: createHash("sha256").update(bytes).digest("hex"),
 		bytes: bytes.length,
-		capturedAt: new Date().toISOString(),
+		capturedAt,
 	};
 	index.push(entry);
 	byPath.set(`${seat} ${path}`, entry);
+	thisRun.add(`${seat} ${path}`);
 	writeFileSync(INDEX, `${JSON.stringify(index, null, 2)}\n`);
 	console.log(`seat ${seat} ${path} -> ${res.status} ${bytes.length} bytes`);
 	return { status: res.status, body: new TextDecoder().decode(bytes) };
@@ -144,6 +152,7 @@ function listHeaders(seat: Seat): Record<string, string> {
 const planFile = process.argv[2];
 if (!planFile) throw new Error("usage: bun capture/capture.ts <plan.json>");
 const plan: Plan = JSON.parse(readFileSync(planFile, "utf8"));
+fresh = plan.fresh === true;
 for (const a of plan.asks ?? []) await drive(a.seat, a.game, a.now ?? Math.floor(Date.now() / 1000));
 for (const l of plan.lists ?? []) {
 	const key = seatRow(l.seat).key;

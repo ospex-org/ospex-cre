@@ -1,13 +1,12 @@
-// The creation hints are hints, not locks: a hint that names the game is used, any other hint is
-// dropped and the game is found by its teams, and a hint never pulls in a record outside the
-// window or with other teams.
+// For seats 1, 2 and 4 the creation hints are hints, not locks: a hint that names the game is
+// used, any other hint is dropped and the game is found by its teams, and a hint never pulls in a
+// record outside the window or with other teams. Seat 3 is read by its hint (ruled 10/22): the
+// match is the hint, and the last block here shows what that does and does not check.
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { Game, Seat } from "../src/types";
 import { CASES, NOW } from "./cases";
-import { INDEX, ROOT, readSaved } from "./fixtures";
+import { readSaved } from "./fixtures";
 
 const byName = (prefix: string) => CASES.find((c) => c.name.startsWith(prefix))!;
 
@@ -66,17 +65,61 @@ describe("hints", () => {
 		expect(read(4, { ...lakers.game, hints: [{ seat: 4, id: want.id! }] })).toMatchObject({ kind: "final", id: want.id });
 	});
 
-	test("seat 3: a hint naming a finished result the board no longer lists is silent, never no final", () => {
-		const entry = INDEX.find((e) => e.seat === 3 && e.path === "/results/NFL")!;
-		const rows = JSON.parse(readFileSync(join(ROOT, entry.file), "utf8")) as Record<string, unknown>[];
-		const finished = rows.find((r) => r.OddType === "Game" && r.FinalType === "Finished")!;
-		const sf = byName("nfl final").game;
-		expect(read(3, { ...sf, hints: [{ seat: 3, id: finished.ID as string }] })).toEqual({
-			kind: "silent",
-			home: null,
-			away: null,
-			detail: "hint has no teams or time",
-			id: null,
+});
+
+describe("seat 3 is read by its hint (ruled 10/22)", () => {
+	const sixers = byName("nba not final");
+	const id = sixers.expect[3]!.id!;
+	const withHints = (hints: { seat: number; id: string }[]) => ({ ...sixers.game, hints });
+	const asked = (game: Game) => readSaved(3, game, NOW).asked.length;
+
+	test("the hint is read: the game still to play reads no final under its id", () => {
+		expect(read(3, sixers.game)).toEqual({ kind: "no_final", home: null, away: null, detail: "NotFinished", id });
+		expect(read(3, withHints([{ seat: 3, id: id.toUpperCase() }]))).toMatchObject({ kind: "no_final", id });
+	});
+
+	test("no hint, two hints, or a hint that is not a seat 3 id: silent, and nothing is asked", () => {
+		const cases: [string, { seat: number; id: string }[], string][] = [
+			["none", [], "no hint"],
+			["another seat's only", [{ seat: 2, id }], "no hint"],
+			["two", [{ seat: 3, id }, { seat: 3, id: "00000000-0000-4000-8000-000000000000" }], "two hints"],
+			["a path", [{ seat: 3, id: "../odds/NFL" }], "hint is not a seat 3 id"],
+			["a query", [{ seat: 3, id: `${id}?x=1` }], "hint is not a seat 3 id"],
+			["a short id", [{ seat: 3, id: id.slice(0, 35) }], "hint is not a seat 3 id"],
+			["empty", [{ seat: 3, id: "" }], "hint is not a seat 3 id"],
+		];
+		for (const [what, hints, detail] of cases) {
+			const game = withHints(hints);
+			expect({ what, ...read(3, game), asked: asked(game) }).toEqual({ what, kind: "silent", home: null, away: null, detail, id: null, asked: 0 });
+		}
+		// The same id given twice is one hint.
+		expect(read(3, withHints([{ seat: 3, id }, { seat: 3, id }]))).toMatchObject({ kind: "no_final", id });
+	});
+
+	test("an id the seat has no result for reads silent, never no final: an unknown id, and ids 78 to 156 days old", () => {
+		// The seat answers [] for each, the same bytes for an id that never existed as for a game
+		// from May. Measured 22 Oct: by id, a result 2.6 days old still answers (next test); these do not.
+		for (const old of [
+			"00000000-0000-4000-8000-000000000000",
+			"038769a6-0023-45d9-a6af-0774268a2804", // 5 Aug
+			"0a8828ee-719d-4fb5-9954-ffd73e40b70e", // 8 Jul
+			"acc4e59b-999e-469b-9137-a2ed1b45aab2", // 11 Jun
+			"35cf5493-fdea-4b54-932b-4efc3ef2eb15", // 19 May
+		]) {
+			expect({ old, ...read(3, withHints([{ seat: 3, id: old }])) }).toEqual({ old, kind: "silent", home: null, away: null, detail: "no result for the hint", id: null });
+		}
+	});
+
+	test("seat 3 checks no teams: a hint naming another game reads that game, so verification must check the hint", () => {
+		// A finished NFL result at least 2.6 days old (from the seat's five-day list, which names no
+		// teams), read under the Lakers' game: the reading is that other game's 26-19.
+		const lakers = byName("nba final").game;
+		expect(read(3, { ...lakers, hints: [{ seat: 3, id: "2c0b5786-b4f2-48de-8178-567ea27c9dbd" }] })).toEqual({
+			kind: "final",
+			home: 26,
+			away: 19,
+			detail: "final",
+			id: "2c0b5786-b4f2-48de-8178-567ea27c9dbd",
 		});
 	});
 });

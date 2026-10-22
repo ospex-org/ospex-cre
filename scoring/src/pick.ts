@@ -1,5 +1,6 @@
-// Finding the game among a feed's records, and turning the record into a reading. Every seat's
-// reader ends here, so the three rules live in one place:
+// Finding the game among a feed's records, and turning the record into a reading. Seats 1, 2 and
+// 4 end here, so the three rules live in one place (seat 3 is read by its creation hint instead;
+// see readers/seat3.ts):
 //
 //   by team   A record is the game only when its two teams resolve to the game's two teams, in
 //             either order. Its points come back by team: a reader drops the feed's home and away
@@ -18,8 +19,8 @@
 // one game twice, and the feed is silent.
 //
 // "Absent" (answered, no record of the game) is said only when the feed's answer rules the game
-// out: when no record of the two teams lacks a game time, no result lacks teams or a time, and no
-// record carries a team name the program can't resolve beside one that could be the game's.
+// out: when no record of the two teams lacks a game time, and no record carries a team name the
+// program can't resolve beside one that could be the game's.
 // Otherwise the feed is silent. So a spelling missing from the team lists makes a seat silent
 // about the games it touches; it does not make the seat say they are absent.
 
@@ -67,18 +68,8 @@ export function resolveFeedTeam(league: string, team: FeedTeam): string | null {
 	return found;
 }
 
-/**
- * Picks the game out of a feed's answer and reads it.
- *
- * `unplaced` holds the ids of records the feed answered for but gave no teams or game time for.
- * One of them may be the game, so while any exist the feed cannot say the game is absent.
- */
-export function pick(
-	seat: Seat,
-	game: Game,
-	answered: readonly FeedRecord[],
-	unplaced: ReadonlySet<string> = new Set(),
-): Reading {
+/** Picks the game out of a feed's answer and reads it. Seats 1, 2 and 4; seat 3 is read by hint. */
+export function pick(seat: Seat, game: Game, answered: readonly FeedRecord[]): Reading {
 	const home = resolveTeam(game.league, game.home);
 	const away = resolveTeam(game.league, game.away);
 	if (home === null || away === null || home === away) return silent(seat, "game teams unknown");
@@ -104,7 +95,6 @@ export function pick(
 
 	const hint = game.hints.find((h) => h.seat === seat);
 	if (hint !== undefined) {
-		if (unplaced.has(hint.id)) return silent(seat, "hint has no teams or time");
 		const named = records.find((r) => r.id === hint.id);
 		if (named !== undefined && isGame(named)) {
 			if (named.time === null) return silent(seat, "no game time");
@@ -119,7 +109,6 @@ export function pick(
 	if (inside.length > 1 && inside[1].time === inside[0].time) return silent(seat, "ambiguous");
 	if (inside.length > 0) return readingOf(seat, game.league, inside[0], home);
 	if (games.some((r) => r.time === null)) return silent(seat, "no game time");
-	if (unplaced.size > 0) return silent(seat, "results without teams or time");
 	// A record with a team name the program can't resolve, whose other team could be one of the
 	// game's, may be the game: the feed can't be said to lack it.
 	const couldBe = (k: string | null): boolean => k === null || k === home || k === away;

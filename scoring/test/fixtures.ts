@@ -27,7 +27,19 @@ export interface Entry {
 
 export const INDEX: readonly Entry[] = JSON.parse(readFileSync(join(ROOT, "index.json"), "utf8"));
 
-const byKey = new Map(INDEX.map((e) => [`${e.seat} ${e.path}`, e]));
+/** Every saved answer for a request, oldest first: a path asked before and after a game ends has two. */
+const byKey = new Map<string, Entry[]>();
+for (const e of [...INDEX].sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt))) {
+	const k = `${e.seat} ${e.path}`;
+	if (!byKey.has(k)) byKey.set(k, []);
+	byKey.get(k)!.push(e);
+}
+
+/** What the feed said for a request as of a moment: the latest answer captured at or before it. */
+function answerAsOf(seat: Seat, path: string, asOf: number): Entry | undefined {
+	const all = byKey.get(`${seat} ${path}`) ?? [];
+	return all.filter((e) => Date.parse(e.capturedAt) / 1000 <= asOf).at(-1);
+}
 
 /** The bytes of a fixture file, exactly as saved. */
 export function bytesOf(file: string): Uint8Array {
@@ -52,8 +64,11 @@ export interface Saved {
 /** Changes a saved answer's parsed body before it is served: a derived answer, never a fixture. */
 export type Derive = (seat: Seat, path: string, body: unknown) => unknown;
 
-/** A transport over the saved answers, recording what was asked and what it could not answer. */
-export function saved(derive?: Derive): Saved {
+/**
+ * A transport over the saved answers as of `asOf` (unix seconds; by default, the latest answer),
+ * recording what was asked and what it could not answer.
+ */
+export function saved(derive?: Derive, asOf: number = Number.MAX_SAFE_INTEGER): Saved {
 	const asked: HttpRequest[] = [];
 	const misses: string[] = [];
 	return {
@@ -62,7 +77,7 @@ export function saved(derive?: Derive): Saved {
 		send(req) {
 			asked.push(req);
 			const at = locate(req);
-			const entry = at === null ? undefined : byKey.get(`${at.seat} ${at.path}`);
+			const entry = at === null ? undefined : answerAsOf(at.seat, at.path, asOf);
 			if (at === null || entry === undefined) {
 				// Seat and path only: test output names no host.
 				misses.push(at === null ? "a host outside the table" : `seat ${at.seat} ${at.path}`);
@@ -82,7 +97,7 @@ export function readSaved(
 	now: number,
 	derive?: Derive,
 ): { reading: Reading; asked: HttpRequest[]; misses: string[] } {
-	const t = saved(derive);
+	const t = saved(derive, now);
 	const reading = runSync(seat, readerFor(seat)({ game, now, key: KEY }), t.send);
 	return { reading, asked: t.asked, misses: t.misses };
 }

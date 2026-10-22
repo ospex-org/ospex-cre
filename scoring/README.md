@@ -27,6 +27,10 @@ seats are asked.
 
 ## How a game is read
 
+Seats 1, 2 and 4 are read by team and window. Seat 3 is read by its creation hint (ruled
+22 Oct): its results carry points and status but no team names and no game time, and its board,
+which has both, drops a game once the game is final.
+
 * **By team.** A feed's record is the game only when its two teams resolve to the game's two
   teams, in either order. Points come back by team, never by the feed's home or away slot, so a
   feed that lists the teams the other way round still reads right. Names resolve through the
@@ -36,20 +40,30 @@ seats are asked.
   nothing. A spelling missing from the lists makes a seat silent about the games it touches; it
   never makes the seat say a game is absent.
 * **The window.** A record counts only if the feed's own game time for it is inside
-  `[start, start + n)`, the game's n and nothing else. A makeup game sits outside, so it never
-  scores the original. The end is open: a makeup at the same clock time the next day is out.
-* **Hints.** A creation hint names a feed's own id for the game. If the feed has a record under
-  that id with the game's two teams, that record is the game; outside the window it reads "no
-  final" and nothing else is searched. A hint the feed doesn't have, or one under other teams,
-  is dropped, and the game is found by its teams. Without a hint, the earliest record of the two
-  teams inside the window is the game.
+  `[start, start + n)`, the game's n and nothing else. The start instant is in; the end is open,
+  so a makeup at the same clock time the next day is out. The start is the scheduled start, taken
+  from the counting seats when the game is verified (ruled 22 Oct); seat 4's own time is the
+  actual start, which only ever serves seat 4's own window check.
+* **Hints, seats 1, 2 and 4.** A creation hint names a feed's own id for the game. If the feed
+  has a record under that id with the game's two teams, that record is the game; outside the
+  window it reads "no final" and nothing else is searched. A hint the feed doesn't have, or one
+  under other teams, is dropped, and the game is found by its teams. Without a hint, the earliest
+  record of the two teams inside the window is the game.
+* **Seat 3, by hint.** One request: the feed's result for the game's seat 3 id. The hint rides in
+  the creation event on chain, so anyone can re-run the match while the feed answers for that id.
+  Measured 22 Oct: it answers a result 2.6 days old, and nothing for ids 78 to 156 days old (the
+  feed says five days). With no team names or time to read, seat 3's points are the feed's own
+  home and away, bound to the game by the hint; checking that binding against the feed's board
+  while the game is listed belongs to verification. No hint, two hints, or a hint that is not a
+  seat 3 id, and seat 3 is silent without asking.
 * **Final or not.** Each reader maps its feed's status to final or not final. Postponed and
   cancelled are recorded where a feed has them and decide nothing. Each reader's header says its
   feed's rule.
 * **Silent.** A feed is silent when it can't answer about the game: no key, a refused or failed
   request, an answer that doesn't parse, a record with no game time, a final without points, two
-  records of the game at the same time, or (seats 3 and 4) a game older than the feed keeps.
-  Silent is never turned into "no final".
+  records of the game at the same time, a game older than seat 4 keeps, and, at seat 3, no usable
+  hint, no result for it, or a hint naming a row for part of the game. Silent is never turned
+  into "no final".
 
 ## Running
 

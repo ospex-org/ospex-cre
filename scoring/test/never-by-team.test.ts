@@ -1,5 +1,9 @@
 // Never: "Feeds are read by team, never by the home or away slot."
 //
+// Seats 1, 2 and 4. Seat 3 is read by its creation hint (Vince, 10/22): its results carry no team
+// names, so its points are the feed's own home and away, bound to the game by the hint, and the
+// binding is checked at verification. The last test here pins that, so it can't change unseen.
+//
 // Three ways a slot could leak in, each tested on the real saved answers:
 //   1. the game was created with the teams the other way round from a feed (a neutral site);
 //   2. a feed lists the teams the other way round from the game (a derived answer: the real one
@@ -17,7 +21,7 @@ import type { Seat } from "../src/types";
 import { CASES, NOW } from "./cases";
 import { copy, readSaved, type Derive } from "./fixtures";
 
-const SEATS: Seat[] = [1, 2, 3, 4];
+const SEATS: Seat[] = [1, 2, 4];
 
 const SLOT_PAIRS: [string, string][] = [
 	["home_team", "visitor_team"],
@@ -72,7 +76,7 @@ describe("never: read by the home or away slot", () => {
 				if (want.kind === "final" && want.home !== want.away) finals++;
 			}
 		}
-		expect(finals).toBe(18); // every final in the cases, at every seat that reads one
+		expect(finals).toBe(20); // every final in the cases, at seats 1, 2 and 4
 	});
 
 	test("a feed that lists the teams the other way round still reads right", () => {
@@ -87,7 +91,7 @@ describe("never: read by the home or away slot", () => {
 				if (want.kind === "final" && want.home !== want.away) finals++;
 			}
 		}
-		expect(finals).toBe(18); // every final in the cases, at every seat that reads one
+		expect(finals).toBe(20); // every final in the cases, at seats 1, 2 and 4
 	});
 
 	test("seat 4 pairs points with teams by name, not by place in its list", () => {
@@ -111,6 +115,32 @@ describe("never: read by the home or away slot", () => {
 			const { reading, misses } = readSaved(seat, other, NOW);
 			expect(misses).toEqual([]);
 			expect({ seat, kind: reading.kind, detail: reading.detail }).toEqual({ seat, kind: "no_final", detail: "absent" });
+		}
+	});
+
+	test("seat 3 is read by its hint: its points are the feed's own home and away, whichever way the game was created", () => {
+		// Derived from the real by-id answer for Cleveland at Philadelphia (still to play at capture),
+		// given a final. The game as created and the same game created the other way round, both
+		// under the same seat 3 hint, read the feed's home points as the game's home points.
+		const sixers = CASES.find((c) => c.name.startsWith("nba not final"))!;
+		const id = sixers.expect[3]!.id!;
+		const finished: Derive = (seat, path, body) => {
+			if (seat !== 3 || path !== `/results/${id}`) return body;
+			return (copy(body) as Record<string, unknown>[]).map((r) => ({ ...r, Final: true, FinalType: "Finished", HomeScore: "112", AwayScore: "104" }));
+		};
+		const turned = { ...sixers.game, home: sixers.game.away, away: sixers.game.home };
+		for (const game of [sixers.game, turned]) {
+			const { reading, misses } = readSaved(3, game, NOW, finished);
+			expect(misses).toEqual([]);
+			expect({ createdHome: game.home, ...shape(reading) }).toEqual({
+				createdHome: game.home,
+				kind: "final",
+				home: 112,
+				away: 104,
+				recorded: null,
+				detail: "final",
+				id,
+			});
 		}
 	});
 

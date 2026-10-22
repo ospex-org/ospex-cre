@@ -862,5 +862,104 @@
     "sha256": "ac70754dc686166da43fe5248f5ebba206cca8d9d25a730637efdb36aace6cce",
     "bytes": 28695,
     "capturedAt": "2026-10-22T16:11:53.208Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/edcfd41f-1773-4bc9-a349-aa50931a0278",
+    "status": 200,
+    "file": "seat3/nfl/results-edcfd41f-1773-4bc9-a349-aa50931a0278.json",
+    "sha256": "1393f1a81c0bcbcc53c28e1732f326f20cad8c642e1c744069e8af5d8826b824",
+    "bytes": 187,
+    "capturedAt": "2026-10-22T17:27:11.967Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/cc394a49-c3d1-4b8c-bba2-8ebbb8326c09",
+    "status": 200,
+    "file": "seat3/nba/results-cc394a49-c3d1-4b8c-bba2-8ebbb8326c09.json",
+    "sha256": "d2c685528bc80c23a66d0c34250558429c80e8447af4aa2fbad7e74669e66684",
+    "bytes": 187,
+    "capturedAt": "2026-10-22T17:27:12.650Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/2fef41ed-51ca-4693-985f-5eb74b5f4875",
+    "status": 200,
+    "file": "seat3/nhl/results-2fef41ed-51ca-4693-985f-5eb74b5f4875.json",
+    "sha256": "267fe1be918923f09ad62eff01c91b2e7509b9d588400046aa0b14f492bf7990",
+    "bytes": 187,
+    "capturedAt": "2026-10-22T17:27:13.685Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/1ecc09e9-a306-4846-9a3c-b8dd63f2bb84",
+    "status": 200,
+    "file": "seat3/ncaaf/results-1ecc09e9-a306-4846-9a3c-b8dd63f2bb84.json",
+    "sha256": "49107187a40b76a152d3037d4896402a208d49dbb9962dfa79b9944843c0a64d",
+    "bytes": 187,
+    "capturedAt": "2026-10-22T17:27:14.760Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/122d7737-bc9a-4f7a-a444-c9cee9a7e750",
+    "status": 200,
+    "file": "seat3/mlb/results-122d7737-bc9a-4f7a-a444-c9cee9a7e750.json",
+    "sha256": "99d01f96822659125ab6025661fc6269e1753aa54f394a17a98abf66a20de037",
+    "bytes": 187,
+    "capturedAt": "2026-10-22T17:27:15.716Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/acc4e59b-999e-469b-9137-a2ed1b45aab2",
+    "status": 200,
+    "file": "seat3/mlb/results-acc4e59b-999e-469b-9137-a2ed1b45aab2.json",
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "bytes": 2,
+    "capturedAt": "2026-10-22T17:27:16.642Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/00000000-0000-4000-8000-000000000000",
+    "status": 200,
+    "file": "seat3/nfl/results-00000000-0000-4000-8000-000000000000.json",
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "bytes": 2,
+    "capturedAt": "2026-10-22T17:27:17.579Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/2c0b5786-b4f2-48de-8178-567ea27c9dbd",
+    "status": 200,
+    "file": "seat3/nfl/results-2c0b5786-b4f2-48de-8178-567ea27c9dbd.json",
+    "sha256": "1de18caad1d06d2ac01c9c7f6d57454139bade49a6852da158d63e1a35894391",
+    "bytes": 203,
+    "capturedAt": "2026-10-22T17:27:18.623Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/038769a6-0023-45d9-a6af-0774268a2804",
+    "status": 200,
+    "file": "seat3/mlb/results-038769a6-0023-45d9-a6af-0774268a2804.json",
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "bytes": 2,
+    "capturedAt": "2026-10-22T17:27:19.647Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/0a8828ee-719d-4fb5-9954-ffd73e40b70e",
+    "status": 200,
+    "file": "seat3/mlb/results-0a8828ee-719d-4fb5-9954-ffd73e40b70e.json",
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "bytes": 2,
+    "capturedAt": "2026-10-22T17:27:20.588Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/35cf5493-fdea-4b54-932b-4efc3ef2eb15",
+    "status": 200,
+    "file": "seat3/mlb/results-35cf5493-fdea-4b54-932b-4efc3ef2eb15.json",
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "bytes": 2,
+    "capturedAt": "2026-10-22T17:27:21.677Z"
   }
 ]

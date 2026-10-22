@@ -3,7 +3,9 @@
 // Asks once per league for live, upcoming and recently completed games. The feed gives each
 // game's points as a list keyed by team name, not by home or away, so each team takes the one
 // entry carrying its own name. Status: `completed` true is final; anything else is not final. The
-// feed records no postponed or cancelled state.
+// feed records no postponed or cancelled state. Its game time is the scheduled start until the game
+// begins and the actual start after; it serves only this seat's own window check, never the game's
+// start (ruled 10/22).
 //
 // Retention: completed games come back for three days. Past 66 hours after the game's start (three
 // days less six hours, which holds whether the feed counts from the start, from the end or by

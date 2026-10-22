@@ -1,6 +1,9 @@
 // Never: "A final counts only if the feed's own game time for that record is inside the window,
 // so a makeup game never scores the original game."
 //
+// Seats 1, 2 and 4. Seat 3 is read by its creation hint (Vince, 10/22) and its results carry no
+// game time; the last test here pins that.
+//
 // The window is [start, start + n). Each refusal below is paired with the acceptance one second
 // the other side of the edge, and each refusal reads "outside window": the record was in the
 // feed's answer and the window turned it away, so the test cannot pass on a record that simply
@@ -114,22 +117,17 @@ describe("never: a final outside the window counts", () => {
 		expect(read(1, hinted, moved1)).toEqual({ kind: "no_final", home: null, away: null, detail: "outside window", id: "5058800" });
 	});
 
-	test("seat 3's board records are held to the window too", () => {
-		const bears = byName("nfl not final");
-		const t = bears.game.start;
-		expect(read(3, { ...bears.game, start: t })).toMatchObject({ kind: "no_final", detail: "NotFinished" });
-		// On the real answer, a board record outside the window cannot make the game absent: the
-		// feed's finished results have no teams or time, and one of them could be the game.
-		expect(read(3, { ...bears.game, start: t - DAY })).toMatchObject({ kind: "silent", detail: "results without teams or time" });
-		// Derived: the results cut to the games still on the board. Then the window alone decides.
-		const boardOnly: Derive = (seat, path, body) => {
-			if (seat !== 3 || !path.startsWith("/results/")) return body;
-			return (body as Record<string, unknown>[]).filter((r) => r.FinalType === "NotFinished");
-		};
-		expect(read(3, { ...bears.game, start: t }, boardOnly)).toMatchObject({ kind: "no_final", detail: "NotFinished" });
-		expect(read(3, { ...bears.game, start: t - DAY }, boardOnly)).toMatchObject({ kind: "no_final", detail: "outside window" });
-		expect(read(3, { ...bears.game, start: t - DAY + 1 }, boardOnly)).toMatchObject({ kind: "no_final", detail: "NotFinished" });
-		expect(read(3, { ...bears.game, start: t + 1 }, boardOnly)).toMatchObject({ kind: "no_final", detail: "outside window" });
+	test("seat 3 carries no game time, so the window cannot hold it: it is read by its hint (ruled 10/22)", () => {
+		// Every seat 3 reading in the cases rests on a record with no time of its own. Its makeup
+		// protection is the feed marking the original id postponed, and the agreement rule.
+		let read3 = 0;
+		for (const c of CASES) {
+			if (c.expect[3]?.id === undefined || c.expect[3]?.id === null) continue;
+			const { reading } = readSaved(3, c.game, NOW);
+			expect({ case: c.name, record: reading.record }).toEqual({ case: c.name, record: { id: c.expect[3]!.id!, time: null } });
+			read3++;
+		}
+		expect(read3).toBeGreaterThan(0);
 	});
 });
 
