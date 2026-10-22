@@ -9,6 +9,7 @@ import * as seat1 from "./readers/seat1";
 import * as seat2 from "./readers/seat2";
 import * as seat3 from "./readers/seat3";
 import * as seat4 from "./readers/seat4";
+import { keyFor, type Keys } from "./keys";
 import { runAsync, runSync, silent } from "./run";
 import { SEATS, leagueRow } from "./table";
 import type { Ask, Game, HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
@@ -23,8 +24,7 @@ const READERS: Readonly<Record<Seat, (ask: Ask) => ReaderRun>> = Object.freeze({
 	4: seat4.read,
 });
 
-/** Each seat's key, by seat. Nothing else is read from it. */
-export type Keys = Readonly<Partial<Record<Seat, string>>>;
+export type { Keys } from "./keys";
 
 /** What the readers found: whether the league is offered, and one reading per seat, in seat order. */
 export interface Readings {
@@ -35,12 +35,6 @@ export interface Readings {
 /** The seats asked for a league: every seat in the table, in seat order; none if not offered. */
 export function seatsFor(league: string): readonly Seat[] {
 	return leagueRow(league) === null ? [] : SEATS.map((r) => r.seat);
-}
-
-function keyFor(keys: Keys, seat: Seat): string | null {
-	if (!Object.prototype.hasOwnProperty.call(keys, seat)) return null;
-	const k = (keys as Record<number, unknown>)[seat];
-	return typeof k === "string" && k !== "" ? k : null;
 }
 
 /** Reads a game on every seat, with a synchronous transport (the Chainlink workflow's). */

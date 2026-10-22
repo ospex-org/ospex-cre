@@ -1,0 +1,31 @@
+{
+  "case": "2026-10-22-nba-spare-stands-in",
+  "what": "Golden State at the Los Angeles Lakers, 22 Oct 2026 (02:00 UTC), created without a seat 3 hint. The Lakers won 127-105.",
+  "game": {
+    "league": "nba",
+    "home": "Los Angeles Lakers",
+    "away": "Golden State Warriors",
+    "date": "2026-10-22T02:00:00Z",
+    "hints": [],
+    "n": 86400,
+    "day7": 604800,
+    "status": "verified",
+    "start": "2026-10-22T02:00:00Z",
+    "startReadings": [[1, 1], [2, 1], [3, 0], [4, 1]]
+  },
+  "run": "2026-10-22T17:30:00Z",
+  "payloads": [
+    { "seat": 1, "path": "/v1/games?dates[]=2026-10-21&per_page=100", "sha256": "084e0e3895afbdc9e8976c4c1984e25a43acc73393e0e990e4ed5521606be3a9" },
+    { "seat": 1, "path": "/v1/games?dates[]=2026-10-22&per_page=100", "sha256": "291a4809c668071e2c7e4c44510e4fe49c6ca0b6e6085fab4843a8f3fb6f6ab3" },
+    { "seat": 1, "path": "/v1/games?dates[]=2026-10-23&per_page=100", "sha256": "161efa7b114d64ead73487f01a73e236ffe660906ddacb40625385a8fcb809bd" },
+    { "seat": 2, "path": "/games?league=NBA&date=2026-10-21", "sha256": "b88228f697305a314c52ae3c3ac5e42dc1507d7212542368100679f655506955" },
+    { "seat": 2, "path": "/games?league=NBA&date=2026-10-22", "sha256": "18f3401fb2a0416d2959f16e710ef690c78d74eb03917e85e674b23a122b66a2" },
+    { "seat": 2, "path": "/games?league=NBA&date=2026-10-23", "sha256": "85aa7f23b1eb0b32b92736723cb4088c2564651a201ee413f5751bc34ff7346a" },
+    { "seat": 4, "path": "/v4/sports/basketball_nba/scores/?daysFrom=3&dateFormat=iso&apiKey=SEATKEY", "sha256": "57178cac050a4bf5f9c6f2793bca948673e59cc405954df9b09c1b1ebd0c9e33" }
+  ],
+  "outcome": {
+    "action": "score",
+    "report": { "kind": 2, "start": 0, "home": 127, "away": 105, "readings": [[1, 2, 127, 105], [2, 2, 127, 105], [3, 0, 0, 0], [4, 2, 127, 105]] }
+  },
+  "logic": "Seat 3 has nothing to read the game by, so it is silent for the whole game and the spare stands in for it. The run is inside the window, at 17:30 UTC, and the three seats that count for this game give the same final: the score, inside n. Without the spare standing in, seat 3's silence would block until n and the score would rest on two finals."
+}

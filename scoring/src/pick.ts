@@ -88,8 +88,16 @@ export function resolveFeedTeam(league: string, team: FeedTeam): string | null {
 	return found;
 }
 
-/** Picks the game out of a feed's answers and reads it. Seats 1, 2 and 4; seat 3 is read by hint. */
-export function pick(seat: Seat, game: Game, listings: readonly Listing[]): Reading {
+/**
+ * Picks the game out of a feed's answers and reads it. Seats 1, 2 and 4; seat 3 is read by hint.
+ *
+ * `near` is for verification, before a start is written: among the records of the two teams in the
+ * window, the game is the one nearest that time (the date the creator gave), and two at the same
+ * distance leave the feed silent. It takes the place of one test of "only one" above (no other
+ * record of the two teams inside the window); a hint, and any other record that could be the game,
+ * decide as they do without it.
+ */
+export function pick(seat: Seat, game: Game, listings: readonly Listing[], near?: number): Reading {
 	const home = resolveTeam(game.league, game.home);
 	const away = resolveTeam(game.league, game.away);
 	if (home === null || away === null || home === away) return silent(seat, "game teams unknown");
@@ -157,6 +165,13 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[]): Read
 
 	const games = records.filter(isGame);
 	const chosen = games.filter(inside);
+	// Verification: several records of the two teams inside the window, and nothing else that could
+	// be the game. The one nearest the creator's date is the game; two at the same distance, none is.
+	if (near !== undefined && chosen.length > 1 && rivals.length === chosen.length) {
+		const distance = (r: FeedRecord): number => Math.abs((r.time as number) - near);
+		const [first, second] = [...chosen].sort((x, y) => distance(x) - distance(y));
+		return distance(first) < distance(second) ? readingOf(seat, game.league, first, home) : silent(seat, "ambiguous");
+	}
 	if (chosen.length === 1 && rivals.length === 1) return readingOf(seat, game.league, chosen[0], home);
 	if (chosen.length > 0) return silent(seat, "ambiguous");
 	if (records.some((r) => (isGame(r) || mayBe(r) || respelt(r)) && r.time === null)) return silent(seat, "no game time");

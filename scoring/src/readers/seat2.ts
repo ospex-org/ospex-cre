@@ -83,5 +83,5 @@ export function* read(ask: Ask): ReaderRun {
 		}
 		listings.push(listing);
 	}
-	return pick(SEAT, ask.game, listings);
+	return pick(SEAT, ask.game, listings, ask.near);
 }

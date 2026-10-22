@@ -70,5 +70,5 @@ export function* read(ask: Ask): ReaderRun {
 		if (r === null) return silent(SEAT, "unreadable record");
 		records.push(r);
 	}
-	return pick(SEAT, ask.game, [records]);
+	return pick(SEAT, ask.game, [records], ask.near);
 }

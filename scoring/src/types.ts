@@ -83,4 +83,10 @@ export interface Ask {
 	readonly now: number;
 	/** This seat's key and nothing else. */
 	readonly key: string;
+	/**
+	 * Verification only, before a start is written: the creator's date. Among the game's records in
+	 * the window, the one nearest it is the game. Without it, more than one leaves the feed silent
+	 * unless a hint chooses (src/pick.ts).
+	 */
+	readonly near?: number;
 }
