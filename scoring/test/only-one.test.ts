@@ -142,6 +142,36 @@ describe("only one: a record is read only when nothing else could be the game", 
 		expect(read(2, { ...hawaii, hints: [{ seat: 2, id: "341963" }] }, MID, laterFinal)).toMatchObject({ kind: "no_final", detail: "scheduled", id: "341963" });
 	});
 
+	test("the series' real pair: the night game's record unreadable never hands the night game the afternoon's final", () => {
+		// White Sox at the Cubs, the night of 18 Aug (00:05 UTC on the 19th, 4-3 Cubs) and the next
+		// afternoon (18:20 UTC, 0-3), both inside the night game's window. Derived: the night game's
+		// record given a White Sox name the program can't resolve, or no time. Either way the night
+		// game's creation reads silent, never the afternoon's 0-3.
+		const night = byName("mlb series, the night game without hints").game;
+		const ids = { 1: "5059668", 2: "337867" };
+		const broken = (seat: 1 | 2, how: "name" | "time"): Derive => (s, _p, body) => {
+			if (s !== seat) return body;
+			const b = copy(body) as Record<string, Record<string, unknown>[]>;
+			for (const g of b[seat === 1 ? "data" : "results"]) {
+				if (String(seat === 1 ? g.id : g.gameId) !== ids[seat]) continue;
+				if (seat === 1 && how === "name") (g.away_team as Record<string, unknown>).display_name = "Chicago White Soks";
+				if (seat === 1 && how === "time") g.date = null;
+				if (seat === 2 && how === "name") ((g.teams as Record<string, Record<string, unknown>>).away).team = "Chicago White Soks";
+				if (seat === 2 && how === "time") g.schedule = { date: null, tbaTime: false };
+			}
+			return b;
+		};
+		for (const seat of [1, 2] as const) {
+			expect({ seat, ...read(seat, night, MID) }).toMatchObject({ seat, kind: "silent", detail: "ambiguous" });
+			for (const how of ["name", "time"] as const) {
+				expect({ seat, how, ...read(seat, night, MID, broken(seat, how)) }).toMatchObject({ seat, how, kind: "silent", detail: "ambiguous" });
+			}
+			// The control: hinted to the night game's own record, it reads 4-3.
+			const hinted = { ...night, hints: [{ seat, id: ids[seat] }] };
+			expect({ seat, ...read(seat, hinted, MID) }).toMatchObject({ seat, kind: "final", home: 4, away: 3, id: ids[seat] });
+		}
+	});
+
 	test("a hint chooses among records that pass both tests: game 2 is inside game 1's window, so a hint naming it is read", () => {
 		// At seats 1, 2 and 4 a hint only chooses among records with the game's two teams and a time
 		// inside the window, and game 2's record is one of those for game 1's creation. Seat 3 is the
@@ -296,6 +326,43 @@ describe("a team the seat marks outside the league is no team of it", () => {
 			expect({ seat, ...read(seat, vsGeorgia, MID, namesake) }).toMatchObject({ seat, kind: "no_final", detail: "absent" });
 			// Kentucky's own game, against the namesake, is not Kentucky against Santa Clara either.
 			expect({ seat, ...read(seat, kentucky.game, MID, namesake) }).toMatchObject({ seat, kind: "no_final", detail: "absent" });
+		}
+	});
+
+	test("Colorado College, Rhode Island College and Cornell College: a final of theirs never reads for the Division I school", () => {
+		// Seat 2's real scheduled records of the three, each against a Division I school, made final
+		// 80-60 (derived), and read for the Division I school whose name each begins with. Rhode
+		// Island College's record is also moved from 23:30 to 00:30 UTC, and each window is 20 hours,
+		// so every date asked is one the saved answers hold. Two things turn each record away: the
+		// team lists, which join no spelling of these colleges to a Division I school, and seat 2
+		// giving them no conference. The second read gives each college a conference, so only the
+		// lists stand between it and the final. The control puts the Division I school itself in the
+		// record: the same derived final then reads.
+		const rows = [
+			{ id: 342338, home: "Northern Colorado", away: "Colorado", school: "Colorado", conference: "Big 12", at: "2026-11-03T02:30:00Z", now: NOW, time: null },
+			{ id: 342332, home: "Albany", away: "Rhode Island", school: "Rhode Island", conference: "Atlantic 10", at: "2026-11-03T00:30:00Z", now: NOW, time: "2026-11-03T00:30:00.000Z" },
+			{ id: 346614, home: "Northern Iowa", away: "Cornell", school: "Cornell", conference: "Ivy League", at: "2026-11-04T01:00:00Z", now: MID, time: null },
+		] as const;
+		for (const row of rows) {
+			const asked = { ...kentucky.game, home: row.home, away: row.away, start: at(row.at), n: 20 * 3600 };
+			const derived = (away: "as saved" | "with a conference" | "the school itself"): Derive => (seat, _p, body) => {
+				if (seat !== 2) return body;
+				const b = copy(body) as { results: Record<string, Record<string, unknown>>[] };
+				for (const g of b.results) {
+					if ((g.gameId as unknown) !== row.id) continue;
+					Object.assign(g, { status: "final", scoreboard: { currentPeriod: 2, score: { home: 80, away: 60 } } });
+					if (row.time !== null) g.schedule = { date: row.time, tbaTime: false };
+					if (away === "with a conference") g.teams.away = { ...g.teams.away, conference: "Derived" };
+					if (away === "the school itself") g.teams.away = { team: row.school, conference: row.conference };
+				}
+				return b;
+			};
+			// As saved, the college is no team of the league, so the game is absent. With a conference,
+			// it is a name the lists don't know beside one of the game's teams: it could be the game, so
+			// the seat is silent. Neither reads the 80-60.
+			expect({ row: row.id, ...read(2, asked, row.now, derived("as saved")) }).toMatchObject({ row: row.id, kind: "no_final", detail: "absent" });
+			expect({ row: row.id, ...read(2, asked, row.now, derived("with a conference")) }).toMatchObject({ row: row.id, kind: "silent", detail: "unresolved team names" });
+			expect({ row: row.id, ...read(2, asked, row.now, derived("the school itself")) }).toMatchObject({ row: row.id, kind: "final", home: 80, away: 60, id: String(row.id) });
 		}
 	});
 
