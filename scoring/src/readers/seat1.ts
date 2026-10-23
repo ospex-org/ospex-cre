@@ -16,7 +16,12 @@
 // reached, at least the league's regulation (four quarters, four in basketball, three in hockey,
 // nine innings, two halves in college basketball). Football carries no period count it fills in
 // (college football's stays 0 on a final), so there the four quarters' points must all be there.
-// A record that says final short of that is read as not final, and its status says why.
+// A record that says final short of that reads silent: it is neither a final the reader can take
+// nor a game the feed says is unfinished. Its detail says why.
+//
+// In college basketball the feed gives every team its conference, and none to a team outside
+// Division I: such a team is marked outside the league, so it is never a league team whatever
+// its name (src/pick.ts).
 
 import { pick, points, type FeedRecord, type FeedTeam, type Listing } from "../pick";
 import { silent } from "../run";
@@ -36,14 +41,14 @@ interface Fields {
 	readonly short: (g: Record<string, unknown>) => string | null;
 }
 
-function team(t: unknown, nameKeys: readonly string[], pts: unknown): FeedTeam {
+function team(t: unknown, nameKeys: readonly string[], pts: unknown, marksOutside = false): FeedTeam {
 	const o = obj(t) ?? {};
 	const names: string[] = [];
 	for (const k of nameKeys) {
 		const s = str(o[k]);
 		if (s !== null) names.push(s);
 	}
-	return { names, points: points(pts) };
+	return marksOutside && o.conference_id === null ? { names, points: points(pts), outside: true } : { names, points: points(pts) };
 }
 
 /** Short of `least` periods by the record's own `period`, or null when it reached them. */
@@ -105,8 +110,8 @@ const FIELDS: Readonly<Record<string, Fields>> = {
 	},
 	ncaab: {
 		time: (g) => g.date,
-		home: (g) => team(g.home_team, ["full_name", "college"], g.home_score),
-		away: (g) => team(g.visitor_team, ["full_name", "college"], g.away_score),
+		home: (g) => team(g.home_team, ["full_name", "college"], g.home_score, true),
+		away: (g) => team(g.visitor_team, ["full_name", "college"], g.away_score, true),
 		older: () => null,
 		short: periods(2),
 	},
@@ -140,7 +145,7 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 	if (state === "final") {
 		const short = f.short(g);
 		if (short !== null) {
-			state = "not_final";
+			state = "short";
 			status = `${status}; ${short}`;
 		}
 	}

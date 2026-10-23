@@ -1,13 +1,14 @@
 // For seats 1, 2 and 4 the creation hints are hints, not locks: a hint that names the game is
 // used, any other hint is dropped and the game is found by its teams, and a hint never pulls in a
-// record outside the window or with other teams. Seat 3 is read by its hint, because its results
+// record outside the window or with other teams. A hint outside the window says the game moved,
+// unless the game's teams have another record inside it; two different hints say nothing. Seat 3 is read by its hint, because its results
 // carry no team names and no time: the match is the hint, and the last block here shows what that
 // does and does not check.
 
 import { describe, expect, test } from "bun:test";
 import type { Game, Seat } from "../src/types";
 import { CASES, NOW } from "./cases";
-import { readSaved } from "./fixtures";
+import { copy, readSaved, type Derive } from "./fixtures";
 
 const byName = (prefix: string) => CASES.find((c) => c.name.startsWith(prefix))!;
 
@@ -48,15 +49,22 @@ describe("hints", () => {
 			expect(read(seat, hinted(ids[seat].dayBefore, seat === 1 ? 2 : 1))).toEqual(final);
 		});
 
-		test(`seat ${seat}: a hint naming the same teams' game outside the window reads no final, and nothing else is searched`, () => {
-			// The search would find this game's final; the hint says the game is the day before's.
-			expect(read(seat, hinted(ids[seat].dayBefore))).toEqual({
-				kind: "no_final",
-				home: null,
-				away: null,
-				detail: "outside window",
-				id: ids[seat].dayBefore,
-			});
+		test(`seat ${seat}: a hint naming the same teams' game outside the window, with the game itself inside it: silent`, () => {
+			// The hint says the game is the day before's; the answer has this game's final inside the
+			// window. The two disagree, so the seat can't say which is the game.
+			expect(read(seat, hinted(ids[seat].dayBefore))).toEqual({ kind: "silent", home: null, away: null, detail: "ambiguous", id: null });
+			// The control: with nothing else of the two teams inside the window (this game's record
+			// taken out, as a feed that moved it would), the hinted game has moved: no final.
+			const moved: Derive = (s, _p, body) => {
+				if (s !== seat) return body;
+				const b = copy(body) as Record<string, Record<string, unknown>[]>;
+				const list = seat === 1 ? "data" : "results";
+				b[list] = b[list].filter((g) => String(seat === 1 ? g.id : g.gameId) !== ids[seat].game);
+				return b;
+			};
+			const { reading, misses } = readSaved(seat, hinted(ids[seat].dayBefore), NOW, moved);
+			expect(misses).toEqual([]);
+			expect({ kind: reading.kind, detail: reading.detail, id: reading.record?.id }).toEqual({ kind: "no_final", detail: "outside window", id: ids[seat].dayBefore });
 		});
 	}
 

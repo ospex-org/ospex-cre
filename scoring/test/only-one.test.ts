@@ -15,6 +15,8 @@ import { describe, expect, test } from "bun:test";
 import type { Game, Seat } from "../src/types";
 import { CASES, MID, NOW } from "./cases";
 import { at, copy, readSaved, type Derive } from "./fixtures";
+import { resolveFeedTeam } from "../src/pick";
+import { toRecord as seat2Record } from "../src/readers/seat2";
 
 const byName = (prefix: string) => CASES.find((c) => c.name.startsWith(prefix))!;
 const lakers = byName("nba final");
@@ -263,5 +265,117 @@ describe("an empty answer for a date is not proof the game is absent", () => {
 
 	test("seat 4's empty answer before the season: silent", () => {
 		expect(read(4, iowa, NOW)).toMatchObject({ kind: "silent", detail: "empty listing" });
+	});
+});
+
+describe("a team the seat marks outside the league is no team of it", () => {
+	// Seat 1's college basketball list has an entry named only "Georgia" (abbreviation GEO), with no
+	// school name and no conference: not the University of Georgia, whose name it shares. Derived:
+	// that entry put in place of Santa Clara in Kentucky's real 20 Mar final, at seats 1 and 2 (seat
+	// 2's record giving it no conference, as it gives teams outside Division I). Asked for Kentucky
+	// against Georgia, neither seat reads that final: the record is Kentucky against no league team.
+	const kentucky = byName("ncaab final, read with seat 1 answering: Santa Clara at Kentucky");
+	const vsGeorgia = { ...kentucky.game, away: "Georgia" };
+	const namesake: Derive = (seat, _p, body) => {
+		if (seat === 1) {
+			const b = copy(body) as { data: Record<string, unknown>[] };
+			for (const g of b.data) if (g.id === 2798585) g.visitor_team = { id: 1241, conference_id: null, name: "Georgia", full_name: "Georgia", college: null, abbreviation: "GEO" };
+			return b;
+		}
+		if (seat === 2) {
+			const b = copy(body) as { results: Record<string, Record<string, unknown>>[] };
+			for (const g of b.results) if ((g.gameId as unknown) === 338824) g.teams.away = { team: "Georgia", location: "Georgia", abbreviation: "GEO" };
+			return b;
+		}
+		return body;
+	};
+
+	test("the namesake's game is not the University of Georgia's", () => {
+		for (const seat of [1, 2] as const) {
+			expect({ seat, ...read(seat, vsGeorgia, MID, namesake) }).toMatchObject({ seat, kind: "no_final", detail: "absent" });
+			// Kentucky's own game, against the namesake, is not Kentucky against Santa Clara either.
+			expect({ seat, ...read(seat, kentucky.game, MID, namesake) }).toMatchObject({ seat, kind: "no_final", detail: "absent" });
+		}
+	});
+
+	test("the control: the same name with a conference is the University of Georgia", () => {
+		const base = { gameId: 1, status: "scheduled", schedule: { date: "2026-03-20T16:15:00.000Z", tbaTime: false } };
+		const withConference = seat2Record("ncaab", { ...base, teams: { home: { team: "Kentucky", conference: "SEC" }, away: { team: "Georgia", conference: "SEC" } } })!;
+		const without = seat2Record("ncaab", { ...base, teams: { home: { team: "Kentucky", conference: "SEC" }, away: { team: "Georgia" } } })!;
+		expect(resolveFeedTeam("ncaab", withConference.teams[1])).toBe("georgia-bulldogs");
+		expect(resolveFeedTeam("ncaab", without.teams[1])).toBeNull();
+		// Professional leagues have no such mark: a seat 2 team there is read by its name alone.
+		const pro = seat2Record("nba", { ...base, teams: { home: { team: "Los Angeles Lakers" }, away: { team: "Golden State Warriors" } } })!;
+		expect(pro.teams.map((t) => resolveFeedTeam("nba", t))).toEqual(["los-angeles-lakers", "golden-state-warriors"]);
+	});
+});
+
+describe("hints and dates that disagree with the answer", () => {
+	// The White Sox at the Cubs, the afternoon of 19 Aug (18:20 UTC), 3-0 White Sox: the night
+	// game before it (00:05 UTC the same date) is outside its window, the game itself inside.
+	const afternoon = byName("mlb series, the next afternoon's game without hints").game;
+
+	test("an empty answer for the game's own date, beside the series' other games: silent, not outside the window", () => {
+		const emptyDay: Derive = (seat, path, body) => {
+			if (seat === 1 && path.includes("dates[]=2026-08-19")) return { ...(copy(body) as Record<string, unknown>), data: [] };
+			if (seat === 2 && path.includes("date=2026-08-19")) return { ...(copy(body) as Record<string, unknown>), results: [] };
+			return body;
+		};
+		for (const seat of [1, 2] as const) {
+			expect({ seat, ...read(seat, afternoon, MID, emptyDay) }).toMatchObject({ seat, kind: "silent", detail: "empty listing" });
+			expect({ seat, ...read(seat, afternoon, MID) }).toMatchObject({ seat, kind: "final", home: 0, away: 3 });
+		}
+	});
+
+	test("a hint naming the night before's game, with this game's final inside the window: silent", () => {
+		const hinted = { ...afternoon, hints: [{ seat: 1, id: "5059668" }, { seat: 2, id: "337867" }] };
+		for (const seat of [1, 2] as const) expect({ seat, ...read(seat, hinted, MID) }).toMatchObject({ seat, kind: "silent", detail: "ambiguous" });
+		// The control: hinted to its own records, it reads.
+		const own = { ...afternoon, hints: [{ seat: 1, id: "5059675" }, { seat: 2, id: "337877" }] };
+		for (const seat of [1, 2] as const) expect({ seat, ...read(seat, own, MID) }).toMatchObject({ seat, kind: "final", home: 0, away: 3 });
+	});
+
+	test("two different hints for one seat, in either order: silent", () => {
+		const dh1 = byName("mlb doubleheader, game 1 without hints").game;
+		const ids = { 1: ["5060179", "5060160"], 2: ["348506", "338376"] };
+		for (const seat of [1, 2] as const) {
+			for (const order of [ids[seat], [...ids[seat]].reverse()]) {
+				const game = { ...dh1, hints: order.map((id) => ({ seat, id })) };
+				expect({ seat, order, ...read(seat, game, MID) }).toMatchObject({ seat, order, kind: "silent", detail: "two hints" });
+			}
+			// The same id twice is one hint.
+			const twice = { ...dh1, hints: [{ seat, id: ids[seat][0] }, { seat, id: ids[seat][0] }] };
+			expect({ seat, ...read(seat, twice, MID) }).toMatchObject({ seat, kind: "final", home: 2, away: 10 });
+		}
+	});
+});
+
+describe("a game the seat respells is not absent", () => {
+	// The Lakers' real final with both teams' names respelt at each seat, as a feed that changed
+	// how it writes names would list it: no name resolves, so the record can't be read as the game,
+	// but it could be the game, so the seat can't say the game is absent.
+	test("both names unknown, inside the window: silent", () => {
+		const respell: Derive = (seat, _p, body) => {
+			const b = copy(body);
+			if (seat === 4) {
+				for (const r of LAKERS[4].find(b)) {
+					if (r.id !== LAKERS[4].id) continue;
+					r.home_team = "L.A. Lakerz";
+					r.away_team = "Golden St. Warriorz";
+					r.scores = [{ name: "L.A. Lakerz", score: "127" }, { name: "Golden St. Warriorz", score: "105" }];
+				}
+				return b;
+			}
+			for (const r of LAKERS[seat as 1 | 2].find(b)) {
+				if (idOf(seat as 1 | 2, r) !== LAKERS[seat as 1 | 2].id) continue;
+				renameAway(seat as 1 | 2)(r);
+				if (seat === 1) (r.home_team as Record<string, unknown>).full_name = "L.A. Lakerz";
+				if (seat === 2) ((r.teams as Record<string, Record<string, unknown>>).home).team = "L.A. Lakerz";
+			}
+			return b;
+		};
+		for (const seat of [1, 2, 4] as const) {
+			expect({ seat, ...read(seat, lakers.game, NOW, respell) }).toMatchObject({ seat, kind: "silent", detail: "unresolved team names" });
+		}
 	});
 });

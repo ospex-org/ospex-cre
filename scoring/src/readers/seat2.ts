@@ -5,8 +5,10 @@
 // `final` is final, `canceled` and `postponed` are recorded, everything else is not final. A
 // final also needs the feed's own period count to have reached the league's regulation (four
 // quarters, three periods, nine innings, two halves in college basketball): a record that says
-// final short of it is read as not final. A game whose start the feed marks "to be announced"
-// carries a placeholder time, so it has no game time the window can hold it to.
+// final short of it reads silent. In college the feed gives every team its conference, and none to
+// a team outside Division I: such a team is marked outside the league (src/pick.ts). A game whose
+// start the feed marks "to be announced" carries a placeholder time, so it has no game time the
+// window can hold it to.
 
 import { pick, points, type FeedRecord, type FeedTeam, type Listing } from "../pick";
 import { silent } from "../run";
@@ -20,10 +22,14 @@ const PAGE = 100;
 
 /** The periods a whole game reaches, by league: overtime only adds to them. */
 const REGULATION: Readonly<Record<string, number>> = { nfl: 4, nba: 4, nhl: 3, mlb: 9, ncaaf: 4, ncaab: 2 };
+const COLLEGE = new Set(["ncaaf", "ncaab"]);
 
-function team(t: unknown, pts: unknown): FeedTeam {
-	const name = str(obj(t)?.team);
-	return { names: name === null ? [] : [name], points: points(pts) };
+function team(t: unknown, pts: unknown, college: boolean): FeedTeam {
+	const o = obj(t);
+	const name = str(o?.team);
+	const names = name === null ? [] : [name];
+	const outside = college && o !== null && (o.conference === undefined || o.conference === null);
+	return outside ? { names, points: points(pts), outside: true } : { names, points: points(pts) };
 }
 
 export function toRecord(league: string, g: Record<string, unknown>): FeedRecord | null {
@@ -41,14 +47,14 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 		const short =
 			least === null ? "league unknown" : typeof p !== "number" || !Number.isInteger(p) ? "no period count" : p < least ? `period ${p} of ${least}` : null;
 		if (short !== null) {
-			state = "not_final";
+			state = "short";
 			status = `${status}; ${short}`;
 		}
 	}
 	return {
 		id: String(g.gameId),
 		time: schedule?.tbaTime === true ? null : parseIsoSeconds(schedule?.date),
-		teams: [team(teams?.home, score?.home), team(teams?.away, score?.away)],
+		teams: [team(teams?.home, score?.home, COLLEGE.has(league)), team(teams?.away, score?.away, COLLEGE.has(league))],
 		state,
 		status,
 	};

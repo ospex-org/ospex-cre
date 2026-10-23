@@ -405,6 +405,20 @@ export const CASES: readonly Case[] = [
 			4: silent("empty listing"),
 		},
 	},
+	// Beside a game to be announced: seat 2's answer for 4 Nov holds Virginia University-Lynchburg at
+	// Morehead State with no time. Seat 2's record gives the visitors no conference, outside Division
+	// I, so it can't be this game, and Morehead State at Western Kentucky reads.
+	{
+		name: "ncaab not final beside a game to be announced: Morehead State at Western Kentucky, 2 Nov",
+		now: MID,
+		game: g("ncaab", "Western Kentucky", "Morehead State", "2026-11-03T00:30:00Z"),
+		expect: {
+			1: noFinal("scheduled", "10882439", 0, 0),
+			2: noFinal("scheduled", "342166"),
+			3: NO_HINT,
+			4: silent("empty listing"),
+		},
+	},
 	{
 		name: "ncaab listed twice at seat 2, read with seat 2's hint for the later id: Seattle at Hawaii",
 		now: MID,

@@ -102,7 +102,7 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 		}
 	});
 
-	test("a final needs the feed's own count of a whole game, league by league", () => {
+	test("a final short of the feed's own count of a whole game reads silent, league by league", () => {
 		// Real finals, each changed only in the one field that counts the game's parts.
 		const set = (id: number, fields: Record<string, unknown>): Derive => (seat, _p, body) => {
 			const b = copy(body) as { data: Record<string, unknown>[] };
@@ -120,14 +120,14 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 		];
 		for (const [prefix, id, fields, detail] of rows) {
 			const c = byName(prefix);
-			expect({ prefix, ...readSaved(1, c.game, c.now, set(id, fields)).reading }).toMatchObject({ prefix, kind: "no_final", detail });
+			expect({ prefix, ...readSaved(1, c.game, c.now, set(id, fields)).reading }).toMatchObject({ prefix, kind: "silent", detail });
 			// The control: the record as saved is final.
 			expect({ prefix, kind: readSaved(1, c.game, c.now).reading.kind }).toEqual({ prefix, kind: "final" });
 		}
 		// Five innings, the runs set apart from the line score: still not final at five.
 		const marlins = byName("mlb final: Arizona at Miami");
 		const five = set(5058793, { period: 5, home_team_data: { runs: 9, inning_scores: [0, 1, 0, 1, 0] }, away_team_data: { runs: 1, inning_scores: [0, 0, 0, 0, 0] } });
-		expect(readSaved(1, marlins.game, marlins.now, five).reading).toMatchObject({ kind: "no_final", detail: "final; period 5 of 9" });
+		expect(readSaved(1, marlins.game, marlins.now, five).reading).toMatchObject({ kind: "silent", detail: "final; period 5 of 9" });
 		// Extra innings and overtime count as a whole game: the real 10-inning and overtime finals read.
 		expect(readSaved(1, byName("ncaab final, read with seat 1").game, MID).reading).toMatchObject({ kind: "final", home: 89, away: 84 });
 	});
@@ -178,17 +178,17 @@ describe("seat 2: final is final once its period count shows a whole game; cance
 		}
 	});
 
-	test("a final short of the league's regulation periods is not final", () => {
+	test("a final short of the league's regulation periods is short, and reads silent", () => {
 		const base = { gameId: 1, status: "final", schedule: { date: "2026-10-22T02:00:00.000Z", tbaTime: false }, teams: { home: { team: "a" }, away: { team: "b" } } };
 		const at = (league: string, currentPeriod: unknown) => seat2(league, { ...base, scoreboard: { currentPeriod, score: { home: 1, away: 0 } } })!;
 		for (const [league, least] of [["nfl", 4], ["nba", 4], ["nhl", 3], ["mlb", 9], ["ncaaf", 4], ["ncaab", 2]] as const) {
 			expect({ league, state: at(league, least).state }).toEqual({ league, state: "final" });
 			expect({ league, state: at(league, least + 1).state }).toEqual({ league, state: "final" }); // overtime, extra innings
-			expect({ league, ...at(league, least - 1) }).toMatchObject({ league, state: "not_final", status: `final; period ${least - 1} of ${least}` });
+			expect({ league, ...at(league, least - 1) }).toMatchObject({ league, state: "short", status: `final; period ${least - 1} of ${least}` });
 		}
-		expect(at("nba", null)).toMatchObject({ state: "not_final", status: "final; no period count" });
-		expect(at("nba", "4")).toMatchObject({ state: "not_final", status: "final; no period count" });
-		expect(at("wnba", 4)).toMatchObject({ state: "not_final", status: "final; league unknown" });
+		expect(at("nba", null)).toMatchObject({ state: "short", status: "final; no period count" });
+		expect(at("nba", "4")).toMatchObject({ state: "short", status: "final; no period count" });
+		expect(at("wnba", 4)).toMatchObject({ state: "short", status: "final; league unknown" });
 		// A real final cut to its first half: status final, period 1, the first half's points.
 		const florida = byName("ncaab final: Santa Clara at Kentucky");
 		const half: Derive = (seat, _p, body) => {
@@ -201,7 +201,7 @@ describe("seat 2: final is final once its period count shows a whole game; cance
 			return b;
 		};
 		const game = { ...florida.game, home: "Florida", away: "Prairie View A&M", start: at2("2026-03-21T00:00:00Z") };
-		expect(readSaved(2, game, NOW, half).reading).toMatchObject({ kind: "no_final", detail: "final; period 1 of 2", record: { id: "338857" } });
+		expect(readSaved(2, game, NOW, half).reading).toMatchObject({ kind: "silent", detail: "final; period 1 of 2" });
 		expect(readSaved(2, game, NOW).reading).toMatchObject({ kind: "final", home: 114, away: 55 });
 	});
 
