@@ -21,8 +21,8 @@ export interface Game {
 	readonly n: number;
 	/**
 	 * The creation hints: a feed's own id for this game, by seat. At seats 1, 2 and 4 a hint only
-	 * picks the game out when the feed's record under it has the game's two teams; otherwise the
-	 * game is found by its teams and the window. Seat 3 is read by its hint and nothing else: its
+	 * chooses among records with the game's two teams and a time inside the window; a hinted record
+	 * that fails either is never read. Seat 3 is read by its hint and nothing else: its
 	 * results carry no team names and no game time, so the hint is the one thing that ties a result
 	 * to this game. Verification checks that hint against seat 3's board (the game's two teams, home
 	 * and away as created, at the start) while the game is still listed.

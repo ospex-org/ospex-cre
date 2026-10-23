@@ -142,9 +142,10 @@ describe("only one: a record is read only when nothing else could be the game", 
 		expect(read(2, { ...hawaii, hints: [{ seat: 2, id: "341963" }] }, MID, laterFinal)).toMatchObject({ kind: "no_final", detail: "scheduled", id: "341963" });
 	});
 
-	test("a hint is the creation's word for which record is the game: hinted to game 2, game 1's creation reads game 2", () => {
-		// Verification checks seat 3's hint against its board; no check binds a seat 1, 2 or 4 hint to
-		// the start. Pinned here so the reliance is seen.
+	test("a hint chooses among records that pass both tests: game 2 is inside game 1's window, so a hint naming it is read", () => {
+		// At seats 1, 2 and 4 a hint only chooses among records with the game's two teams and a time
+		// inside the window, and game 2's record is one of those for game 1's creation. Seat 3 is the
+		// one seat read by its hint, and verification checks that hint against seat 3's board.
 		const dh1 = byName("mlb doubleheader, game 1 without hints").game;
 		const game2Hints = { ...dh1, hints: [{ seat: 1, id: "5060160" }, { seat: 2, id: "338376" }] };
 		expect(read(1, game2Hints, MID)).toMatchObject({ kind: "final", home: 6, away: 3, id: "5060160" });

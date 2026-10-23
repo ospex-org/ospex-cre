@@ -59,13 +59,14 @@ a game once the game is final, so the hint is the only thing that ties a result 
   lists don't know, and no such record without a game time. Otherwise the seat is silent. A record
   whose two names both fail to resolve can't stop a reading, but inside the window it keeps the seat
   from saying the game is absent: it could be the game, respelt.
-* **Hints, seats 1, 2 and 4.** A creation hint names a feed's own id for the game. If the feed has
-  a record under that id with the game's two teams, that record is the game: inside the window it
-  is read; outside it the game has moved and it reads "no final", unless another record that could
-  be the game is inside the window, and then the seat is silent. A hint the feed doesn't have, or
-  one under other teams, is dropped, and the game is found by its teams; two different hints for
-  one seat leave it silent. In a doubleheader or a series, a hint is what lets a seat read the
-  earlier game, and verification checks only seat 3's.
+* **Hints, seats 1, 2 and 4.** A creation hint names a feed's own id for the game, and only chooses
+  among records that pass both tests above: the game's two teams, and a time inside the window. A
+  hinted record that passes both is read, whatever else is in the window; one that fails either is
+  never read. A hint the feed doesn't have, or one under other teams, is dropped, and the game is
+  found by its teams. A hinted record of the two teams outside the window leaves the seat silent
+  while anything inside the window could be the game, and otherwise is dropped too. Two different
+  hints for one seat leave it silent. In a doubleheader or a series, a hint is what lets a seat
+  choose between the games inside the window; verification checks only seat 3's.
 * **Seat 3, by hint.** One request: the feed's result for the game's seat 3 id. The hint rides in
   the creation event on chain, so anyone can re-run the match while the feed answers for that id:
   in the answers saved on 22 Oct, a result about four days old answered, and ids 78 to 156 days

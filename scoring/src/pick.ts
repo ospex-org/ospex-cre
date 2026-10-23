@@ -8,12 +8,14 @@
 //             name alone. A team the feed's own record marks as outside the league (a college team
 //             it gives no conference) is no team of the league, whatever its name.
 //   window    A record counts only when the feed's own game time for it is inside the window.
-//   hints     A hint names the feed's own id for the game. When the feed has a record under that
-//             id with the game's two teams, that record is the game: inside the window it is
-//             read; outside it, the game has moved and it reads "no final", unless another record
-//             that could be the game is inside the window, which leaves the feed silent. A hint the
-//             feed doesn't have, or one under another pair of teams, is dropped, and the game is
-//             found by its teams. Two different hints for one seat leave it silent.
+//   hints     A hint names the feed's own id for the game. It only chooses among records that pass
+//             both tests above, the game's two teams and a time inside the window: a hinted record
+//             that passes both is read, whatever else is in the window. One that fails either is
+//             never read. A hint the feed doesn't have, or one under another pair of teams, is
+//             dropped and the game is found by its teams. A hinted record of the game's two teams
+//             with no time inside the window leaves the feed silent while anything else could be
+//             the game, since the hint and the window disagree on which record that is; with
+//             nothing else, it is dropped too. Two different hints for one seat leave it silent.
 //   only one  Without a hint that names it, a record is the game only when nothing else in the
 //             answer could be: no other record of the two teams inside the window (a doubleheader,
 //             or the next game of a series), no record inside the window with one of the game's
@@ -146,9 +148,10 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[]): Read
 	if (hinted.length === 1) {
 		const named = records.find((r) => r.id === hinted[0]);
 		if (named !== undefined && isGame(named)) {
-			if (named.time === null) return silent(seat, "no game time");
-			if (inWindow(named.time, w)) return readingOf(seat, game.league, named, home);
-			return rivals.length > 0 ? silent(seat, "ambiguous") : noFinal(seat, "outside window", named);
+			if (inside(named)) return readingOf(seat, game.league, named, home);
+			// The game's two teams, but no time inside the window: not read, and while anything else
+			// could be the game, nothing else is read either. Otherwise the hint is dropped.
+			if (rivals.length > 0) return silent(seat, named.time === null ? "no game time" : "ambiguous");
 		}
 	}
 

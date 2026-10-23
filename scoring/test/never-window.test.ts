@@ -101,9 +101,10 @@ describe("never: a final outside the window counts", () => {
 		const makeupGame = byName("mlb final: the makeup").game;
 		expect(read(1, makeupGame)).toMatchObject({ kind: "final", home: 0, away: 2, id: "8800381" });
 
-		// And as a feed that moved the original record itself, keeping its id: the creation hint
-		// names it, it is the game, and outside the window it reads "no final" and nothing else is
-		// searched.
+		// And as a feed that moved the original record itself, keeping its id. The creation hint names
+		// it, but a hint only chooses among records inside the window, so the seat reads as it does
+		// unhinted: "no final" outside the window (naming the 10 Jun game, the first record of the two
+		// teams), never the moved record's 2-0.
 		const moved1: Derive = (seat, path, body) => {
 			if (seat !== 1 || !path.includes("2026-06-11")) return body;
 			const b = copy(body) as { data: Record<string, unknown>[] };
@@ -114,7 +115,9 @@ describe("never: a final outside the window counts", () => {
 			return b;
 		};
 		const hinted = { ...rainout, hints: [{ seat: 1, id: "5058800" }] };
-		expect(read(1, hinted, moved1)).toEqual({ kind: "no_final", home: null, away: null, detail: "outside window", id: "5058800" });
+		const unhinted = read(1, rainout, moved1);
+		expect(unhinted).toEqual({ kind: "no_final", home: null, away: null, detail: "outside window", id: "5058788" });
+		expect(read(1, hinted, moved1)).toEqual(unhinted);
 	});
 
 	test("seat 3 carries no game time, so the window cannot hold it: it is read by its hint", () => {

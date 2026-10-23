@@ -1,19 +1,22 @@
-// For seats 1, 2 and 4 the creation hints are hints, not locks: a hint that names the game is
-// used, any other hint is dropped and the game is found by its teams, and a hint never pulls in a
-// record outside the window or with other teams. A hint outside the window says the game moved,
-// unless the game's teams have another record inside it; two different hints say nothing. Seat 3 is read by its hint, because its results
-// carry no team names and no time: the match is the hint, and the last block here shows what that
-// does and does not check.
+// For seats 1, 2 and 4 a creation hint only chooses among records that pass both of the reader's
+// tests, the game's two teams and a time inside the window. A hinted record that passes both is
+// read; one that fails either is never read. A hint the feed doesn't have, or one under another
+// pair of teams, is dropped and the game is found by its teams. A hinted record of the two teams
+// outside the window leaves the seat silent while anything inside the window could be the game, and
+// otherwise changes nothing. Two different hints say nothing. Seat 3 is read by its hint, because
+// its results carry no team names and no time: the match is the hint, and the last block here shows
+// what that does and does not check.
 
 import { describe, expect, test } from "bun:test";
 import type { Game, Seat } from "../src/types";
+import { inWindow, windowOf } from "../src/window";
 import { CASES, NOW } from "./cases";
-import { copy, readSaved, type Derive } from "./fixtures";
+import { at, copy, readSaved, type Derive } from "./fixtures";
 
 const byName = (prefix: string) => CASES.find((c) => c.name.startsWith(prefix))!;
 
-function read(seat: Seat, game: Game) {
-	const { reading, misses } = readSaved(seat, game, NOW);
+function read(seat: Seat, game: Game, derive?: Derive) {
+	const { reading, misses } = readSaved(seat, game, NOW, derive);
 	expect(misses).toEqual([]);
 	return { kind: reading.kind, home: reading.home, away: reading.away, detail: reading.detail, id: reading.record?.id ?? null };
 }
@@ -30,6 +33,14 @@ describe("hints", () => {
 	for (const seat of [1, 2] as const) {
 		const final = { kind: "final", home: 2, away: 0, detail: "final", id: ids[seat].game };
 		const hinted = (id: string, hintSeat: number = seat) => ({ ...marlins, hints: [{ seat: hintSeat, id }] });
+		const list = seat === 1 ? "data" : "results";
+		// This game's own record taken out, as a feed that moved it would.
+		const moved: Derive = (s, _p, body) => {
+			if (s !== seat) return body;
+			const b = copy(body) as Record<string, Record<string, unknown>[]>;
+			b[list] = b[list].filter((g) => String(seat === 1 ? g.id : g.gameId) !== ids[seat].game);
+			return b;
+		};
 
 		test(`seat ${seat}: no hint, and a hint naming the game, both read the game`, () => {
 			expect(read(seat, marlins)).toEqual(final);
@@ -41,7 +52,11 @@ describe("hints", () => {
 			expect(read(seat, hinted(""))).toEqual(final);
 		});
 
-		test(`seat ${seat}: a hint naming another pair of teams is dropped`, () => {
+		test(`seat ${seat}: a hint naming another pair of teams is dropped, though its record is inside the window`, () => {
+			// The other pair is Atlanta at the White Sox, rained out at 23:40 UTC on 11 Jun: inside this
+			// game's window, so only the teams test can turn the hinted record away.
+			const rainout = byName("mlb postponed").game;
+			expect(inWindow(rainout.start, windowOf(marlins))).toBe(true);
 			expect(read(seat, hinted(ids[seat].otherTeams))).toEqual(final);
 		});
 
@@ -53,25 +68,56 @@ describe("hints", () => {
 			// The hint says the game is the day before's; the answer has this game's final inside the
 			// window. The two disagree, so the seat can't say which is the game.
 			expect(read(seat, hinted(ids[seat].dayBefore))).toEqual({ kind: "silent", home: null, away: null, detail: "ambiguous", id: null });
-			// The control: with nothing else of the two teams inside the window (this game's record
-			// taken out, as a feed that moved it would), the hinted game has moved: no final.
-			const moved: Derive = (s, _p, body) => {
-				if (s !== seat) return body;
-				const b = copy(body) as Record<string, Record<string, unknown>[]>;
-				const list = seat === 1 ? "data" : "results";
-				b[list] = b[list].filter((g) => String(seat === 1 ? g.id : g.gameId) !== ids[seat].game);
-				return b;
+			// The control: with nothing else of the two teams inside the window, the hint is dropped and
+			// the seat reads as it does unhinted: no final, outside the window. Never the hinted 8-0.
+			const unhinted = readSaved(seat, marlins, NOW, moved);
+			const withHint = readSaved(seat, hinted(ids[seat].dayBefore), NOW, moved);
+			expect([unhinted.misses, withHint.misses]).toEqual([[], []]);
+			expect({ kind: unhinted.reading.kind, detail: unhinted.reading.detail, id: unhinted.reading.record?.id }).toEqual({ kind: "no_final", detail: "outside window", id: ids[seat].dayBefore });
+			expect(withHint.reading).toEqual(unhinted.reading);
+		});
+
+		test(`seat ${seat}: a hinted record outside the window decides nothing by itself`, () => {
+			// This game's record taken out and the next date's answer emptied. Unhinted, the empty date
+			// leaves the seat silent, since the game could be on it. A hint naming the day before's game
+			// doesn't make the seat say "no final" in its place.
+			const emptied: Derive = (s, path, body) => {
+				const b = moved(s, path, body);
+				if (s !== seat || !path.includes("2026-06-12")) return b;
+				return seat === 1 ? { ...(b as Record<string, unknown>), data: [], meta: {} } : { ...(b as Record<string, unknown>), results: [] };
 			};
-			const { reading, misses } = readSaved(seat, hinted(ids[seat].dayBefore), NOW, moved);
-			expect(misses).toEqual([]);
-			expect({ kind: reading.kind, detail: reading.detail, id: reading.record?.id }).toEqual({ kind: "no_final", detail: "outside window", id: ids[seat].dayBefore });
+			const silentEmpty = { kind: "silent", home: null, away: null, detail: "empty listing", id: null };
+			expect(read(seat, marlins, emptied)).toEqual(silentEmpty);
+			expect(read(seat, hinted(ids[seat].dayBefore), emptied)).toEqual(silentEmpty);
 		});
 	}
 
-	test("seat 4: a hint naming the game reads it", () => {
-		const lakers = byName("nba final");
-		const want = lakers.expect[4]!;
-		expect(read(4, { ...lakers.game, hints: [{ seat: 4, id: want.id! }] })).toMatchObject({ kind: "final", id: want.id });
+	describe("seat 4", () => {
+		// Golden State at the Lakers, 02:00 UTC on 22 Oct, 127-105. Seat 4's answer also holds the
+		// Clippers and the Kings at 02:43 that night (inside this window), and these two teams' game of
+		// 31 Oct (outside it).
+		const lakers = byName("nba final").game;
+		const final = { kind: "final", home: 127, away: 105, detail: "final", id: "6fff70f4bf196dba25060a5775a03b54" };
+		const clippers = "f6be3e587d43c3821d8f059c3a1f1967";
+		const october31 = "761c15cdefb5a94e34f234e11d6e57ad";
+		const hinted = (id: string) => ({ ...lakers, hints: [{ seat: 4, id }] });
+
+		test("a hint naming the game reads it", () => {
+			expect(read(4, hinted(final.id))).toEqual(final);
+		});
+
+		test("a hint naming another pair's game inside the window is dropped", () => {
+			expect(inWindow(at("2026-10-22T02:43:44Z"), windowOf(lakers))).toBe(true);
+			expect(read(4, hinted(clippers))).toEqual(final);
+		});
+
+		test("a hint naming the two teams' game outside the window: silent beside the game, and otherwise no change", () => {
+			expect(read(4, hinted(october31))).toEqual({ kind: "silent", home: null, away: null, detail: "ambiguous", id: null });
+			const moved: Derive = (s, _p, body) => (s === 4 ? (copy(body) as Record<string, unknown>[]).filter((g) => g.id !== final.id) : body);
+			const unhinted = read(4, lakers, moved);
+			expect(unhinted).toEqual({ kind: "no_final", home: null, away: null, detail: "outside window", id: october31 });
+			expect(read(4, hinted(october31), moved)).toEqual(unhinted);
+		});
 	});
 
 });
