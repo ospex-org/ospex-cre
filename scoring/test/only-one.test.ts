@@ -378,4 +378,20 @@ describe("a game the seat respells is not absent", () => {
 			expect({ seat, ...read(seat, lakers.game, NOW, respell) }).toMatchObject({ seat, kind: "silent", detail: "unresolved team names" });
 		}
 	});
+	test("both names unknown, and no time to place it: silent", () => {
+		// Seat 2's real Memphis at Iowa State, both names respelt and its time marked to be announced.
+		const iowa = byName("ncaab not final: Memphis at Iowa State").game;
+		const tba: Derive = (seat, _p, body) => {
+			if (seat !== 2) return body;
+			const b = copy(body) as { results: Record<string, Record<string, unknown>>[] };
+			for (const g of b.results) {
+				if ((g.gameId as unknown) !== 341752) continue;
+				(g.teams.home as Record<string, unknown>).team = "Iowa St Cyclonez";
+				(g.teams.away as Record<string, unknown>).team = "Memphis Tigerz";
+				g.schedule = { ...g.schedule, tbaTime: true };
+			}
+			return b;
+		};
+		expect(read(2, iowa, NOW, tba)).toMatchObject({ kind: "silent", detail: "no game time" });
+	});
 });
