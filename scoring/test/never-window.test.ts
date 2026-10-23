@@ -1,8 +1,8 @@
 // Never: "A final counts only if the feed's own game time for that record is inside the window,
 // so a makeup game never scores the original game."
 //
-// Seats 1, 2 and 4. Seat 3 is read by its creation hint (Vince, 10/22) and its results carry no
-// game time; the last test here pins that.
+// Seats 1, 2 and 4. Seat 3 is read by its creation hint and its results carry no game time; the
+// last test here pins that.
 //
 // The window is [start, start + n). Each refusal below is paired with the acceptance one second
 // the other side of the edge, and each refusal reads "outside window": the record was in the
@@ -117,7 +117,7 @@ describe("never: a final outside the window counts", () => {
 		expect(read(1, hinted, moved1)).toEqual({ kind: "no_final", home: null, away: null, detail: "outside window", id: "5058800" });
 	});
 
-	test("seat 3 carries no game time, so the window cannot hold it: it is read by its hint (ruled 10/22)", () => {
+	test("seat 3 carries no game time, so the window cannot hold it: it is read by its hint", () => {
 		// Every seat 3 reading in the cases rests on a record with no time of its own. Its makeup
 		// protection is the feed marking the original id postponed, and the agreement rule.
 		let read3 = 0;

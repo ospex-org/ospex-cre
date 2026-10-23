@@ -1,11 +1,11 @@
-// Seat 3's reader: read by the game's hint (Vince, 10/22, ruling 1 on the Built report).
+// Seat 3's reader: read by the game's seat 3 hint.
 //
 // The feed's results give a game's points and status, but no team names and no game time, and
-// its board, which has both, drops a game once the game is final. So seat 3 is not found by team
+// its board, which has both, drops a game once the game is final. So seat 3 can't be found by team
 // and window like the other three. It is read by the seat 3 id given at the game's creation: the
 // hint rides in the creation event on chain, so anyone can re-run the match for as long as the
-// feed answers for that id. No seat 3 hint, or one that is not a seat 3 id, and the seat is
-// silent without asking.
+// feed answers for that id (about five days after the game; older ids answer nothing). No seat 3
+// hint, two different ones, or one that is not a seat 3 id, and the seat is silent without asking.
 //
 // What that means for the two never-lines this seat cannot check itself:
 //   by team   The result has no team names, so its points are read in the feed's own home and

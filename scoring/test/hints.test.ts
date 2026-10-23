@@ -1,7 +1,8 @@
 // For seats 1, 2 and 4 the creation hints are hints, not locks: a hint that names the game is
 // used, any other hint is dropped and the game is found by its teams, and a hint never pulls in a
-// record outside the window or with other teams. Seat 3 is read by its hint (ruled 10/22): the
-// match is the hint, and the last block here shows what that does and does not check.
+// record outside the window or with other teams. Seat 3 is read by its hint, because its results
+// carry no team names and no time: the match is the hint, and the last block here shows what that
+// does and does not check.
 
 import { describe, expect, test } from "bun:test";
 import type { Game, Seat } from "../src/types";
@@ -67,7 +68,7 @@ describe("hints", () => {
 
 });
 
-describe("seat 3 is read by its hint (ruled 10/22)", () => {
+describe("seat 3 is read by its hint", () => {
 	const sixers = byName("nba not final");
 	const id = sixers.expect[3]!.id!;
 	const withHints = (hints: { seat: number; id: string }[]) => ({ ...sixers.game, hints });
@@ -98,7 +99,7 @@ describe("seat 3 is read by its hint (ruled 10/22)", () => {
 
 	test("an id the seat has no result for reads silent, never no final: an unknown id, and ids 78 to 156 days old", () => {
 		// The seat answers [] for each, the same bytes for an id that never existed as for a game
-		// from May. Measured 22 Oct: by id, a result about four days old still answers (next test);
+		// from May. In the answers saved on 22 Oct a result about four days old still answers by id (next test);
 		// these do not.
 		for (const old of [
 			"00000000-0000-4000-8000-000000000000",

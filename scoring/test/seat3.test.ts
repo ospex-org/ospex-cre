@@ -1,5 +1,5 @@
-// Seat 3 is read by its creation hint (Vince, 10/22, ruling 1 on the Built report). Why, measured
-// on the saved answers, and how its one answer per game is read.
+// Seat 3 is read by its creation hint. Why, measured on the saved answers, and how its one answer
+// per game is read.
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";

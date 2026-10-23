@@ -35,7 +35,6 @@ export interface Entry {
 	sha256: string;
 	bytes: number;
 	capturedAt: string;
-	pending?: string;
 }
 
 interface Plan {

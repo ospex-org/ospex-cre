@@ -22,7 +22,6 @@ export interface Entry {
 	sha256: string;
 	bytes: number;
 	capturedAt: string;
-	pending?: string;
 }
 
 export const INDEX: readonly Entry[] = JSON.parse(readFileSync(join(ROOT, "index.json"), "utf8"));

@@ -2,9 +2,9 @@
 // fingerprint. Only the keys and the payout address come from outside, and neither can touch the
 // score."
 //
-// This card's half is which feeds to ask (how many must agree is D2's rule). The feeds asked come
-// from the table and nothing else: not the keys handed in, not the environment, not a write to
-// the table at runtime. A key changes only its own slot in a request.
+// Here: which feeds are asked (how many must agree is the agreement rule's, beside the readers).
+// The feeds asked come from the table and nothing else: not the keys handed in, not the
+// environment, not a write to the table at runtime. A key changes only its own slot in a request.
 //
 // The break that turns this red (index.ts, readGameSync):
 //   const seats = seatsFor(game.league);

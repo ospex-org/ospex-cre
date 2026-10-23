@@ -19,13 +19,20 @@ export interface Game {
 	readonly start: number;
 	/** The game's n, in seconds. The window is [start, start + n). */
 	readonly n: number;
-	/** The creation hints: a feed's own id for this game, by seat. Hints, never locks. */
+	/**
+	 * The creation hints: a feed's own id for this game, by seat. At seats 1, 2 and 4 a hint only
+	 * picks the game out when the feed's record under it has the game's two teams; otherwise the
+	 * game is found by its teams and the window. Seat 3 is read by its hint and nothing else: its
+	 * results carry no team names and no game time, so the hint is the one thing that ties a result
+	 * to this game. Verification checks that hint against seat 3's board (the game's two teams, home
+	 * and away as created, at the start) while the game is still listed.
+	 */
 	readonly hints: ReadonlyArray<{ readonly seat: number; readonly id: string }>;
 }
 
 /**
- * What one feed said about one game. The three kinds are the spec's: silent, answered without a
- * final, and answered with a final.
+ * What one feed said about one game, one of three kinds: silent (it could not answer about this
+ * game), answered without a final, and answered with a final.
  */
 export interface Reading {
 	readonly seat: Seat;

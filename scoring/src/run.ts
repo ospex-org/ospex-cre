@@ -3,7 +3,12 @@
 
 import type { HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
 
-/** The most requests one reader may make for one game. Past it, the feed is silent. */
+/**
+ * The most requests one reader may make for one game. Past it, the feed is silent. Seats 1 and 2
+ * ask once per filing date and page (a 24-hour window has two or three dates); the most any saved
+ * read needed was 4, one date of college basketball's opening night running to two pages. Twelve
+ * leaves room for every date of a window to run to four pages, and stops a feed that pages for ever.
+ */
 export const MAX_REQUESTS = 12;
 
 export function silent(seat: Seat, detail: string): Reading {
@@ -26,7 +31,11 @@ export function runSync(seat: Seat, run: ReaderRun, send: (req: HttpRequest) => 
 	return step.value;
 }
 
-/** Runs a reader with an asynchronous transport, as a sealed machine's fetch would. */
+/**
+ * Runs a reader with an asynchronous transport, as a sealed machine's fetch would. It sets no
+ * deadline of its own: a transport whose promise never settles holds the run until the caller's
+ * deadline, so the caller bounds each request.
+ */
 export async function runAsync(
 	seat: Seat,
 	run: ReaderRun,

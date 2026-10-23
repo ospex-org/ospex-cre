@@ -5,10 +5,15 @@
 // its new time, never scores the original game. The start instant is in; the end is open: a makeup
 // played at the same clock time the next day sits at exactly start + 24 h and stays out.
 //
-// The start is the scheduled start, written at verification from the counting seats (Vince, 10/22,
-// ruling 2). Seat 4 gives a game's actual start once it has begun, up to 22 minutes after the
-// scheduled one in the saved answers; that time never sets the start and serves only seat 4's
-// own check against this window. Seat 3 is read by hint and has no time to check.
+// The start is the scheduled start, written at verification from the counting seats. Seat 4 gives
+// a game's actual start once it has begun, up to 22 minutes after the scheduled one in the saved
+// answers; that time never sets the start and serves only seat 4's own check against this
+// window. Seat 3 is read by hint and has no time to check.
+//
+// The window holds what the feed says about the game's time. A feed that moves a game's own record
+// to another time inside n still has it inside; one that moves it outside has it out. So a makeup
+// stays out of the original's window by being played later than n after it, which every makeup in
+// the saved answers is (the 11 Jun rainout's was 20 Aug).
 
 import type { Game } from "./types";
 

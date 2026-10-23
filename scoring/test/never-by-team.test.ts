@@ -1,8 +1,8 @@
 // Never: "Feeds are read by team, never by the home or away slot."
 //
-// Seats 1, 2 and 4. Seat 3 is read by its creation hint (Vince, 10/22): its results carry no team
-// names, so its points are the feed's own home and away, bound to the game by the hint, and the
-// binding is checked at verification. The last test here pins that, so it can't change unseen.
+// Seats 1, 2 and 4. Seat 3 is read by its creation hint: its results carry no team names, so its
+// points are the feed's own home and away, bound to the game by the hint, and the binding is
+// checked at verification. The last test here pins that, so it can't change unseen.
 //
 // Three ways a slot could leak in, each tested on the real saved answers:
 //   1. the game was created with the teams the other way round from a feed (a neutral site);

@@ -43,7 +43,7 @@ describe("silent", () => {
 		}
 	});
 
-	test("a transport that throws or never resolves its promise into an answer", async () => {
+	test("a transport that throws, or whose promise rejects, makes the seat silent", async () => {
 		for (const seat of SEATS) {
 			expect(readWith(seat, gameFor(seat), () => { throw new Error("boom"); })).toMatchObject({ kind: "silent", detail: "transport" });
 			const r = await runAsync(seat, readerFor(seat)({ game: gameFor(seat), now: NOW, key: KEY }), async () => { throw new Error("boom"); });
