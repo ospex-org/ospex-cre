@@ -158,6 +158,16 @@ describe("only one: what can't be the game doesn't stop a reading", () => {
 		const iowa = byName("ncaab not final: Memphis at Iowa State").game;
 		expect(read(2, { ...iowa, start: iowa.start + 1, n: 3600 }, NOW)).toMatchObject({ kind: "no_final", detail: "outside window", id: "341752" });
 		expect(read(2, { ...iowa, home: "Duke", away: "North Carolina" }, NOW)).toMatchObject({ kind: "no_final", detail: "absent" });
+		// That record is at 23:00 on 2 Nov, before both windows. Derived: moved to 00:30 on 3 Nov, inside
+		// them. It still names neither team: Iowa State reads, and the game the answer lacks is absent.
+		const inside: Derive = (seat, _p, body) => {
+			if (seat !== 2) return body;
+			const b = copy(body) as { results: Record<string, unknown>[] };
+			for (const g of b.results) if (g.gameId === 342404) g.schedule = { date: "2026-11-03T00:30:00.000Z", tbaTime: false };
+			return b;
+		};
+		expect(read(2, iowa, NOW, inside)).toMatchObject({ kind: "no_final", detail: "scheduled", id: "341752" });
+		expect(read(2, { ...iowa, home: "Duke", away: "North Carolina" }, NOW, inside)).toMatchObject({ kind: "no_final", detail: "absent" });
 		// The control: one of the game's teams beside a name the program can't resolve, inside the
 		// window, may be the game.
 		const renamed: Derive = (seat, _p, body) => {
