@@ -145,7 +145,7 @@ describe("silent", () => {
 		const noPoints: Derive = (seat, _p, body) => {
 			const b = copy(body) as { results: Record<string, unknown>[] };
 			const g = b.results.find((x) => x.gameId === 340490);
-			if (g) delete g.scoreboard;
+			if (g) delete (g.scoreboard as Record<string, unknown>).score;
 			return b;
 		};
 		expect(detailOf(2, lakers.game, noPoints)).toEqual({ kind: "silent", detail: "final without points" });

@@ -1,6 +1,6 @@
 // Finding the game among a feed's records, and turning the record into a reading. Seats 1, 2 and
-// 4 end here, so the three rules live in one place (seat 3 is read by its creation hint instead;
-// see readers/seat3.ts):
+// 4 end here, so the rules live in one place (seat 3 is read by its creation hint instead; see
+// readers/seat3.ts):
 //
 //   by team   A record is the game only when its two teams resolve to the game's two teams, in
 //             either order. Its points come back by team: a reader drops the feed's home and away
@@ -12,17 +12,16 @@
 //             read; outside it, the game has moved, it reads "no final", and nothing else is
 //             searched. A hint the feed doesn't have, or one under another pair of teams, is
 //             dropped, and the game is found by its teams.
+//   only one  Without a hint that names it, a record is the game only when nothing else in the
+//             answer could be: no other record of the two teams inside the window (a doubleheader,
+//             or the next game of a series), no record inside the window with one of the game's
+//             teams beside a name the program can't resolve, and no record of either kind
+//             without a game time, which can't be placed outside the window. Any of them, and
+//             the feed is silent: it can't be said which record is the game.
 //
-// Among several records of the two teams inside the window and no hint to choose, the earliest
-// is the game: a postponed game the feed still lists at its own time comes before the next
-// game between the same teams. Two at the same earliest time, under two ids, is a feed listing
-// one game twice, and the feed is silent.
-//
-// "Absent" (answered, no record of the game) is said only when the feed's answer rules the game
-// out: when no record of the two teams lacks a game time, and no record carries a team name the
-// program can't resolve beside one that could be the game's.
-// Otherwise the feed is silent. So a spelling missing from the team lists makes a seat silent
-// about the games it touches; it does not make the seat say they are absent.
+// "Absent" (answered, no record of the game) is said only when the answer rules the game out:
+// every date asked answered with at least one record, and nothing in the window could be the game.
+// An empty answer for a date is not proof the date is empty, so it leaves the feed silent instead.
 
 import { resolveTeam } from "./teams";
 import { silent } from "./run";
@@ -49,6 +48,12 @@ export interface FeedTeam {
 	readonly points: number | null;
 }
 
+/**
+ * What a feed answered for one date (every page of it), or its one answer where it is asked once,
+ * in the order asked.
+ */
+export type Listing = readonly FeedRecord[];
+
 /** A feed's points, if they are a whole number written plainly; anything else is no points. */
 export function points(v: unknown): number | null {
 	if (typeof v === "number") return Number.isSafeInteger(v) && v >= 0 && v < 10000 ? v : null;
@@ -56,39 +61,66 @@ export function points(v: unknown): number | null {
 	return null;
 }
 
-/** The team a feed's names mean, when they mean exactly one. */
+/**
+ * The team a feed's names mean, when every one of them means that one team. A name the program
+ * can't resolve, beside one it can, leaves the team unresolved: the feed's own names disagree.
+ */
 export function resolveFeedTeam(league: string, team: FeedTeam): string | null {
 	let found: string | null = null;
 	for (const name of team.names) {
 		const key = resolveTeam(league, name);
-		if (key === null) continue;
-		if (found !== null && found !== key) return null;
+		if (key === null || (found !== null && found !== key)) return null;
 		found = key;
 	}
 	return found;
 }
 
-/** Picks the game out of a feed's answer and reads it. Seats 1, 2 and 4; seat 3 is read by hint. */
-export function pick(seat: Seat, game: Game, answered: readonly FeedRecord[]): Reading {
+/** Picks the game out of a feed's answers and reads it. Seats 1, 2 and 4; seat 3 is read by hint. */
+export function pick(seat: Seat, game: Game, listings: readonly Listing[]): Reading {
 	const home = resolveTeam(game.league, game.home);
 	const away = resolveTeam(game.league, game.away);
 	if (home === null || away === null || home === away) return silent(seat, "game teams unknown");
 
+	const keysOf = (r: FeedRecord): [string | null, string | null] => [
+		resolveFeedTeam(game.league, r.teams[0]),
+		resolveFeedTeam(game.league, r.teams[1]),
+	];
 	const isGame = (r: FeedRecord): boolean => {
-		const a = resolveFeedTeam(game.league, r.teams[0]);
-		const b = resolveFeedTeam(game.league, r.teams[1]);
+		const [a, b] = keysOf(r);
 		return (a === home && b === away) || (a === away && b === home);
 	};
+	// One of the game's teams beside a name the program can't resolve: it may be the game. A record
+	// whose names both fail to resolve names neither team, so it is not.
+	const mayBe = (r: FeedRecord): boolean => {
+		const [a, b] = keysOf(r);
+		const known = a === null ? b : b === null ? a : null;
+		return (a === null) !== (b === null) && (known === home || known === away);
+	};
 	const w = windowOf(game);
+	const inside = (r: FeedRecord): boolean => r.time !== null && inWindow(r.time, w);
 
-	// A feed can list one game under two of the dates asked for. Identical repeats are one record;
-	// a repeat of the game that differs from itself leaves the feed silent.
+	// A feed can list one game under two of the dates asked for. Identical repeats are one record. A
+	// repeat that differs is the same record asked again moments later, so the later answer stands,
+	// unless the two name different teams, or the earlier already said final: then the feed is
+	// silent. Two differing copies inside one date's answer leave it silent too.
+	const differs = (x: FeedRecord, y: FeedRecord): boolean => JSON.stringify(x) !== JSON.stringify(y);
+	const relevant = (x: FeedRecord, y: FeedRecord): boolean => [x, y].some((r) => isGame(r) || mayBe(r));
 	const byId = new Map<string, FeedRecord>();
-	for (const r of answered) {
-		const prior = byId.get(r.id);
-		if (prior === undefined) byId.set(r.id, r);
-		else if (JSON.stringify(prior) !== JSON.stringify(r) && (isGame(prior) || isGame(r))) {
-			return silent(seat, "inconsistent records");
+	for (const listing of listings) {
+		const here = new Map<string, FeedRecord>();
+		for (const r of listing) {
+			const twin = here.get(r.id);
+			if (twin === undefined) here.set(r.id, r);
+			else if (differs(twin, r) && relevant(twin, r)) return silent(seat, "inconsistent records");
+		}
+		for (const r of here.values()) {
+			const prior = byId.get(r.id);
+			if (prior === undefined) byId.set(r.id, r);
+			else if (differs(prior, r) && relevant(prior, r)) {
+				const sameTeams = keysOf(prior).sort().join("|") === keysOf(r).sort().join("|");
+				if (!sameTeams || prior.state === "final") return silent(seat, "inconsistent records");
+				byId.set(r.id, r);
+			}
 		}
 	}
 	const records = [...byId.values()];
@@ -103,22 +135,16 @@ export function pick(seat: Seat, game: Game, answered: readonly FeedRecord[]): R
 	}
 
 	const games = records.filter(isGame);
-	const inside = games
-		.filter((r) => r.time !== null && inWindow(r.time, w))
-		.sort((x, y) => (x.time as number) - (y.time as number));
-	if (inside.length > 1 && inside[1].time === inside[0].time) return silent(seat, "ambiguous");
-	if (inside.length > 0) return readingOf(seat, game.league, inside[0], home);
-	if (games.some((r) => r.time === null)) return silent(seat, "no game time");
-	// A record with a team name the program can't resolve, whose other team could be one of the
-	// game's, may be the game: the feed can't be said to lack it.
-	const couldBe = (k: string | null): boolean => k === null || k === home || k === away;
-	const unresolved = records.some((r) => {
-		const a = resolveFeedTeam(game.league, r.teams[0]);
-		const b = resolveFeedTeam(game.league, r.teams[1]);
-		return (a === null || b === null) && couldBe(a) && couldBe(b);
-	});
-	if (unresolved) return silent(seat, "unresolved team names");
-	return games.length > 0 ? noFinal(seat, "outside window", games[0]) : noFinal(seat, "absent", null);
+	const chosen = games.filter(inside);
+	// Anything else that could be the game: in the window, or with no time to place it outside.
+	const rivals = records.filter((r) => (isGame(r) || mayBe(r)) && (r.time === null || inside(r)));
+	if (chosen.length === 1 && rivals.length === 1) return readingOf(seat, game.league, chosen[0], home);
+	if (chosen.length > 0) return silent(seat, "ambiguous");
+	if (rivals.some((r) => r.time === null)) return silent(seat, "no game time");
+	if (rivals.length > 0) return silent(seat, "unresolved team names");
+	if (games.length > 0) return noFinal(seat, "outside window", games[0]);
+	if (listings.some((l) => l.length === 0)) return silent(seat, "empty listing");
+	return noFinal(seat, "absent", null);
 }
 
 function readingOf(seat: Seat, league: string, r: FeedRecord, homeKey: string): Reading {

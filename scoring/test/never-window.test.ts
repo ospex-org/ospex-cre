@@ -127,7 +127,7 @@ describe("never: a final outside the window counts", () => {
 			expect({ case: c.name, record: reading.record }).toEqual({ case: c.name, record: { id: c.expect[3]!.id!, time: null } });
 			read3++;
 		}
-		expect(read3).toBe(9); // five games before they started, four of them again after they ended
+		expect(read3).toBe(13);
 	});
 });
 

@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { SEATS } from "../src/table";
-import { INDEX, KEY, ROOT, bytesOf, saved } from "./fixtures";
+import { INDEX, KEY, ROOT, at, bytesOf, saved } from "./fixtures";
 
 const SCORING = join(import.meta.dir, "..");
 const TABLE = join(SCORING, "src", "table.ts");
@@ -83,6 +83,29 @@ describe("saved answers", () => {
 		const t = saved(undefined, Date.parse(e.capturedAt) / 1000);
 		expect(t.send({ url: `https://${row.host}${e.path}`, method: "GET", headers: {} }).status).toBe(e.status);
 		expect(t.misses).toEqual([]);
+	});
+
+	test("a clock in milliseconds is refused; both infinities are still clocks", () => {
+		const ms = Date.parse("2026-10-22T17:00:00Z"); // before the game, in milliseconds
+		expect(() => saved(undefined, ms)).toThrow("milliseconds");
+		expect(() => saved(undefined, ms / 1000)).not.toThrow();
+		expect(() => saved(undefined, Number.POSITIVE_INFINITY)).not.toThrow();
+		expect(() => saved(undefined, Number.NEGATIVE_INFINITY)).not.toThrow();
+	});
+
+	test("a capture's own second reads that capture, whatever its milliseconds", () => {
+		// The night's answer for the Bears' result, saved at 03:31:10.473 UTC, final; the afternoon's,
+		// on the same path, not final. A clock of 03:31:10 is that capture's second.
+		const path = "/results/edcfd41f-1773-4bc9-a349-aa50931a0278";
+		const night = INDEX.find((x) => x.seat === 3 && x.path === path && x.capturedAt.startsWith("2026-10-23"))!;
+		expect(night.capturedAt).toBe("2026-10-23T03:31:10.473Z");
+		const row = SEATS.find((r) => r.seat === 3)!;
+		const read = (clock: number) => {
+			const t = saved(undefined, clock);
+			return JSON.parse(t.send({ url: `https://${row.host}${path}`, method: "GET", headers: {} }).body).find((r: Record<string, unknown>) => r.OddType === "Game").FinalType;
+		};
+		expect(read(at("2026-10-23T03:31:10Z"))).toBe("Finished");
+		expect(read(at("2026-10-23T03:31:09Z"))).toBe("NotFinished");
 	});
 });
 

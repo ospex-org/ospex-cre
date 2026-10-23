@@ -2,14 +2,23 @@
 //
 // Asks for the league's games one filing date at a time (see filingDates), a hundred to a page,
 // following the feed's cursor. Each league names its fields its own way, so each has a small map
-// below. Status: the nine-state `status_state` decides where a record has it: `final` is final,
+// below. A team is named by its full name, and in college by its school's name too; never by its
+// city, which two teams can share.
+//
+// Status: the nine-state `status_state` decides where a record has it: `final` is final,
 // `postponed` and `canceled` are recorded, everything else is not final. Where a record lacks
 // `status_state`, the reader falls back to the league's older field, and only that field's own
-// unambiguous final word makes a final (see FALLBACK). College has no such word: its older
-// field says "post" for a final, a postponed and a cancelled game alike, so a college record
-// without `status_state` is not final.
+// unambiguous final word makes a final (see `older`). College has no such word: its older field
+// says "post" for a final, a postponed and a cancelled game alike, so a college record without
+// `status_state` is not final.
+//
+// A final also needs the feed's own count of the game's parts to show a whole game: the period
+// reached, at least the league's regulation (four quarters, four in basketball, three in hockey,
+// nine innings, two halves in college basketball). Football carries no period count it fills in
+// (college football's stays 0 on a final), so there the four quarters' points must all be there.
+// A record that says final short of that is read as not final, and its status says why.
 
-import { pick, points, type FeedRecord, type FeedTeam } from "../pick";
+import { pick, points, type FeedRecord, type FeedTeam, type Listing } from "../pick";
 import { silent } from "../run";
 import { leagueRow } from "../table";
 import type { Ask, ReaderRun, Seat } from "../types";
@@ -23,6 +32,8 @@ interface Fields {
 	readonly home: (g: Record<string, unknown>) => FeedTeam;
 	readonly away: (g: Record<string, unknown>) => FeedTeam;
 	readonly older: (g: Record<string, unknown>) => FeedRecord["state"] | null;
+	/** Why the record is short of a whole game, or null when it shows one. */
+	readonly short: (g: Record<string, unknown>) => string | null;
 }
 
 function team(t: unknown, nameKeys: readonly string[], pts: unknown): FeedTeam {
@@ -35,18 +46,34 @@ function team(t: unknown, nameKeys: readonly string[], pts: unknown): FeedTeam {
 	return { names, points: points(pts) };
 }
 
+/** Short of `least` periods by the record's own `period`, or null when it reached them. */
+const periods = (least: number) => (g: Record<string, unknown>): string | null => {
+	const p = g.period;
+	if (typeof p !== "number" || !Number.isInteger(p)) return "no period count";
+	return p >= least ? null : `period ${p} of ${least}`;
+};
+
+/** Short unless every one of the named quarter fields carries points. */
+const quarters = (keys: readonly string[]) => (g: Record<string, unknown>): string | null =>
+	keys.every((k) => points(g[k]) !== null) ? null : "not every quarter scored";
+
+/** The older field's final word in football and basketball, with any overtimes it names. */
+const FINAL_WORD = /^Final(\/\d*OT)?$/;
+
 const FIELDS: Readonly<Record<string, Fields>> = {
 	nba: {
 		time: (g) => g.datetime,
 		home: (g) => team(g.home_team, ["full_name"], g.home_team_score),
 		away: (g) => team(g.visitor_team, ["full_name"], g.visitor_team_score),
-		older: (g) => (g.postponed === true ? "postponed" : g.status === "Final" ? "final" : null),
+		older: (g) => (g.postponed === true ? "postponed" : typeof g.status === "string" && FINAL_WORD.test(g.status) ? "final" : null),
+		short: periods(4),
 	},
 	nfl: {
 		time: (g) => g.date,
 		home: (g) => team(g.home_team, ["full_name"], g.home_team_score),
 		away: (g) => team(g.visitor_team, ["full_name"], g.visitor_team_score),
-		older: (g) => (typeof g.status === "string" && /^Final(\/OT)?$/.test(g.status) ? "final" : null),
+		older: (g) => (typeof g.status === "string" && FINAL_WORD.test(g.status) ? "final" : null),
+		short: quarters(["home_team_q1", "home_team_q2", "home_team_q3", "home_team_q4", "visitor_team_q1", "visitor_team_q2", "visitor_team_q3", "visitor_team_q4"]),
 	},
 	mlb: {
 		time: (g) => g.date,
@@ -60,24 +87,28 @@ const FIELDS: Readonly<Record<string, Fields>> = {
 					: g.status === "STATUS_CANCELED"
 						? "canceled"
 						: null,
+		short: periods(9),
 	},
 	nhl: {
 		time: (g) => g.start_time_utc,
 		home: (g) => team(g.home_team, ["full_name"], g.home_score),
 		away: (g) => team(g.away_team, ["full_name"], g.away_score),
 		older: (g) => (g.game_state === "OFF" ? "final" : null),
+		short: periods(3),
 	},
 	ncaaf: {
 		time: (g) => g.date,
-		home: (g) => team(g.home_team, ["full_name", "college", "city"], g.home_score),
-		away: (g) => team(g.visitor_team, ["full_name", "college", "city"], g.away_score),
+		home: (g) => team(g.home_team, ["full_name", "college"], g.home_score),
+		away: (g) => team(g.visitor_team, ["full_name", "college"], g.away_score),
 		older: () => null,
+		short: quarters(["home_score_q1", "home_score_q2", "home_score_q3", "home_score_q4", "away_score_q1", "away_score_q2", "away_score_q3", "away_score_q4"]),
 	},
 	ncaab: {
 		time: (g) => g.date,
 		home: (g) => team(g.home_team, ["full_name", "college"], g.home_score),
 		away: (g) => team(g.visitor_team, ["full_name", "college"], g.away_score),
 		older: () => null,
+		short: periods(2),
 	},
 };
 
@@ -94,17 +125,24 @@ const STATE: Readonly<Record<string, FeedRecord["state"]>> = {
 };
 
 export function toRecord(league: string, g: Record<string, unknown>): FeedRecord | null {
-	const f = FIELDS[league];
+	const f = Object.prototype.hasOwnProperty.call(FIELDS, league) ? FIELDS[league] : undefined;
 	if (!f || (typeof g.id !== "number" && typeof g.id !== "string")) return null;
 	const raw = g.status_state;
 	let state: FeedRecord["state"];
 	let status: string;
 	if (typeof raw === "string") {
-		state = STATE[raw] ?? "not_final";
+		state = Object.prototype.hasOwnProperty.call(STATE, raw) ? STATE[raw] : "not_final";
 		status = raw;
 	} else {
 		state = f.older(g) ?? "not_final";
 		status = `no status_state; ${String(g.status ?? g.game_state ?? "")}`.trim();
+	}
+	if (state === "final") {
+		const short = f.short(g);
+		if (short !== null) {
+			state = "not_final";
+			status = `${status}; ${short}`;
+		}
 	}
 	return {
 		id: String(g.id),
@@ -117,9 +155,10 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 
 export function* read(ask: Ask): ReaderRun {
 	const row = leagueRow(ask.game.league);
-	if (row === null || !FIELDS[ask.game.league]) return silent(SEAT, "league not offered");
-	const records: FeedRecord[] = [];
+	if (row === null || !Object.prototype.hasOwnProperty.call(FIELDS, ask.game.league)) return silent(SEAT, "league not offered");
+	const listings: Listing[] = [];
 	for (const date of filingDates(windowOf(ask.game))) {
+		const listing: FeedRecord[] = [];
 		let cursor: string | null = null;
 		do {
 			const q = `?dates[]=${date}&per_page=100${cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`}`;
@@ -133,11 +172,12 @@ export function* read(ask: Ask): ReaderRun {
 				const o = obj(g);
 				const r = o === null ? null : toRecord(ask.game.league, o);
 				if (r === null) return silent(SEAT, "unreadable record");
-				records.push(r);
+				listing.push(r);
 			}
 			const next = obj(page?.meta)?.next_cursor;
 			cursor = typeof next === "number" || (typeof next === "string" && next !== "") ? String(next) : null;
 		} while (cursor !== null);
+		listings.push(listing);
 	}
-	return pick(SEAT, ask.game, records);
+	return pick(SEAT, ask.game, listings);
 }

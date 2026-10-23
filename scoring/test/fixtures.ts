@@ -35,11 +35,17 @@ for (const e of [...INDEX].sort((a, b) => Date.parse(a.capturedAt) - Date.parse(
 	byKey.get(k)!.push(e);
 }
 
-/** What the feed said for a request as of a moment: the latest answer captured at or before it. */
+/**
+ * What the feed said for a request as of a moment: the latest answer captured at or before it, to
+ * the whole second, so a clock written as a capture's own second (at()) includes that capture.
+ */
 function answerAsOf(seat: Seat, path: string, asOf: number): Entry | undefined {
 	const all = byKey.get(`${seat} ${path}`) ?? [];
-	return all.filter((e) => Date.parse(e.capturedAt) / 1000 <= asOf).at(-1);
+	return all.filter((e) => Math.floor(Date.parse(e.capturedAt) / 1000) <= asOf).at(-1);
 }
+
+/** Past this a clock is milliseconds, not seconds: unix seconds reach it in the year 5138. */
+const SECONDS_CEILING = 1e11;
 
 /** The bytes of a fixture file, exactly as saved. */
 export function bytesOf(file: string): Uint8Array {
@@ -68,12 +74,14 @@ export type Derive = (seat: Seat, path: string, body: unknown) => unknown;
  * A transport over the saved answers as of `asOf` (unix seconds), recording what was asked and
  * what it could not answer. The clock is required: a request asked before and after a game ends
  * has two answers, and a test must say which moment it reads. Tests are not type-checked, so a
- * missing clock is refused here rather than read as some default moment. Any number is a
- * clock, an unreadable one included: a test of a program that must refuse such a clock hands
- * the same one to its transport.
+ * missing clock is refused here rather than read as some default moment, and so is a clock in
+ * milliseconds, which would read as after every capture. Any other number is a clock, an
+ * unreadable one included (NaN, either infinity): a test of a program that must refuse such a
+ * clock hands the same one to its transport.
  */
 export function saved(derive: Derive | undefined, asOf: number): Saved {
 	if (typeof asOf !== "number") throw new Error("saved: the clock is required");
+	if (Number.isFinite(asOf) && asOf > SECONDS_CEILING) throw new Error("saved: the clock is in milliseconds; give unix seconds");
 	const asked: HttpRequest[] = [];
 	const misses: string[] = [];
 	return {

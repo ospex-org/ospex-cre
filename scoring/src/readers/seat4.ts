@@ -2,19 +2,21 @@
 //
 // Asks once per league for live, upcoming and recently completed games. The feed gives each
 // game's points as a list keyed by team name, not by home or away, so each team takes the one
-// entry carrying its own name. Status: `completed` true is final; anything else is not final. The
-// feed records no postponed or cancelled state. Its game time is the scheduled start until the game
-// begins and the actual start after; it serves only this seat's own window check, never the game's
-// start (ruled 10/22).
+// entry carrying its own name, compared the way team names are (case, accents, punctuation and
+// spacing aside). Status: `completed` true is final, the feed's own word for a whole game;
+// anything else is not final. The feed records no postponed or cancelled state. Its game time is
+// the scheduled start until the game begins and the actual start after; it serves only this
+// seat's own window check, never the game's start.
 //
-// Retention: completed games come back for three days. Past 66 hours after the game's start (three
-// days less six hours, which holds whether the feed counts from the start, from the end or by
-// calendar day) the reader does not ask, and the feed is silent: a missing game then could be
-// age, not absence.
+// Retention: the feed keeps completed games for three days. The reader stops asking 66 hours after
+// the game's start, three days less six hours, a margin that holds whether the feed counts its
+// three days from the start, from the end or by calendar day; past it the feed is silent, because a
+// missing game then could be age, not absence.
 
 import { pick, points, type FeedRecord, type FeedTeam } from "../pick";
 import { silent } from "../run";
 import { leagueRow } from "../table";
+import { normalise } from "../teams";
 import type { Ask, ReaderRun, Seat } from "../types";
 import { parseIsoSeconds } from "../window";
 import { jsonOf, obj, request, str } from "./request";
@@ -29,7 +31,7 @@ function team(name: string | null, scores: unknown): FeedTeam {
 	if (Array.isArray(scores)) {
 		for (const s of scores) {
 			const o = obj(s);
-			if (o !== null && o.name === name) {
+			if (o !== null && typeof o.name === "string" && normalise(o.name) === normalise(name)) {
 				found = o.score;
 				count++;
 			}
@@ -66,5 +68,5 @@ export function* read(ask: Ask): ReaderRun {
 		if (r === null) return silent(SEAT, "unreadable record");
 		records.push(r);
 	}
-	return pick(SEAT, ask.game, records);
+	return pick(SEAT, ask.game, [records]);
 }

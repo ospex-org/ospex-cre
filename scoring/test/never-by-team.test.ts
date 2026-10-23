@@ -76,7 +76,7 @@ describe("never: read by the home or away slot", () => {
 				if (want.kind === "final" && want.home !== want.away) finals++;
 			}
 		}
-		expect(finals).toBe(30); // every final in the cases, at seats 1, 2 and 4
+		expect(finals).toBe(52); // every final in the cases, at seats 1, 2 and 4
 	});
 
 	test("a feed that lists the teams the other way round still reads right", () => {
@@ -91,7 +91,7 @@ describe("never: read by the home or away slot", () => {
 				if (want.kind === "final" && want.home !== want.away) finals++;
 			}
 		}
-		expect(finals).toBe(30); // every final in the cases, at seats 1, 2 and 4
+		expect(finals).toBe(52); // every final in the cases, at seats 1, 2 and 4
 	});
 
 	test("seat 4 pairs points with teams by name, not by place in its list", () => {
@@ -104,7 +104,7 @@ describe("never: read by the home or away slot", () => {
 			expect({ case: c.name, ...shape(reading) }).toEqual({ case: c.name, ...want });
 			if (want.kind === "final") finals++;
 		}
-		expect(finals).toBe(9);
+		expect(finals).toBe(11);
 	});
 
 	test("a record is the game only when both teams are the game's", () => {

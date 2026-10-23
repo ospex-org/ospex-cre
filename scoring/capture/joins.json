@@ -1,117 +1,300 @@
 {
-  "nba": {
-    "Los Angeles Clippers": "LA Clippers"
-  },
-  "mlb": {
-    "Athletics": "Oakland Athletics"
-  },
-  "nhl": {
-    "Utah Mammoth": "Utah Hockey Club"
-  },
-  "ncaaf": {
-    "Appalachian State": "App State",
-    "Appalachian St": "App State",
-    "Appalachian State Mountaineers": "App State",
-    "Connecticut": "UConn",
-    "Louisiana-Lafayette": "Louisiana",
-    "Louisiana-Monroe": "UL Monroe",
-    "Miami (FL)": "Miami",
-    "Miami Florida": "Miami",
-    "Miami Ohio": "Miami (OH)",
-    "Mississippi": "Ole Miss",
-    "Sam Houston State": "Sam Houston",
-    "Sam Houston State Bearkats": "Sam Houston",
-    "Southern Mississippi": "Southern Miss",
-    "Southern Mississippi Golden Eagles": "Southern Miss",
-    "Central Florida": "UCF",
-    "N. Dakota State": "North Dakota State",
-    "North Carolina State": "NC State",
-    "Tex San Antonio": "UTSA",
-    "UMass Minutemen": "Massachusetts",
-    "Citadel Bulldogs": "The Citadel",
-    "Grambling State Tigers": "Grambling",
-    "LIU Sharks": "Long Island University",
-    "McNeese State Cowboys": "McNeese",
-    "Nicholls State Colonels": "Nicholls",
-    "Presbyterian College Blue Hose": "Presbyterian",
-    "Southern University Jaguars": "Southern",
-    "St. Thomas (MN) Tommies": "St. Thomas-Minnesota",
-    "Yale University Bulldogs": "Yale",
-    "Houston Baptist Huskies": "Houston Christian",
-    "Dixie State Trailblazers": "Utah Tech",
-    "Kentucky State University Thorobreds": "Kentucky State",
-    "Southeastern Louisiana Lions": "SE Louisiana",
-    "St. Francis (PA) Red Flash": "Saint Francis",
-    "Albany": "UAlbany"
-  },
-  "ncaab": {
-    "Miami (FL)": "Miami",
-    "Albany": "UAlbany",
-    "Virginia Commonwealth": "VCU",
-    "Queens (NC)": "Queens University",
-    "Connecticut": "UConn",
-    "Sam Houston State": "Sam Houston",
-    "St. Peter's": "Saint Peter's",
-    "Illinois-Chicago": "UIC",
-    "SE Missouri State": "Southeast Missouri State",
-    "Tennessee-Martin": "UT Martin",
-    "American": "American University",
-    "Mississippi": "Ole Miss",
-    "Prairie View": "Prairie View A&M",
-    "LSU-New Orleans": "New Orleans",
-    "McNeese State": "McNeese",
-    "Nicholls State": "Nicholls",
-    "Rio Grande Valley": "UT Rio Grande Valley",
-    "Nebraska-Omaha": "Omaha",
-    "St. Thomas (MN)": "St. Thomas-Minnesota",
-    "UMKC": "Kansas City",
-    "Appalachian State": "App State",
-    "Louisiana-Lafayette": "Louisiana",
-    "Louisiana-Monroe": "UL Monroe",
-    "Southern Mississippi": "Southern Miss",
-    "Arkansas-Little Rock": "Little Rock",
-    "Texas-Arlington": "UT Arlington",
-    "Seattle": "Seattle U",
-    "St. Mary's (CA)": "Saint Mary's",
-    "St. Joseph's (PA)": "Saint Joseph's",
-    "College of Charleston": "Charleston",
-    "Detroit": "Detroit Mercy",
-    "Southeastern Louisiana": "SE Louisiana",
-    "Albany Great Danes": "UAlbany",
-    "American Eagles": "American University",
-    "Appalachian St Mountaineers": "App State",
-    "Arkansas-Little Rock Trojans": "Little Rock",
-    "Army Knights": "Army",
-    "CSU Bakersfield Roadrunners": "Cal State Bakersfield",
-    "CSU Fullerton Titans": "Cal State Fullerton",
-    "CSU Northridge Matadors": "Cal State Northridge",
-    "Cal Baptist Lancers": "California Baptist",
-    "Central Connecticut St Blue Devils": "Central Connecticut",
-    "Dixie State Trailblazers": "Utah Tech",
-    "Florida Int'l Golden Panthers": "Florida International",
-    "Fort Wayne Mastodons": "Purdue Fort Wayne",
-    "GW Revolutionaries": "George Washington",
-    "Gardner-Webb Bulldogs": "Gardner-Webb",
-    "Grambling St Tigers": "Grambling",
-    "Grand Canyon Antelopes": "Grand Canyon",
-    "IUPUI Jaguars": "IU Indianapolis",
-    "LIU Sharks": "Long Island University",
-    "Long Beach St 49ers": "Long Beach State",
-    "Loyola (Chi) Ramblers": "Loyola Chicago",
-    "Loyola (MD) Greyhounds": "Loyola Maryland",
-    "Miss Valley St Delta Devils": "Mississippi Valley State",
-    "Mt. St. Mary's Mountaineers": "Mount St. Mary's",
-    "N Colorado Bears": "Northern Colorado",
-    "Nicholls St Colonels": "Nicholls",
-    "Prairie View Panthers": "Prairie View A&M",
-    "SE Missouri St Redhawks": "Southeast Missouri State",
-    "Sam Houston St Bearkats": "Sam Houston",
-    "Seattle Redhawks": "Seattle U",
-    "St. Francis (PA) Red Flash": "Saint Francis",
-    "St. Francis BKN Terriers": "St. Francis Brooklyn",
-    "St. Thomas (MN) Tommies": "St. Thomas-Minnesota",
-    "Tenn-Martin Skyhawks": "UT Martin",
-    "Texas A&M-CC Islanders": "Texas A&M-Corpus Christi",
-    "UMKC Kangaroos": "Kansas City"
-  }
+  "about": "Hand joins, read by capture/teams.ts. Each joins a spelling on one seat's own list to the team whose own name on seat 1's list is given, for the reason the group states. A spelling joins only from the seat and league its group names.",
+  "namesakes": [
+    {
+      "league": "ncaab",
+      "name": "Georgia",
+      "team": "Georgia Bulldogs",
+      "why": "Seat 1's list also has an entry named only Georgia (abbreviation GEO), with no school name and no conference: a touring side, not a school. Seats 2 and 3 write the University of Georgia as Georgia, so the name stays the school's."
+    }
+  ],
+  "groups": [
+    {
+      "seat": 2,
+      "league": "nba",
+      "why": "Seat 1's list writes the club as LA Clippers; the other seats write its city in full. One club of that name.",
+      "joins": {
+        "Los Angeles Clippers": "LA Clippers"
+      }
+    },
+    {
+      "seat": 3,
+      "league": "nba",
+      "why": "Seat 1's list writes the club as LA Clippers; the other seats write its city in full. One club of that name.",
+      "joins": {
+        "Los Angeles Clippers": "LA Clippers"
+      }
+    },
+    {
+      "seat": 4,
+      "league": "nba",
+      "why": "Seat 1's list writes the club as LA Clippers; the other seats write its city in full. One club of that name.",
+      "joins": {
+        "Los Angeles Clippers": "LA Clippers"
+      }
+    },
+    {
+      "seat": 2,
+      "league": "mlb",
+      "why": "The club left Oakland and plays as the Athletics; seat 1's list keeps the name Oakland Athletics. One club of that name.",
+      "joins": {
+        "Athletics": "Oakland Athletics"
+      }
+    },
+    {
+      "seat": 4,
+      "league": "mlb",
+      "why": "The club left Oakland and plays as the Athletics; seat 1's list keeps the name Oakland Athletics. One club of that name.",
+      "joins": {
+        "Athletics": "Oakland Athletics"
+      }
+    },
+    {
+      "seat": 2,
+      "league": "nhl",
+      "why": "The club took the name Mammoth in its second season; seat 1's list keeps its first name, Utah Hockey Club. One club in Utah.",
+      "joins": {
+        "Utah Mammoth": "Utah Hockey Club"
+      }
+    },
+    {
+      "seat": 3,
+      "league": "nhl",
+      "why": "The club took the name Mammoth in its second season; seat 1's list keeps its first name, Utah Hockey Club. One club in Utah.",
+      "joins": {
+        "Utah Mammoth": "Utah Hockey Club"
+      }
+    },
+    {
+      "seat": 4,
+      "league": "nhl",
+      "why": "The club took the name Mammoth in its second season; seat 1's list keeps its first name, Utah Hockey Club. One club in Utah.",
+      "joins": {
+        "Utah Mammoth": "Utah Hockey Club"
+      }
+    },
+    {
+      "seat": 2,
+      "league": "ncaab",
+      "why": "Seat 2's list writes the school by another of its names (a former name, the formal name, or the name without its campus). Its own mascot field is the same as seat 1's for the school, and the generator refuses a seat 2 hand join whose mascot differs.",
+      "joins": {
+        "Albany": "UAlbany",
+        "American": "American University",
+        "Appalachian State": "App State",
+        "Arkansas-Little Rock": "Little Rock",
+        "College of Charleston": "Charleston",
+        "Connecticut": "UConn",
+        "Detroit": "Detroit Mercy",
+        "Illinois-Chicago": "UIC",
+        "Louisiana-Lafayette": "Louisiana",
+        "Louisiana-Monroe": "UL Monroe",
+        "LSU-New Orleans": "New Orleans",
+        "McNeese State": "McNeese",
+        "Miami (FL)": "Miami",
+        "Mississippi": "Ole Miss",
+        "Nebraska-Omaha": "Omaha",
+        "Nicholls State": "Nicholls",
+        "Prairie View": "Prairie View A&M",
+        "Queens (NC)": "Queens University",
+        "Rio Grande Valley": "UT Rio Grande Valley",
+        "Sam Houston State": "Sam Houston",
+        "SE Missouri State": "Southeast Missouri State",
+        "Seattle": "Seattle U",
+        "Southeastern Louisiana": "SE Louisiana",
+        "Southern Mississippi": "Southern Miss",
+        "St. Joseph's (PA)": "Saint Joseph's",
+        "St. Mary's (CA)": "Saint Mary's",
+        "St. Peter's": "Saint Peter's",
+        "St. Thomas (MN)": "St. Thomas-Minnesota",
+        "Stonehill College": "Stonehill",
+        "Tennessee-Martin": "UT Martin",
+        "Texas-Arlington": "UT Arlington",
+        "UMKC": "Kansas City",
+        "Virginia Commonwealth": "VCU"
+      }
+    },
+    {
+      "seat": 4,
+      "league": "ncaab",
+      "why": "Seat 4's list writes State as St. Each spelling is the school's name and nickname on seat 1's list with that one word shortened.",
+      "joins": {
+        "Alabama St Hornets": "Alabama State Hornets",
+        "Alcorn St Braves": "Alcorn State Braves",
+        "Arizona St Sun Devils": "Arizona State Sun Devils",
+        "Arkansas St Red Wolves": "Arkansas State Red Wolves",
+        "Chicago St Cougars": "Chicago State Cougars",
+        "Cleveland St Vikings": "Cleveland State Vikings",
+        "Colorado St Rams": "Colorado State Rams",
+        "Coppin St Eagles": "Coppin State Eagles",
+        "Delaware St Hornets": "Delaware State Hornets",
+        "East Tennessee St Buccaneers": "East Tennessee State Buccaneers",
+        "Florida St Seminoles": "Florida State Seminoles",
+        "Fresno St Bulldogs": "Fresno State Bulldogs",
+        "Georgia St Panthers": "Georgia State Panthers",
+        "Illinois St Redbirds": "Illinois State Redbirds",
+        "Indiana St Sycamores": "Indiana State Sycamores",
+        "Jackson St Tigers": "Jackson State Tigers",
+        "Jacksonville St Gamecocks": "Jacksonville State Gamecocks",
+        "Kansas St Wildcats": "Kansas State Wildcats",
+        "Kennesaw St Owls": "Kennesaw State Owls",
+        "Michigan St Spartans": "Michigan State Spartans",
+        "Mississippi St Bulldogs": "Mississippi State Bulldogs",
+        "Missouri St Bears": "Missouri State Bears",
+        "Montana St Bobcats": "Montana State Bobcats",
+        "Morehead St Eagles": "Morehead State Eagles",
+        "Morgan St Bears": "Morgan State Bears",
+        "Murray St Racers": "Murray State Racers",
+        "New Mexico St Aggies": "New Mexico State Aggies",
+        "Norfolk St Spartans": "Norfolk State Spartans",
+        "North Dakota St Bison": "North Dakota State Bison",
+        "Northwestern St Demons": "Northwestern State Demons",
+        "Oklahoma St Cowboys": "Oklahoma State Cowboys",
+        "Oregon St Beavers": "Oregon State Beavers",
+        "Portland St Vikings": "Portland State Vikings",
+        "Sacramento St Hornets": "Sacramento State Hornets",
+        "San Diego St Aztecs": "San Diego State Aztecs",
+        "San José St Spartans": "San José State Spartans",
+        "Savannah St Tigers": "Savannah State Tigers",
+        "South Carolina St Bulldogs": "South Carolina State Bulldogs",
+        "South Dakota St Jackrabbits": "South Dakota State Jackrabbits",
+        "Tennessee St Tigers": "Tennessee State Tigers",
+        "Washington St Cougars": "Washington State Cougars",
+        "Wichita St Shockers": "Wichita State Shockers",
+        "Wright St Raiders": "Wright State Raiders",
+        "Youngstown St Penguins": "Youngstown State Penguins"
+      }
+    },
+    {
+      "seat": 4,
+      "league": "ncaab",
+      "why": "Seat 4's list writes University as Univ. The spelling is the school's name and nickname on seat 1's list with that one word shortened.",
+      "joins": {
+        "Boston Univ. Terriers": "Boston University Terriers"
+      }
+    },
+    {
+      "seat": 4,
+      "league": "ncaab",
+      "why": "Seat 4's list keeps a nickname seat 1's list does not: Army's Black Knights written Knights, Gardner-Webb's Runnin' Bulldogs written Bulldogs, Long Beach State as the 49ers and FIU as the Golden Panthers (their nicknames before they changed them), Grand Canyon's Lopes written in full as Antelopes, Kentucky State's Thorobreds (seat 1's list gives it no nickname), and UAlbany written Albany with none. Each spelling names one school on seat 1's list and no other.",
+      "joins": {
+        "Army Knights": "Army",
+        "Florida Int'l Golden Panthers": "Florida International",
+        "Gardner-Webb Bulldogs": "Gardner-Webb",
+        "Grand Canyon Antelopes": "Grand Canyon",
+        "Long Beach St 49ers": "Long Beach State"
+      }
+    },
+    {
+      "seat": 4,
+      "league": "ncaab",
+      "why": "Seat 4's list writes the school by another of its names (a former name, the formal name, an abbreviation) and the same nickname as seat 1's list.",
+      "joins": {
+        "Albany Great Danes": "UAlbany",
+        "American Eagles": "American University",
+        "Appalachian St Mountaineers": "App State",
+        "Arkansas-Little Rock Trojans": "Little Rock",
+        "Cal Baptist Lancers": "California Baptist",
+        "Central Connecticut St Blue Devils": "Central Connecticut",
+        "CSU Bakersfield Roadrunners": "Cal State Bakersfield",
+        "CSU Fullerton Titans": "Cal State Fullerton",
+        "CSU Northridge Matadors": "Cal State Northridge",
+        "Dixie State Trailblazers": "Utah Tech",
+        "Fort Wayne Mastodons": "Purdue Fort Wayne",
+        "Grambling St Tigers": "Grambling",
+        "GW Revolutionaries": "George Washington",
+        "IUPUI Jaguars": "IU Indianapolis",
+        "LIU Sharks": "Long Island University",
+        "Loyola (Chi) Ramblers": "Loyola Chicago",
+        "Loyola (MD) Greyhounds": "Loyola Maryland",
+        "Miss Valley St Delta Devils": "Mississippi Valley State",
+        "Mt. St. Mary's Mountaineers": "Mount St. Mary's",
+        "N Colorado Bears": "Northern Colorado",
+        "Nicholls St Colonels": "Nicholls",
+        "Prairie View Panthers": "Prairie View A&M",
+        "Sam Houston St Bearkats": "Sam Houston",
+        "SE Missouri St Redhawks": "Southeast Missouri State",
+        "Seattle Redhawks": "Seattle U",
+        "St. Francis (PA) Red Flash": "Saint Francis",
+        "St. Francis BKN Terriers": "St. Francis Brooklyn",
+        "St. Thomas (MN) Tommies": "St. Thomas-Minnesota",
+        "Tenn-Martin Skyhawks": "UT Martin",
+        "Texas A&M-CC Islanders": "Texas A&M-Corpus Christi",
+        "UMKC Kangaroos": "Kansas City"
+      }
+    },
+    {
+      "seat": 2,
+      "league": "ncaaf",
+      "why": "Seat 2's list writes the school by another of its names (a former name, the formal name, or the name without its campus). Its own mascot field is the same as seat 1's for the school, and the generator refuses a seat 2 hand join whose mascot differs.",
+      "joins": {
+        "Appalachian State": "App State",
+        "Connecticut": "UConn",
+        "Louisiana-Lafayette": "Louisiana",
+        "Louisiana-Monroe": "UL Monroe",
+        "Miami (FL)": "Miami",
+        "Mississippi": "Ole Miss",
+        "Sam Houston State": "Sam Houston",
+        "Southern Mississippi": "Southern Miss"
+      }
+    },
+    {
+      "seat": 3,
+      "league": "ncaaf",
+      "why": "Seat 3's board writes the school by another of its names. The board carries no mascot, so each was checked by hand against the school's names on the other seats' lists: one school answers to each.",
+      "joins": {
+        "Appalachian St": "App State",
+        "Central Florida": "UCF",
+        "Connecticut": "UConn",
+        "Louisiana-Lafayette": "Louisiana",
+        "Louisiana-Monroe": "UL Monroe",
+        "Miami Florida": "Miami",
+        "Miami Ohio": "Miami (OH)",
+        "Mississippi": "Ole Miss",
+        "N. Dakota State": "North Dakota State",
+        "North Carolina State": "NC State",
+        "Tex San Antonio": "UTSA"
+      }
+    },
+    {
+      "seat": 4,
+      "league": "ncaaf",
+      "why": "Seat 4's list writes State as St. Each spelling is the school's name and nickname on seat 1's list with that one word shortened.",
+      "joins": {
+        "Youngstown St Penguins": "Youngstown State Penguins"
+      }
+    },
+    {
+      "seat": 4,
+      "league": "ncaaf",
+      "why": "Seat 4's list keeps a nickname seat 1's list does not: Army's Black Knights written Knights, Gardner-Webb's Runnin' Bulldogs written Bulldogs, Long Beach State as the 49ers and FIU as the Golden Panthers (their nicknames before they changed them), Grand Canyon's Lopes written in full as Antelopes, Kentucky State's Thorobreds (seat 1's list gives it no nickname), and UAlbany written Albany with none. Each spelling names one school on seat 1's list and no other.",
+      "joins": {
+        "Albany": "UAlbany",
+        "Kentucky State University Thorobreds": "Kentucky State"
+      }
+    },
+    {
+      "seat": 4,
+      "league": "ncaaf",
+      "why": "Seat 4's list writes the school by another of its names (a former name, the formal name, an abbreviation) and the same nickname as seat 1's list.",
+      "joins": {
+        "Appalachian State Mountaineers": "App State",
+        "Citadel Bulldogs": "The Citadel",
+        "Dixie State Trailblazers": "Utah Tech",
+        "Grambling State Tigers": "Grambling",
+        "Houston Baptist Huskies": "Houston Christian",
+        "LIU Sharks": "Long Island University",
+        "McNeese State Cowboys": "McNeese",
+        "Nicholls State Colonels": "Nicholls",
+        "Presbyterian College Blue Hose": "Presbyterian",
+        "Sam Houston State Bearkats": "Sam Houston",
+        "Southeastern Louisiana Lions": "SE Louisiana",
+        "Southern Mississippi Golden Eagles": "Southern Miss",
+        "Southern University Jaguars": "Southern",
+        "St. Francis (PA) Red Flash": "Saint Francis",
+        "St. Thomas (MN) Tommies": "St. Thomas-Minnesota",
+        "UMass Minutemen": "Massachusetts",
+        "Yale University Bulldogs": "Yale"
+      }
+    }
+  ]
 }
