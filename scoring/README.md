@@ -20,7 +20,9 @@ code, the fixtures, the tests and every reading, a feed is its seat:
 | 4 | the spare, asked on every run |
 
 A feed keeps its seat in every league. Six leagues are offered (`nfl`, `nba`, `mlb`, `nhl`,
-`ncaaf`, `ncaab`), each with all four seats. The table is frozen at load and is part of the
+`ncaaf`, `ncaab`), each with all four seats. Nothing here shows that the four feeds draw on
+independent sources upstream: agreement across seats guards against one feed's error, not against
+an error several feeds copied from one source. The table is frozen at load and is part of the
 program's fingerprint. The only things handed in at runtime are the game (read from the chain),
 the run's clock, a transport, and each seat's key; a test shows that none of them changes which
 seats are asked.
@@ -47,7 +49,10 @@ a game once the game is final, so the hint is the only thing that ties a result 
   a school outside the league's teams also carries on seat 1's list, with one reviewed exception
   (Georgia, whose namesake there is not a school). College football and basketball share each
   school's spellings. `capture/teams-report.txt` lists every hand join and every name that joined
-  nothing.
+  nothing. A league's teams are seat 1's current entries: every team on its NFL and MLB lists; on
+  its NBA and NHL lists, the teams with a current conference (the lists also carry defunct and
+  overseas teams); in college basketball, the Division I schools (the entries with a conference);
+  in college football, every entry that names a school.
 * **The window.** A record counts only if the feed's own game time for it is inside
   `[start, start + n)`, the game's n and nothing else. The start instant is in; the end is open,
   so a game at the same clock time the next day is out. The start is the scheduled start, taken

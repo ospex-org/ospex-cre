@@ -37,9 +37,13 @@ export interface Game {
 export interface Reading {
 	readonly seat: Seat;
 	readonly kind: "silent" | "no_final" | "final";
-	/** The home team's points, by team (never by the feed's slot); null when the feed gave none. */
+	/**
+	 * The home team's points; null when the feed gave none. At seats 1, 2 and 4 they are matched to
+	 * the team by its name, never by the feed's home slot. Seat 3's results carry no names, so its
+	 * points are the feed's own home slot, tied to the game by the hint (see readers/seat3.ts).
+	 */
 	readonly home: number | null;
-	/** The away team's points, by team; null when the feed gave none. */
+	/** The away team's points, the same way; null when the feed gave none. */
 	readonly away: number | null;
 	/** Postponed or cancelled, where the feed records it. Recorded only: it decides nothing. */
 	readonly recorded: "postponed" | "canceled" | null;

@@ -7,7 +7,7 @@
 // feed answers for that id (about five days after the game; older ids answer nothing). No seat 3
 // hint, two different ones, or one that is not a seat 3 id, and the seat is silent without asking.
 //
-// What that means for the two never-lines this seat cannot check itself:
+// What that means for the two rules this seat cannot check itself:
 //   by team   The result has no team names, so its points are read in the feed's own home and
 //             away order. The hint binds that order to the game; checking the binding against
 //             the feed's board while the game is listed (teams in the game's own home and away
