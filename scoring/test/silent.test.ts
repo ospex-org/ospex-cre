@@ -85,7 +85,7 @@ describe("silent", () => {
 		// Seat 3 has no such bound: it is read by id, and an id it no longer keeps answers [] and
 		// reads silent (see hints.test.ts).
 		const old = { ...lakers.game, start: NOW - 5 * 86400 };
-		const t = saved(NOW);
+		const t = saved(undefined, NOW);
 		const r = readWith(4, old, t.send);
 		expect({ kind: r.kind, detail: r.detail, asked: t.asked.length }).toEqual({ kind: "silent", detail: "past retention", asked: 0 });
 		// The control: inside what it keeps, it asks.

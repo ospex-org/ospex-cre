@@ -67,9 +67,11 @@ export type Derive = (seat: Seat, path: string, body: unknown) => unknown;
 /**
  * A transport over the saved answers as of `asOf` (unix seconds), recording what was asked and
  * what it could not answer. The clock is required: a request asked before and after a game ends
- * has two answers, and a test must say which moment it reads.
+ * has two answers, and a test must say which moment it reads. Tests are not type-checked, so a
+ * missing clock is refused here rather than read as some default moment.
  */
-export function saved(asOf: number, derive?: Derive): Saved {
+export function saved(derive: Derive | undefined, asOf: number): Saved {
+	if (!Number.isFinite(asOf)) throw new Error("saved: the clock is required");
 	const asked: HttpRequest[] = [];
 	const misses: string[] = [];
 	return {
@@ -98,7 +100,7 @@ export function readSaved(
 	now: number,
 	derive?: Derive,
 ): { reading: Reading; asked: HttpRequest[]; misses: string[] } {
-	const t = saved(now, derive);
+	const t = saved(derive, now);
 	const reading = runSync(seat, readerFor(seat)({ game, now, key: KEY }), t.send);
 	return { reading, asked: t.asked, misses: t.misses };
 }

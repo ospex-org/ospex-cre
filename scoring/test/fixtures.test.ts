@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { SEATS } from "../src/table";
-import { INDEX, KEY, ROOT, bytesOf } from "./fixtures";
+import { INDEX, KEY, ROOT, bytesOf, saved } from "./fixtures";
 
 const SCORING = join(import.meta.dir, "..");
 const TABLE = join(SCORING, "src", "table.ts");
@@ -69,6 +69,17 @@ describe("saved answers", () => {
 				}
 			}
 		}
+	});
+
+	test("a test must say which moment it reads: no clock is refused, a clock is served", () => {
+		expect(() => saved(undefined, undefined as unknown as number)).toThrow("the clock is required");
+		expect(() => saved(undefined, Number.NaN)).toThrow("the clock is required");
+		// The control: with a clock, a saved request is answered.
+		const e = INDEX[0];
+		const row = SEATS.find((r) => r.seat === e.seat)!;
+		const t = saved(undefined, Date.parse(e.capturedAt) / 1000);
+		expect(t.send({ url: `https://${row.host}${e.path}`, method: "GET", headers: {} }).status).toBe(e.status);
+		expect(t.misses).toEqual([]);
 	});
 });
 

@@ -43,7 +43,7 @@ describe("each seat reads the real games", () => {
 	test("reading a whole game asks every seat, and each answers as it does alone", () => {
 		for (const c of CASES) {
 			const keys = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
-			const t = saved(c.now);
+			const t = saved(undefined, c.now);
 			const r = readGameSync(c.game, keys, c.now, (req) => {
 				try {
 					return t.send(req);
