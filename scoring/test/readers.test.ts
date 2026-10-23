@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { LEAGUES, readGameSync } from "../src/index";
 import type { Seat } from "../src/types";
-import { CASES, NOW, PENDING } from "./cases";
+import { CASES, PENDING } from "./cases";
 import { KEY, readSaved, saved } from "./fixtures";
 
 const SEATS: Seat[] = [1, 2, 3, 4];
@@ -14,7 +14,7 @@ describe("each seat reads the real games", () => {
 			const want = c.expect[seat];
 			if (want === undefined) continue;
 			test(`seat ${seat}: ${c.name}`, () => {
-				const { reading, misses } = readSaved(seat, c.game, NOW);
+				const { reading, misses } = readSaved(seat, c.game, c.now);
 				expect(misses).toEqual([]);
 				expect({
 					kind: reading.kind,
@@ -24,8 +24,9 @@ describe("each seat reads the real games", () => {
 					detail: reading.detail,
 					id: reading.record?.id ?? null,
 				}).toEqual(want);
-				if (reading.kind === "final") {
-					// A final always rests on a record inside the window.
+				if (reading.kind === "final" && seat !== 3) {
+					// At seats 1, 2 and 4 a final rests on a record inside the window. Seat 3's record
+					// has no time (it is read by hint); never-window.test.ts pins that.
 					expect(reading.record!.time >= c.game.start && reading.record!.time < c.game.start + c.game.n).toBe(true);
 				}
 			});
@@ -42,8 +43,8 @@ describe("each seat reads the real games", () => {
 	test("reading a whole game asks every seat, and each answers as it does alone", () => {
 		for (const c of CASES) {
 			const keys = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
-			const t = saved();
-			const r = readGameSync(c.game, keys, NOW, (req) => {
+			const t = saved(c.now);
+			const r = readGameSync(c.game, keys, c.now, (req) => {
 				try {
 					return t.send(req);
 				} catch {

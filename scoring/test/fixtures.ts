@@ -65,10 +65,11 @@ export interface Saved {
 export type Derive = (seat: Seat, path: string, body: unknown) => unknown;
 
 /**
- * A transport over the saved answers as of `asOf` (unix seconds; by default, the latest answer),
- * recording what was asked and what it could not answer.
+ * A transport over the saved answers as of `asOf` (unix seconds), recording what was asked and
+ * what it could not answer. The clock is required: a request asked before and after a game ends
+ * has two answers, and a test must say which moment it reads.
  */
-export function saved(derive?: Derive, asOf: number = Number.MAX_SAFE_INTEGER): Saved {
+export function saved(asOf: number, derive?: Derive): Saved {
 	const asked: HttpRequest[] = [];
 	const misses: string[] = [];
 	return {
@@ -97,7 +98,7 @@ export function readSaved(
 	now: number,
 	derive?: Derive,
 ): { reading: Reading; asked: HttpRequest[]; misses: string[] } {
-	const t = saved(derive, now);
+	const t = saved(now, derive);
 	const reading = runSync(seat, readerFor(seat)({ game, now, key: KEY }), t.send);
 	return { reading, asked: t.asked, misses: t.misses };
 }

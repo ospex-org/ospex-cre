@@ -123,11 +123,11 @@ describe("never: a final outside the window counts", () => {
 		let read3 = 0;
 		for (const c of CASES) {
 			if (c.expect[3]?.id === undefined || c.expect[3]?.id === null) continue;
-			const { reading } = readSaved(3, c.game, NOW);
+			const { reading } = readSaved(3, c.game, c.now);
 			expect({ case: c.name, record: reading.record }).toEqual({ case: c.name, record: { id: c.expect[3]!.id!, time: null } });
 			read3++;
 		}
-		expect(read3).toBeGreaterThan(0);
+		expect(read3).toBe(9); // five games before they started, four of them again after they ended
 	});
 });
 

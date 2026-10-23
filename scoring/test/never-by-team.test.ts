@@ -9,7 +9,7 @@
 //   2. a feed lists the teams the other way round from the game (a derived answer: the real one
 //      with the feed's home and away blocks swapped whole);
 //   3. a feed's points come as a list, and the list's order is taken for home and away (seat 4
-//      lists home first in all 37 of its saved games, so the real bytes alone cannot catch this;
+//      lists home first in all 55 distinct games across its saved answers, so the real bytes alone cannot catch this;
 //      the derived answer reverses every list).
 //
 // The break that turns this red (pick.ts, readingOf):
@@ -70,13 +70,13 @@ describe("never: read by the home or away slot", () => {
 			for (const seat of SEATS) {
 				const want = c.expect[seat];
 				if (want === undefined) continue;
-				const { reading, misses } = readSaved(seat, turned, NOW);
+				const { reading, misses } = readSaved(seat, turned, c.now);
 				expect(misses).toEqual([]);
 				expect({ case: c.name, seat, ...shape(reading) }).toEqual({ case: c.name, seat, ...want, home: want.away, away: want.home });
 				if (want.kind === "final" && want.home !== want.away) finals++;
 			}
 		}
-		expect(finals).toBe(20); // every final in the cases, at seats 1, 2 and 4
+		expect(finals).toBe(30); // every final in the cases, at seats 1, 2 and 4
 	});
 
 	test("a feed that lists the teams the other way round still reads right", () => {
@@ -85,13 +85,13 @@ describe("never: read by the home or away slot", () => {
 			for (const seat of SEATS) {
 				const want = c.expect[seat];
 				if (want === undefined) continue;
-				const { reading, misses } = readSaved(seat, c.game, NOW, otherWayRound);
+				const { reading, misses } = readSaved(seat, c.game, c.now, otherWayRound);
 				expect(misses).toEqual([]);
 				expect({ case: c.name, seat, ...shape(reading) }).toEqual({ case: c.name, seat, ...want });
 				if (want.kind === "final" && want.home !== want.away) finals++;
 			}
 		}
-		expect(finals).toBe(20); // every final in the cases, at seats 1, 2 and 4
+		expect(finals).toBe(30); // every final in the cases, at seats 1, 2 and 4
 	});
 
 	test("seat 4 pairs points with teams by name, not by place in its list", () => {
@@ -99,12 +99,12 @@ describe("never: read by the home or away slot", () => {
 		for (const c of CASES) {
 			const want = c.expect[4];
 			if (want === undefined) continue;
-			const { reading, misses } = readSaved(4, c.game, NOW, reversedPoints);
+			const { reading, misses } = readSaved(4, c.game, c.now, reversedPoints);
 			expect(misses).toEqual([]);
 			expect({ case: c.name, ...shape(reading) }).toEqual({ case: c.name, ...want });
 			if (want.kind === "final") finals++;
 		}
-		expect(finals).toBe(5);
+		expect(finals).toBe(9);
 	});
 
 	test("a record is the game only when both teams are the game's", () => {
@@ -119,24 +119,20 @@ describe("never: read by the home or away slot", () => {
 	});
 
 	test("seat 3 is read by its hint: its points are the feed's own home and away, whichever way the game was created", () => {
-		// Derived from the real by-id answer for Cleveland at Philadelphia (still to play at capture),
-		// given a final. The game as created and the same game created the other way round, both
-		// under the same seat 3 hint, read the feed's home points as the game's home points.
-		const sixers = CASES.find((c) => c.name.startsWith("nba not final"))!;
-		const id = sixers.expect[3]!.id!;
-		const finished: Derive = (seat, path, body) => {
-			if (seat !== 3 || path !== `/results/${id}`) return body;
-			return (copy(body) as Record<string, unknown>[]).map((r) => ({ ...r, Final: true, FinalType: "Finished", HomeScore: "112", AwayScore: "104" }));
-		};
+		// The real by-id final for Cleveland at Philadelphia, 114-106 to Philadelphia. The game as
+		// created and the same game created the other way round, both under the same seat 3 hint,
+		// read the feed's home points as the game's home points.
+		const sixers = CASES.find((c) => c.name.startsWith("nba final, read after the game"))!;
+		const id = "cc394a49-c3d1-4b8c-bba2-8ebbb8326c09";
 		const turned = { ...sixers.game, home: sixers.game.away, away: sixers.game.home };
 		for (const game of [sixers.game, turned]) {
-			const { reading, misses } = readSaved(3, game, NOW, finished);
+			const { reading, misses } = readSaved(3, game, sixers.now);
 			expect(misses).toEqual([]);
 			expect({ createdHome: game.home, ...shape(reading) }).toEqual({
 				createdHome: game.home,
 				kind: "final",
-				home: 112,
-				away: 104,
+				home: 114,
+				away: 106,
 				recorded: null,
 				detail: "final",
 				id,

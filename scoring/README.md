@@ -80,6 +80,10 @@ bun run typecheck # src/ loads no runtime types, so it cannot name process, fetc
 index keeps paths, never hosts or keys. A test checks every file against its hash, so an edit or a
 line-ending conversion fails the suite; `.gitattributes` marks the folder `-text` for that reason.
 
+A request asked before and after a game ends keeps both answers. Each test case reads at its own
+clock and is served the latest answer captured at or before it, so one game can be read not final
+at one clock and final at a later one, by the same requests.
+
 A fixture marked `pending` stands in for an answer the feed would not give at capture: a league
 the seat's tier refuses, or a league with no finished game in the feed's window. Its reader is
 built against the documented shape.
