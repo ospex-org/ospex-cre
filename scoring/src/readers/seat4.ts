@@ -57,6 +57,8 @@ export function toRecord(e: Record<string, unknown>): FeedRecord | null {
 export function* read(ask: Ask): ReaderRun {
 	const row = leagueRow(ask.game.league);
 	if (row === null) return silent(SEAT, "league not offered");
+	// A clock that isn't a number can't say whether the game is still kept.
+	if (!Number.isFinite(ask.now) || !Number.isFinite(ask.game.start)) return silent(SEAT, "no clock");
 	if (ask.now - ask.game.start > RETENTION) return silent(SEAT, "past retention");
 	const res = jsonOf(yield request(SEAT, `/v4/sports/${encodeURIComponent(row[SEAT])}/scores/?daysFrom=3&dateFormat=iso`, ask.key));
 	if (!res.ok) return silent(SEAT, res.detail);

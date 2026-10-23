@@ -90,7 +90,9 @@ One read of one game, measured over every saved case: seats 1 and 2 ask once per
 page, 2 to 4 requests (three dates for most windows; four when one date's answer runs to two
 pages); seat 3 asks once, or not at all without a hint; seat 4 asks once (two credits on its plan),
 or not at all past 66 hours. The cap is 12 requests per seat per game (`MAX_REQUESTS` in
-`src/run.ts`).
+`src/run.ts`); a window of ten days or less always fits in it at one page a date, and a longer
+one can leave seats 1 and 2 silent for want of requests.
+Each game is read on its own: a slate of games costs the sum.
 
 ## Running
 

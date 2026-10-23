@@ -8,6 +8,8 @@ import type { HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./type
  * ask once per filing date and page (a 24-hour window has two or three dates); the most any saved
  * read needed was 4, one date of college basketball's opening night running to two pages. Twelve
  * leaves room for every date of a window to run to four pages, and stops a feed that pages for ever.
+ * It also bounds the window: a window of ten days or less asks at most 12 dates, and a longer one can
+ * ask more than this allows, so seats 1 and 2 would read it silent.
  */
 export const MAX_REQUESTS = 12;
 

@@ -98,6 +98,14 @@ describe("silent", () => {
 		expect(readSaved(4, lakers.game, NOW).asked.length).toBeGreaterThan(0);
 	});
 
+	test("seat 4 with a clock that isn't a number: silent, and nothing asked", () => {
+		for (const now of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+			const t = saved(undefined, now);
+			const r = runSync(4, readerFor(4)({ game: lakers.game, now, key: KEY }), t.send);
+			expect({ now, kind: r.kind, detail: r.detail, asked: t.asked.length }).toEqual({ now, kind: "silent", detail: "no clock", asked: 0 });
+		}
+	});
+
 	test("a record with no game time the window can hold it to", () => {
 		const iowa = byName("ncaab not final").game;
 		const tba: Derive = (seat, _p, body) => {
