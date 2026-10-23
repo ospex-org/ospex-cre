@@ -85,11 +85,14 @@ describe("team lists", () => {
 	test("every alias on every seat's own list names exactly one team, or is one of the pinned names that are not the league's", () => {
 		const notJoined: Record<string, string[]> = {};
 		for (const [league, seats] of ownLists()) {
+			// Every team holding each comparison form, read straight from the generated list.
+			const holders = new Map<string, string[]>();
+			for (const t of TEAMS[league]) for (const x of t.names) holders.set(normalise(x), [...(holders.get(normalise(x)) ?? []), t.key]);
 			for (const [seat, names] of seats) {
 				for (const n of names) {
-					const holders = TEAMS[league].filter((t) => t.names.some((x) => normalise(x) === normalise(n)));
-					if (holders.length > 1) throw new Error(`${league}: seat ${seat} "${n}" names ${holders.length} teams`);
-					if (holders.length === 1) expect({ league, seat, n, key: resolveTeam(league, n) }).toEqual({ league, seat, n, key: holders[0].key });
+					const keys = [...new Set(holders.get(normalise(n)) ?? [])];
+					if (keys.length > 1) throw new Error(`${league}: seat ${seat} "${n}" names ${keys.length} teams`);
+					if (keys.length === 1) expect({ league, seat, n, key: resolveTeam(league, n) }).toEqual({ league, seat, n, key: keys[0] });
 					else (notJoined[league] ??= []).push(`seat ${seat} ${n}`);
 				}
 			}
