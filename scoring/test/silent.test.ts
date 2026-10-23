@@ -71,7 +71,13 @@ describe("silent", () => {
 		const iowa = byName("ncaab not final").game;
 		const full = (n: number) => JSON.stringify({ status: 200, results: Array.from({ length: 100 }, (_, i) => ({ gameId: n * 1000 + i, status: "scheduled", teams: {} })) });
 		let asked = 0;
-		const r = readWith(2, iowa, () => ({ status: 200, body: full(asked++) }));
+		// The test's own stop, far past the bound: a reader with no bound fails here, at "transport",
+		// instead of paging until the suite is killed.
+		const STOP = 100;
+		const r = readWith(2, iowa, () => {
+			if (asked >= STOP) throw new Error("the test's own stop");
+			return { status: 200, body: full(asked++) };
+		});
 		expect(r).toMatchObject({ kind: "silent", detail: "request bound" });
 		expect(asked).toBe(MAX_REQUESTS);
 		// The control: the real two-page answer for 2 Nov is read through to its second page.

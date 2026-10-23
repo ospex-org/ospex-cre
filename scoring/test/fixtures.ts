@@ -68,10 +68,12 @@ export type Derive = (seat: Seat, path: string, body: unknown) => unknown;
  * A transport over the saved answers as of `asOf` (unix seconds), recording what was asked and
  * what it could not answer. The clock is required: a request asked before and after a game ends
  * has two answers, and a test must say which moment it reads. Tests are not type-checked, so a
- * missing clock is refused here rather than read as some default moment.
+ * missing clock is refused here rather than read as some default moment. Any number is a
+ * clock, an unreadable one included: a test of a program that must refuse such a clock hands
+ * the same one to its transport.
  */
 export function saved(derive: Derive | undefined, asOf: number): Saved {
-	if (!Number.isFinite(asOf)) throw new Error("saved: the clock is required");
+	if (typeof asOf !== "number") throw new Error("saved: the clock is required");
 	const asked: HttpRequest[] = [];
 	const misses: string[] = [];
 	return {

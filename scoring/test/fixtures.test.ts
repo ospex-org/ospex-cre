@@ -71,9 +71,12 @@ describe("saved answers", () => {
 		}
 	});
 
-	test("a test must say which moment it reads: no clock is refused, a clock is served", () => {
+	test("a test must say which moment it reads: a missing clock is refused, a clock is served", () => {
 		expect(() => saved(undefined, undefined as unknown as number)).toThrow("the clock is required");
-		expect(() => saved(undefined, Number.NaN)).toThrow("the clock is required");
+		expect(() => saved(undefined, "2026-10-22T17:30:00Z" as unknown as number)).toThrow("the clock is required");
+		// An unreadable number is still a clock: a test of a program that must refuse one hands the
+		// same clock to its transport and expects nothing to be asked.
+		expect(() => saved(undefined, Number.NaN)).not.toThrow();
 		// The control: with a clock, a saved request is answered.
 		const e = INDEX[0];
 		const row = SEATS.find((r) => r.seat === e.seat)!;
