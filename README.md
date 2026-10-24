@@ -31,16 +31,17 @@ three request types, the report ABI contract, the determinism rules, and simulat
 | `oracle/config.*.example.json` | per-target config templates — copy to `config.*.json` and fill |
 | `oracle/workflow.yaml`, `project.yaml` | CRE CLI target settings |
 | `secrets.yaml` | secret **names** mapped to env vars (no secret values) |
+| `scoring/` | v3: the scoring program's feed table and its four readers, which import nothing from Chainlink — see [`scoring/README.md`](./scoring/README.md) |
 
 ## Prerequisites
 
 - **[Bun](https://bun.sh)** (package manager + test runner) and the **[CRE CLI](https://docs.chain.link/cre)** (`cre`).
-- A gitignored **`.env`** with the provider API keys: `RAPIDAPI_KEY`, `JSONODDS_KEY`. Never commit real keys.
+- A gitignored **`.env`** with the provider API keys named in [`secrets.yaml`](./secrets.yaml). Never commit real keys.
 - For on-chain CRE registry operations (`cre workflow deploy`, `cre workflow hash`, owner linking):
   - **`ETH_MAINNET_RPC_URL`** — the CRE WorkflowRegistry lives on Ethereum mainnet; it is referenced from
     `project.yaml`. Registry commands fail without it.
   - the workflow **owner address** and a **linked owner key** (or `--public_key`) for registry ownership.
-  - a **Vault secret owner** (the CRE deploy wallet) under which `RAPIDAPI_KEY` / `JSONODDS_KEY` are created
+  - a **Vault secret owner** (the CRE deploy wallet) under which the keys in `secrets.yaml` are created
     with `cre secrets create`.
 
 ## Setup
