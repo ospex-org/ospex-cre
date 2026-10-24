@@ -73,9 +73,16 @@ describe("never: which feeds to ask comes from the table alone", () => {
 			["change the counting seats", () => ((COUNTING as unknown as number[])[0] = 4)],
 			["drop a seat", () => (SEATS as unknown as object[]).pop()],
 		];
-		for (const [what, attempt] of attempts) expect({ what, threw: throws(attempt) }).toEqual({ what, threw: true });
-		expect(SEATS.map((r) => r.seat)).toEqual([1, 2, 3, 4]);
-		expect([...COUNTING]).toEqual([1, 2, 3]);
+		// A write that gets through is put back afterwards, whatever this test's result, so a table left
+		// open can't change what the files run after this one see.
+		const was = structuredClone({ SEATS, LEAGUES, COUNTING });
+		try {
+			for (const [what, attempt] of attempts) expect({ what, threw: throws(attempt) }).toEqual({ what, threw: true });
+			expect(SEATS.map((r) => r.seat)).toEqual([1, 2, 3, 4]);
+			expect([...COUNTING]).toEqual([1, 2, 3]);
+		} finally {
+			putBack({ SEATS, LEAGUES, COUNTING }, was);
+		}
 	});
 
 	test("the keys decide nothing but each seat's key: every seat is read, in table order, whatever is handed in", () => {
@@ -198,6 +205,17 @@ describe("the script's source reaches nothing outside the fingerprint on its own
 		expect(offenders).toEqual([]);
 	});
 });
+
+/** Writes back whatever differs from `was`, a copy taken earlier; nothing, while nothing differs. */
+function putBack(now: Record<string, unknown>, was: Record<string, unknown>): void {
+	if (Array.isArray(now) && Array.isArray(was) && now.length !== was.length) now.length = was.length;
+	for (const k of Object.keys(now)) if (!(k in was)) delete now[k];
+	for (const [k, v] of Object.entries(was)) {
+		const here = now[k];
+		if (typeof v === "object" && v !== null && typeof here === "object" && here !== null) putBack(here as Record<string, unknown>, v as Record<string, unknown>);
+		else if (here !== v) now[k] = v;
+	}
+}
 
 function throws(f: () => void): boolean {
 	try {

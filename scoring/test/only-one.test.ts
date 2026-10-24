@@ -1,15 +1,18 @@
 // Without a hint that names it, a record is the game only when nothing else in the answer could be
 // (src/pick.ts, "only one"): no other record of the two teams inside the window, no record inside it
-// with one of the game's teams beside a name the program can't resolve, and no record of either
-// kind with no game time. Otherwise the seat is silent; a hint that names the game decides.
+// with one of the game's teams beside a name the program can't resolve, no record of either kind
+// with no game time, and no record the lists can't place inside the window and earlier than it.
+// Otherwise the seat is silent; a hint that names the game decides.
 //
 // Real cases first (cases.ts: the doubleheader, the series, the game listed twice), then each shape
 // the rule turns away, built from a real final by changing one thing, with the control beside it that
 // still reads. Seats 1, 2 and 4.
 //
-// The break that turns this red (pick.ts, pick):
+// The breaks that turn this red (pick.ts, pick):
 //   if (chosen.length === 1 && rivals.length === 1) return readingOf(seat, game.league, chosen[0], home);
 //   ->  if (chosen.length >= 1) return readingOf(seat, game.league, chosen[0], home);
+// and, for a record the lists can't place, `|| (unplaced(r) && earlier(r))` removed from `rivals`.
+// Its boundary: `<` made `<=` in `earlier` turns the same-instant control red.
 
 import { describe, expect, test } from "bun:test";
 import type { Game, Seat } from "../src/types";
@@ -183,6 +186,191 @@ describe("only one: a record is read only when nothing else could be the game", 
 	});
 });
 
+describe("only one: a record the lists can't place, earlier in the window, keeps a later final from being read", () => {
+	// A record the lists can't place has neither side resolved, or one of the game's teams beside a
+	// team the feed marks outside the league. Earlier in the window than a record of the game, it may
+	// be the game itself, and the later record the two teams' next game: silent, hinted to it or not.
+	// At the same instant or later it doesn't stop the read, and neither does one with no time (the
+	// saved Morehead State case in cases.ts, beside a game to be announced). A marked team beside a
+	// league team that is not in the game is not such a record: it is no record of the game.
+
+	const respellBoth = (seat: 1 | 2 | 4) => (r: Record<string, unknown>) => {
+		renameAway(seat)(r);
+		if (seat === 1) (r.home_team as Record<string, unknown>).full_name = "L.A. Lakerz";
+		if (seat === 2) ((r.teams as Record<string, Record<string, unknown>>).home).team = "L.A. Lakerz";
+		if (seat === 4) {
+			r.home_team = "L.A. Lakerz";
+			r.scores = (r.scores as Record<string, unknown>[]).map((x) => (x.name === "Los Angeles Lakers" ? { ...x, name: "L.A. Lakerz" } : x));
+		}
+	};
+	const LATER_ID = { 1: "99000001", 2: "99000001", 4: "derived-later" };
+
+	test("both names unknown: the Lakers' final respelt, an hour before a later final of the two teams", () => {
+		for (const seat of [1, 2, 4] as const) {
+			const derive = withLater(seat, respellBoth(seat));
+			expect({ seat, ...read(seat, lakers.game, NOW, derive) }).toMatchObject({ seat, kind: "silent", detail: "ambiguous" });
+			// Hinted to its own record, which now names neither team: the hint is dropped, and the seat
+			// is silent all the same.
+			const own = { ...lakers.game, hints: [{ seat, id: LAKERS[seat].id }] };
+			expect({ seat, ...read(seat, own, NOW, derive) }).toMatchObject({ seat, kind: "silent", detail: "ambiguous" });
+			// The control: a hint naming the later final reads it, as a hint that names the game does.
+			const later = { ...lakers.game, hints: [{ seat, id: LATER_ID[seat] }] };
+			expect({ seat, ...read(seat, later, NOW, derive) }).toMatchObject({ seat, kind: "final", home: 81, away: 79, id: LATER_ID[seat] });
+		}
+	});
+
+	test("both names unknown: the series' night game, before the next afternoon's final", () => {
+		// White Sox at the Cubs, the night of 18 Aug (00:05 UTC on the 19th) and the next afternoon
+		// (18:20 UTC, 0-3), both inside the night game's window. Derived: the night game's record with
+		// both names respelt, or with no names at all. Unhinted, or hinted to that record, the night
+		// game's creation reads silent, never the afternoon's 0-3.
+		const night = byName("mlb series, the night game without hints").game;
+		const ids = { 1: "5059668", 2: "337867" };
+		const unnamed = (seat: 1 | 2, how: "respelt" | "no names"): Derive => (s, _p, body) => {
+			if (s !== seat) return body;
+			const b = copy(body) as Record<string, Record<string, unknown>[]>;
+			for (const g of b[seat === 1 ? "data" : "results"]) {
+				if (String(seat === 1 ? g.id : g.gameId) !== ids[seat]) continue;
+				const teams = g.teams as Record<string, Record<string, unknown>>;
+				const sides = (seat === 1 ? [g.home_team, g.away_team] : [teams.home, teams.away]) as Record<string, unknown>[];
+				const field = seat === 1 ? "display_name" : "team";
+				if (how === "respelt") [sides[0][field], sides[1][field]] = ["Chicago Cubbz", "Chicago White Soks"];
+				else for (const side of sides) delete side[field];
+			}
+			return b;
+		};
+		for (const seat of [1, 2] as const) {
+			for (const how of ["respelt", "no names"] as const) {
+				for (const hints of [[], [{ seat, id: ids[seat] }]]) {
+					const hinted = hints.length > 0;
+					expect({ seat, how, hinted, ...read(seat, { ...night, hints }, MID, unnamed(seat, how)) }).toMatchObject({ seat, how, hinted, kind: "silent", detail: "ambiguous" });
+				}
+			}
+		}
+	});
+
+	// Kentucky's real 20 Mar final (16:15 UTC, 89-84 against Santa Clara), asked for as Kentucky
+	// against Georgia. Derived: its away team made the University of Georgia, one or both teams
+	// marked outside the league (seat 1's record giving the team no conference id, seat 2's no
+	// conference), and beside it a final of Kentucky and Georgia, both listed as league teams, 80-70.
+	const kentucky = byName("ncaab final, read with seat 1 answering: Santa Clara at Kentucky").game;
+	const vsGeorgia = { ...kentucky, away: "Georgia" };
+	const KENTUCKY = { 1: 2798585, 2: 338824 };
+	// The University of Georgia as each seat lists it: seat 1's own entry, seat 2's name and conference.
+	const GEORGIA = {
+		1: { id: 278, conference_id: 24, name: "Bulldogs", full_name: "Georgia Bulldogs", college: "Georgia", abbreviation: "UGA" },
+		2: { team: "Georgia", location: "Georgia", mascot: "Bulldogs", abbreviation: "UGA", conference: "SEC" },
+	};
+	// "santa clara" keeps the record's own away team, a league team that is not in the game.
+	type Side = "listed" | "marked" | "respelt" | "santa clara";
+	const side = (seat: 1 | 2, how: Side, t: Record<string, unknown>, own: Record<string, unknown>): Record<string, unknown> => {
+		if (how === "santa clara") return own;
+		if (how === "listed") return t;
+		if (how === "respelt") return seat === 1 ? { ...t, full_name: "Kentucky Wildcatz", college: "Kentuckee" } : { ...t, team: "Kentuckee" };
+		if (seat === 1) return { ...t, conference_id: null };
+		const rest = { ...t };
+		delete rest.conference;
+		return rest;
+	};
+	const AT_16 = "2026-03-20T16:15:00.000Z";
+	const AT_19 = "2026-03-20T19:15:00.000Z";
+	/** Kentucky's record with its teams as `sides` say, at `own`; the final of the two teams at `final`. */
+	const withGeorgia = (seat: 1 | 2, sides: readonly [Side, Side], own: string, final: string, finalFirst = false): Derive => (s, _p, body) => {
+		if (s !== seat) return body;
+		const b = copy(body) as Record<string, Record<string, unknown>[]>;
+		const list = b[seat === 1 ? "data" : "results"];
+		const record = list.find((g) => (seat === 1 ? g.id : g.gameId) === KENTUCKY[seat]);
+		if (record === undefined) return b;
+		const later = copy(record);
+		if (seat === 1) {
+			Object.assign(later, { id: 99_000_001, date: final, visitor_team: GEORGIA[1], home_score: 80, away_score: 70 });
+			const away = record.visitor_team as Record<string, unknown>;
+			Object.assign(record, { date: own, home_team: side(1, sides[0], record.home_team as Record<string, unknown>, away), visitor_team: side(1, sides[1], GEORGIA[1], away) });
+		} else {
+			const teams = record.teams as Record<string, Record<string, unknown>>;
+			Object.assign(later, { gameId: 99_000_001, schedule: { date: final, tbaTime: false }, teams: { home: teams.home, away: GEORGIA[2] }, scoreboard: { currentPeriod: 2, score: { home: 80, away: 70 } } });
+			Object.assign(record, { schedule: { date: own, tbaTime: false }, teams: { home: side(2, sides[0], teams.home, teams.away), away: side(2, sides[1], GEORGIA[2], teams.away) } });
+		}
+		if (finalFirst) list.unshift(later);
+		else list.push(later);
+		return b;
+	};
+
+	test("a team marked outside the league: Kentucky against Georgia three hours before a final of the two", () => {
+		const shapes: readonly [string, readonly [Side, Side]][] = [
+			["Georgia marked", ["listed", "marked"]],
+			["Kentucky marked", ["marked", "listed"]],
+			["both marked", ["marked", "marked"]],
+			["Kentucky respelt, Georgia marked", ["respelt", "marked"]],
+		];
+		for (const seat of [1, 2] as const) {
+			for (const [what, sides] of shapes) {
+				for (const finalFirst of [false, true]) {
+					const reading = read(seat, vsGeorgia, MID, withGeorgia(seat, sides, AT_16, AT_19, finalFirst));
+					expect({ seat, what, finalFirst, ...reading }).toMatchObject({ seat, what, finalFirst, kind: "silent", detail: "ambiguous" });
+				}
+			}
+			// Hinted to Kentucky's own record with Georgia marked: the hint names no record of the two
+			// teams and is dropped, and the seat is silent all the same.
+			const hinted = { ...vsGeorgia, hints: [{ seat, id: String(KENTUCKY[seat]) }] };
+			expect({ seat, ...read(seat, hinted, MID, withGeorgia(seat, ["listed", "marked"], AT_16, AT_19)) }).toMatchObject({ seat, kind: "silent", detail: "ambiguous" });
+		}
+	});
+
+	test("the controls: at the same instant as the game's record or later, or beside a team not in the game, the read stands", () => {
+		// The real record of West Florida against Southeastern Baptist, two schools outside Division I
+		// (seat 1 marks both; seat 2 gives West Florida a conference and a name the lists don't know,
+		// and Southeastern Baptist no conference), is at 23:00 on 2 Nov, before Memphis at Iowa State's
+		// window. Derived: moved to Iowa State's own instant, 00:00 on 3 Nov, and to 00:30. Iowa State
+		// reads at both.
+		const iowa = byName("ncaab not final, read with seat 1 answering: Memphis at Iowa State").game;
+		const ids = { 1: { other: 10882497, own: "10882536" }, 2: { other: 342404, own: "341752" } };
+		const moved = (seat: 1 | 2, iso: string): Derive => (s, _p, body) => {
+			if (s !== seat) return body;
+			const b = copy(body) as Record<string, Record<string, unknown>[]>;
+			for (const g of b[seat === 1 ? "data" : "results"]) {
+				if ((seat === 1 ? g.id : g.gameId) !== ids[seat].other) continue;
+				if (seat === 1) g.date = iso;
+				else g.schedule = { date: iso, tbaTime: false };
+			}
+			return b;
+		};
+		for (const seat of [1, 2] as const) {
+			for (const iso of ["2026-11-03T00:00:00.000Z", "2026-11-03T00:30:00.000Z"]) {
+				expect({ seat, iso, ...read(seat, iowa, MID, moved(seat, iso)) }).toMatchObject({ seat, iso, kind: "no_final", detail: "scheduled", id: ids[seat].own });
+			}
+			// Kentucky against Georgia with Georgia marked, three hours after the final of the two
+			// teams rather than before it: the final reads.
+			const after = withGeorgia(seat, ["listed", "marked"], AT_19, AT_16);
+			expect({ seat, ...read(seat, vsGeorgia, MID, after) }).toMatchObject({ seat, kind: "final", home: 80, away: 70, id: "99000001" });
+			// A team marked outside beside Santa Clara, a league team that is not in the game, three
+			// hours before the final, whichever side is marked: no record of the game, and the final
+			// reads.
+			for (const sides of [["marked", "santa clara"], ["santa clara", "marked"]] as const) {
+				expect({ seat, sides, ...read(seat, vsGeorgia, MID, withGeorgia(seat, sides, AT_16, AT_19)) }).toMatchObject({ seat, sides, kind: "final", home: 80, away: 70, id: "99000001" });
+			}
+		}
+		// The Lakers' final with a respelt copy an hour after it, at seats 1, 2 and 4: the final reads.
+		// Seat 4's answer also lists the two teams' game of 31 Oct, after the window: a record of the
+		// two teams outside the window is no record the respelt one can be earlier than.
+		for (const seat of [1, 2, 4] as const) {
+			const respeltAfter: Derive = (s, _p, body) => {
+				if (s !== seat) return body;
+				const b = copy(body);
+				const list = LAKERS[seat].find(b);
+				const own = list.find((r) => idOf(seat, r) === LAKERS[seat].id);
+				if (own) {
+					const g = laterFinal(seat, own);
+					respellBoth(seat)(g);
+					list.push(g);
+				}
+				return b;
+			};
+			expect({ seat, ...read(seat, lakers.game, NOW, respeltAfter) }).toMatchObject({ seat, kind: "final", home: 127, away: 105, id: LAKERS[seat].id });
+		}
+	});
+});
+
 describe("only one: what can't be the game doesn't stop a reading", () => {
 	test("a record whose two names both fail to resolve names neither team", () => {
 		// Seat 2's real 2 Nov answer holds Southeastern Baptist College at West Florida, two schools
@@ -192,7 +380,8 @@ describe("only one: what can't be the game doesn't stop a reading", () => {
 		expect(read(2, { ...iowa, start: iowa.start + 1, n: 3600 }, NOW)).toMatchObject({ kind: "no_final", detail: "outside window", id: "341752" });
 		expect(read(2, { ...iowa, home: "Duke", away: "North Carolina" }, NOW)).toMatchObject({ kind: "no_final", detail: "absent" });
 		// That record is at 23:00 on 2 Nov, before both windows. Derived: moved to 00:30 on 3 Nov, inside
-		// them. It still names neither team: Iowa State reads, and the game the answer lacks is absent.
+		// them and after Iowa State's record. It still names neither team: Iowa State reads, and the
+		// game the answer lacks is absent.
 		const inside: Derive = (seat, _p, body) => {
 			if (seat !== 2) return body;
 			const b = copy(body) as { results: Record<string, unknown>[] };

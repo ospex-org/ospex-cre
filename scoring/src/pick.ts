@@ -19,9 +19,17 @@
 //   only one  Without a hint that names it, a record is the game only when nothing else in the
 //             answer could be: no other record of the two teams inside the window (a doubleheader,
 //             or the next game of a series), no record inside the window with one of the game's
-//             teams beside a name the program can't resolve, and no record of either kind
-//             without a game time, which can't be placed outside the window. Any of them, and
-//             the feed is silent: it can't be said which record is the game.
+//             teams beside a name the program can't resolve, no record of either kind without a
+//             game time, which can't be placed outside the window, and no record the lists can't
+//             place inside the window and earlier than it. Any of them, and the feed is silent: it
+//             can't be said which record is the game.
+//
+//             A record the lists can't place has neither side resolved (a name the program can't
+//             resolve, or a team the feed marks outside the league), or one of the game's teams
+//             beside a team marked outside. Earlier in the window, it may be the game itself,
+//             listed in a way the lists don't know, and the record after it the two teams' next
+//             game. At the same instant as the record or later, or with no time, it doesn't stop
+//             the read.
 //
 // "Absent" (answered, no record of the game) is said only when the answer rules the game out:
 // every date asked answered with at least one record, nothing in the window could be the game (a
@@ -110,7 +118,8 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[]): Read
 		return (unknown(r, 0) && (b === home || b === away)) || (unknown(r, 1) && (a === home || a === away));
 	};
 	// Both sides unknown: it names neither team as the program knows them, but it could be the game
-	// respelt. It can't stop a reading, only keep the feed from saying the game is absent.
+	// respelt. Inside the window it keeps the feed from saying the game is absent; earlier than a
+	// record of the game, it also stops that record being read (see `unplaced`).
 	const respelt = (r: FeedRecord): boolean => unknown(r, 0) && unknown(r, 1);
 	const w = windowOf(game);
 	const inside = (r: FeedRecord): boolean => r.time !== null && inWindow(r.time, w);
@@ -140,8 +149,19 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[]): Read
 		}
 	}
 	const records = [...byId.values()];
-	// Anything that could be the game: in the window, or with no time to place it outside.
-	const rivals = records.filter((r) => (isGame(r) || mayBe(r)) && (r.time === null || inside(r)));
+	const games = records.filter(isGame);
+	const chosen = games.filter(inside);
+	// A record the lists can't place: neither side resolved, or one of the game's teams beside a team
+	// the feed marks outside the league.
+	const unplaced = (r: FeedRecord): boolean => {
+		const [a, b] = keysOf(r);
+		if (a === null && b === null) return true;
+		return (r.teams[0].outside === true && (b === home || b === away)) || (r.teams[1].outside === true && (a === home || a === away));
+	};
+	const earlier = (r: FeedRecord): boolean => inside(r) && chosen.some((c) => (r.time as number) < (c.time as number));
+	// Anything that could be the game: in the window, or with no time to place it outside; and a
+	// record the lists can't place, inside the window and earlier than a record of the game.
+	const rivals = records.filter((r) => ((isGame(r) || mayBe(r)) && (r.time === null || inside(r))) || (unplaced(r) && earlier(r)));
 
 	const hinted = [...new Set(game.hints.filter((h) => h.seat === seat).map((h) => h.id))];
 	if (hinted.length > 1) return silent(seat, "two hints");
@@ -155,8 +175,6 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[]): Read
 		}
 	}
 
-	const games = records.filter(isGame);
-	const chosen = games.filter(inside);
 	if (chosen.length === 1 && rivals.length === 1) return readingOf(seat, game.league, chosen[0], home);
 	if (chosen.length > 0) return silent(seat, "ambiguous");
 	if (records.some((r) => (isGame(r) || mayBe(r) || respelt(r)) && r.time === null)) return silent(seat, "no game time");

@@ -61,9 +61,14 @@ a game once the game is final, so the hint is the only thing that ties a result 
 * **Only one.** Without a hint that names it, a record is the game only when nothing else in the
   answer could be: no other record of the two teams inside the window (a doubleheader, or the next
   game of a series), no record inside the window with one of the game's teams beside a name the
-  lists don't know, and no such record without a game time. Otherwise the seat is silent. A record
-  whose two names both fail to resolve can't stop a reading, but inside the window it keeps the seat
-  from saying the game is absent: it could be the game, respelt.
+  lists don't know, no such record without a game time, and no record the lists can't place inside
+  the window and earlier than it. Otherwise the seat is silent. A record the lists can't place has
+  neither side resolved (a name the lists don't know, or a team the feed marks outside the league),
+  or one of the game's teams beside a team marked outside. Earlier in the window, it may be the game
+  itself, listed in a way the lists don't know, and the record after it the two teams' next game. At
+  the same instant or later, or with no time, it doesn't stop the read. A record whose two names
+  both fail to resolve also keeps the seat from saying the game is absent while it is inside the
+  window: it could be the game, respelt.
 * **Hints, seats 1, 2 and 4.** A creation hint names a feed's own id for the game, and only chooses
   among records that pass both tests above: the game's two teams, and a time inside the window. A
   hinted record that passes both is read, whatever else is in the window; one that fails either is
