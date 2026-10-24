@@ -77,14 +77,15 @@ describe("never: the hour-24 void while any answering feed shows a final", () =>
 			return { action: o.decision.action, kind: o.report?.kind ?? null, readings: o.report?.readings.map((r) => [r.seat, r.kind]) ?? null };
 		};
 		expect(out()).toEqual({ action: "void", kind: 3, readings: [[1, 1], [2, 1], [3, 0], [4, 0]] });
-		// Derived from the real answer: seat 2 marks the rained-out game final, 3-1.
+		// Derived from the real answer: seat 2 marks the rained-out game final, 3-1, after nine innings
+		// (a final needs the feed's period count to reach the league's regulation).
 		const seat2Final: Derive = (s, p, body) => {
 			if (s !== 2 || !p.includes("league=MLB")) return body;
 			const b = copy(body) as { results: Record<string, any>[] };
 			for (const g of b.results) {
 				if (g.gameId === 336995) {
 					g.status = "final";
-					g.scoreboard = { score: { home: 3, away: 1 } };
+					g.scoreboard = { currentPeriod: 9, score: { home: 3, away: 1 } };
 				}
 			}
 			return b;
