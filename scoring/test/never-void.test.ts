@@ -93,7 +93,7 @@ describe("never: the hour-24 void while any answering feed shows a final", () =>
 		expect(out(seat2Final)).toEqual({ action: "dispute", kind: 4, readings: [[1, 1], [2, 2], [3, 0], [4, 0]] });
 	});
 
-	test("the rainout's case is real: its game sits in D1's cases with the readings the void rests on", () => {
+	test("the rainout's case is real: its game sits in the readers' cases with the readings the void rests on", () => {
 		const c = CASES.find((x) => x.name.startsWith("mlb postponed"))!;
 		expect([c.expect[1]?.detail, c.expect[2]?.detail, c.expect[4]?.detail]).toEqual(["postponed", "canceled", "past retention"]);
 	});

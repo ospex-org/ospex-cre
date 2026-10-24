@@ -44,7 +44,7 @@ export function* everyFour(): Generator<readonly [State, State, State, State]> {
 
 export const SEATS4: readonly Seat[] = [1, 2, 3, 4];
 
-/** A real game from D1's cases, as the chain would hold it once verified. */
+/** A real game from the readers' cases (test/cases.ts), as the chain would hold it once verified. */
 export function chainOf(caseName: string, over: Partial<ChainGame> = {}): ChainGame {
 	const c = CASES.find((x) => x.name.startsWith(caseName));
 	if (!c) throw new Error(`no case ${caseName}`);

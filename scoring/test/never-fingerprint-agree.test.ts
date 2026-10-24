@@ -2,15 +2,20 @@
 // fingerprint. Only the keys and the payout address come from outside, and neither can touch the
 // score."
 //
-// D1's never-fingerprint.test.ts holds which feeds are asked. This file holds the rest: how many
-// must agree, which seats count, and the two things that do come from outside. A key decides only
-// whether its own seat can be read; a missing key is a silent seat on that run, never a seat that
-// stops counting. The payout lands in the report's payout field and nowhere else.
+// never-fingerprint.test.ts holds which feeds are asked. This file holds the rest: how many must
+// agree, which seats count, and the two things that do come from outside. A key decides only
+// whether the run can read at all: a seat whose key is missing, or whose feed refuses it (401, 403,
+// 429), makes the run decide nothing. It is never a silent seat, which would let a key choose
+// between a score, a dispute and a void, and never a seat that stops counting. The payout lands in
+// the report's payout field and nowhere else.
 //
-// The break that turns this red (program.ts, plan):
-//   const down = silentForGame(game);
-//   ->  const down = keyFor(keys, 3) === null ? 3 : silentForGame(game);
-// (a missing key would stand seat 3 down for the game and let the spare count in its place).
+// The breaks that turn this red (program.ts):
+//   if (typeof k === "number") return nothing(`seat ${k} has no key`);
+//   ->  if (false) return nothing(`seat ${k} has no key`);
+// (a missing key would read as no key at all, and the seat would be asked anyway), and
+//   if (status !== null) return refusedKey(job, status);
+//   ->  (deleted, in scoreGameSync)
+// (a refused key would read as a silent seat, and the run would decide on the others).
 
 import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../src/chain";
@@ -18,8 +23,8 @@ import { scoreGameSync } from "../src/program";
 import { AGREE } from "../src/rule";
 import { START_SPREAD } from "../src/verify";
 import type { Keys } from "../src/index";
-import { NOW } from "./cases";
-import { KEY, copy, saved, type Derive } from "./fixtures";
+import { LATE, NOW } from "./cases";
+import { KEY, copy, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, chainOf } from "./rule-helpers";
 
 // Golden State at the Lakers, 127-105, inside its window at the suite's clock, as if created with a
@@ -46,6 +51,14 @@ function outcome(game: ChainGame, keys: Keys, payout = PAYOUT) {
 	return { action: o.decision.action, why: o.decision.why, report: o.report };
 }
 
+/** One run at a clock, the answers as of NOW; `refuse` answers that seat with `status`. Reports what was asked, by seat. */
+function run(game: ChainGame, keys: Keys, now: number, refuse?: number, status = 401) {
+	const t = saved(seat3Final, NOW);
+	const o = scoreGameSync(game, keys, PAYOUT, now, (q) => (refuse !== undefined && locate(q)?.seat === refuse ? { status, body: "" } : t.send(q)));
+	expect(t.misses).toEqual([]);
+	return { action: o.decision.action, why: o.decision.why, report: o.report, asked: t.asked.length, seats: t.asked.map((q) => locate(q)!.seat) };
+}
+
 describe("never: how many must agree, or which seats count, from outside the fingerprint", () => {
 	test("the counts are the spec's, fixed in the source, and nothing at runtime writes to them", () => {
 		expect({ ...AGREE }).toEqual({ insideN: 3, afterN: 2, day7Sources: 4, day7Agree: 3 });
@@ -60,14 +73,96 @@ describe("never: how many must agree, or which seats count, from outside the fin
 		expect({ ...AGREE }).toEqual({ insideN: 3, afterN: 2, day7Sources: 4, day7Agree: 3 });
 	});
 
-	test("a missing key is a silent seat on that run; it never stops a seat counting or lets the spare in", () => {
-		expect(outcome(lakers3, ALL).action).toBe("score");
-		// Seat 3's key missing: seat 3 is silent, and inside n a silent counting seat blocks. The
-		// spare's agreeing final does not stand in for it: the seat is not silent for the game.
-		const no3 = outcome(lakers3, { 1: KEY, 2: KEY, 4: KEY });
-		expect({ action: no3.action, why: no3.why }).toEqual({ action: "wait", why: "inside n: a counting seat is silent" });
-		// The control: the same game created without a seat 3 hint has seat 3 silent for the game, and there the spare counts.
-		expect(outcome({ ...lakers3, hints: [] }, { 1: KEY, 2: KEY, 4: KEY }).action).toBe("score");
+	test("a missing key decides nothing, at every state and for every seat, before any request is sent", () => {
+		// Four states, each decided with every key: verification, inside n, after n and day 7.
+		const verifying: ChainGame = { ...chainOf("nfl not final"), status: "unverified", start: null, startReadings: null };
+		const after = lakers3.start! + lakers3.n + 60;
+		const disputed: ChainGame = {
+			...lakers3,
+			status: "disputed",
+			dispute: { at: NOW - 7 * 86_400, readings: [1, 2, 3, 4].map((seat) => ({ seat, kind: 2 as const, homeScore: 127, awayScore: 105 })) },
+		};
+		const states: [string, ChainGame, number, string][] = [
+			["verification", verifying, NOW, "start"],
+			["inside n", lakers3, NOW, "score"],
+			["after n", lakers3, after, "score"],
+			["day 7", disputed, NOW, "score"],
+		];
+		for (const [state, game, now, decided] of states) {
+			const all = run(game, ALL, now);
+			expect({ state, got: [all.action, all.asked > 0] }).toEqual({ state, got: [decided, true] });
+			for (const seat of [1, 2, 3, 4] as const) {
+				const keys: Record<number, string> = { ...ALL };
+				delete keys[seat];
+				const o = run(game, keys, now);
+				expect({ state, seat, got: [o.action, o.why, o.report, o.asked] }).toEqual({ state, seat, got: ["wait", `seat ${seat} has no key`, null, 0] });
+			}
+		}
+		// A key that is there but empty, or not text, is no key.
+		for (const bad of ["", 7, null]) {
+			const o = run(lakers3, { ...ALL, 2: bad } as unknown as Keys, NOW);
+			expect({ bad, got: [o.action, o.why, o.asked] }).toEqual({ bad, got: ["wait", "seat 2 has no key", 0] });
+		}
+	});
+
+	test("a key the feed refuses (401, 403, 429) decides nothing, and nothing more is asked; any other failure is a silent seat", () => {
+		const after = lakers3.start! + lakers3.n + 60;
+		for (const status of [401, 403, 429]) {
+			for (const seat of [1, 2, 3, 4] as const) {
+				const o = run(lakers3, ALL, after, seat, status);
+				expect({ status, seat, got: [o.action, o.why, o.report] }).toEqual({ status, seat, got: ["wait", `seat ${seat}'s key was refused: http ${status}`, null] });
+				// The refusal ends the run: no seat after it is asked.
+				expect({ status, seat, later: o.seats.filter((s) => s > seat) }).toEqual({ status, seat, later: [] });
+			}
+		}
+		// The control: a feed that fails another way is silent on that run, and after n two finals beside it score.
+		for (const status of [404, 500, 503]) {
+			const o = run(lakers3, ALL, after, 2, status);
+			expect({ status, got: [o.action, o.why] }).toEqual({ status, got: ["score", "after n: two counting seats or more, the same final, the rest silent"] });
+		}
+	});
+
+	test("the three runs a key used to decide: each waits without the key, and the dispute stands with it", () => {
+		// Cleveland at Philadelphia, read after the game: seats 1 to 3 114-106.
+		const sixers = chainOf("nba final, read after the game");
+		const sixersAt = (now: number, keys: Keys, derive: Derive, refuse?: number) => {
+			const t = saved(derive, LATE);
+			const o = scoreGameSync(sixers, keys, PAYOUT, now, (q) => (refuse !== undefined && locate(q)?.seat === refuse ? { status: 401, body: "" } : t.send(q)));
+			expect(t.misses).toEqual([]);
+			return [o.decision.action, o.decision.why];
+		};
+		const without = (seat: number): Keys => Object.fromEntries(Object.entries(ALL).filter(([s]) => Number(s) !== seat));
+		// Inside n, the spare dissents, 115-107: every seat shows a final, so the record is posted.
+		const spareOff: Derive = (s, p, b) =>
+			s === 4 && p.includes("basketball_nba")
+				? (copy(b) as Record<string, any>[]).map((g) => (g.id === "110e33c79c5ec8c0377702aff685f83b" ? { ...g, scores: g.scores.map((x: Record<string, unknown>) => ({ ...x, score: String(Number(x.score) + 1) })) } : g))
+				: b;
+		expect(sixersAt(LATE, ALL, spareOff)).toEqual(["dispute", "two finals differ"]);
+		expect(sixersAt(LATE, without(4), spareOff)).toEqual(["wait", "seat 4 has no key"]);
+		expect(sixersAt(LATE, ALL, spareOff, 4)).toEqual(["wait", "seat 4's key was refused: http 401"]);
+		// After n, seat 2 dissents, 115-106.
+		const afterN = sixers.start! + sixers.n;
+		const seat2Off: Derive = (s, p, b) => {
+			if (s !== 2 || !p.startsWith("/games?league=NBA")) return b;
+			const c = copy(b) as { results: Record<string, any>[] };
+			for (const g of c.results) if (g.gameId === 340484) g.scoreboard.score.home = 115;
+			return c;
+		};
+		expect(sixersAt(afterN, ALL, seat2Off)).toEqual(["dispute", "two finals differ"]);
+		expect(sixersAt(afterN, without(2), seat2Off)).toEqual(["wait", "seat 2 has no key"]);
+		expect(sixersAt(afterN, ALL, seat2Off, 2)).toEqual(["wait", "seat 2's key was refused: http 401"]);
+		// After n, the same game not yet final at seats 1 and 2, and final at seat 3: a dispute, never a void.
+		const notFinal = chainOf("nba not final");
+		const seat3Final: Derive = (s, p, b) =>
+			s === 3 && p === `/results/${SEAT3_ID}` ? (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, Final: true, FinalType: "Finished", HomeScore: "114", AwayScore: "106" })) : b;
+		const at3 = (keys: Keys) => {
+			const t = saved(seat3Final, NOW);
+			const o = scoreGameSync(notFinal, keys, PAYOUT, notFinal.start! + notFinal.n, t.send);
+			expect(t.misses).toEqual([]);
+			return [o.decision.action, o.decision.why];
+		};
+		expect(at3(ALL)).toEqual(["dispute", "after n: finals beside answers without a final"]);
+		expect(at3(without(3))).toEqual(["wait", "seat 3 has no key"]);
 	});
 
 	test("nothing handed in beside the keys, and nothing riding on the game object, changes a decision", () => {

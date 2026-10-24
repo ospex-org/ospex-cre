@@ -63,6 +63,16 @@ describe("never: a score on fewer than two agreeing finals, fewer than three ins
 		expect(scores).toEqual({ inside: 12, after: 48 });
 	});
 
+	test("one seat's reading given three times is one reading: three finals all labelled seat 1 wait, inside n and after", () => {
+		const three = [reading(1, "A"), { ...reading(1, "A") }, { ...reading(1, "A") }];
+		const inside = decide(three, [1, 2, 3], true);
+		const after = decide(three, [1, 2, 3], false);
+		expect([inside.action, inside.why, after.action, after.why]).toEqual(["wait", "inside n: a counting seat is silent", "wait", "after n: fewer than two counting seats answer"]);
+		// The control: the same final at seats 1, 2 and 3 scores, inside n and after.
+		const real = [reading(1, "A"), reading(2, "A"), reading(3, "A")];
+		expect([decide(real, [1, 2, 3], true).action, decide(real, [1, 2, 3], false).action]).toEqual(["score", "score"]);
+	});
+
 	test("the edges, by name: what scores, what waits, and what is a disagreement", () => {
 		const d = (counting: readonly Seat[], inside: boolean, states: readonly State[]) => {
 			const r = decide(SEATS4.map((s, i) => reading(s, states[i])), counting, inside);
@@ -78,7 +88,7 @@ describe("never: a score on fewer than two agreeing finals, fewer than three ins
 			[[1, 2, 3], true, ["A", "A", "silent", "A"], "wait"], // a silent counting seat blocks; the spare does not stand in for it
 			[[1, 2, 3], true, ["A", "A", "none", "A"], "wait"], // a seat still without a final, inside n: wait
 			[[1, 2, 3], true, ["A", "A", "A", "B"], "dispute"], // the spare's final disagrees
-			[[1, 2, 3], true, ["A", "B", "silent", "silent"], "dispute"],
+			[[1, 2, 3], true, ["A", "B", "silent", "silent"], "wait"], // two finals differ, but not every seat has one yet (dispute.test.ts)
 			// After n: two, the third silent.
 			[[1, 2, 3], false, ["A", "A", "silent", "silent"], A],
 			[[1, 2, 3], false, ["silent", "A", "A", "none"], A], // the spare's answer without a final blocks nothing

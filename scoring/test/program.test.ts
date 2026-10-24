@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../src/chain";
 import { scoreGameAsync, scoreGameSync } from "../src/program";
 import { silentForGame } from "../src/rule";
-import { CASES, NOW } from "./cases";
+import { CASES, LATE, NOW } from "./cases";
 import { KEY, at, copy, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, chainOf } from "./rule-helpers";
 
@@ -47,22 +47,44 @@ describe("one run", () => {
 		}
 	});
 
-	test("a seat with no key is still in the report: silent, one reading per seat asked", () => {
+	test("a seat with no key decides nothing and asks nothing, even a seat silent for the game; with every key, the run scores", () => {
 		const g = chainOf("nba final");
 		const after = g.start! + g.n + 60;
 		const t = saved(undefined, after);
-		const o = scoreGameSync(g, { 1: KEY, 2: KEY }, PAYOUT, after, t.send);
-		expect(t.misses).toEqual([]);
-		expect([o.report?.kind, o.report?.readings.map((r) => [r.seat, r.kind])]).toEqual([
-			2,
-			[
-				[1, 2],
-				[2, 2],
-				[3, 0],
-				[4, 0],
-			],
-		]);
-		expect(o.decision.readings.map((r) => r.detail)).toEqual(["final", "final", "silent for the game", "no key"]);
+		// Seat 3 is silent for this game (created without its hint) and would not be asked, but its key is still required.
+		const o = scoreGameSync(g, { 1: KEY, 2: KEY, 4: KEY }, PAYOUT, after, t.send);
+		expect([o.decision.action, o.decision.why, o.report, t.asked.length]).toEqual(["wait", "seat 3 has no key", null, 0]);
+		const all = scoreGameSync(g, KEYS, PAYOUT, after, saved(undefined, after).send);
+		expect([all.report?.kind, all.report?.readings.map((r) => [r.seat, r.kind])]).toEqual([2, [[1, 2], [2, 2], [3, 0], [4, 2]]]);
+	});
+
+	test("a start report this program could not have written decides nothing: one reading per seat, in seat order, seats 1 and 2 answering", () => {
+		// Cleveland at Philadelphia, read after the game, with seat 3's result derived to 99-106: a start
+		// report that let the run stand seat 3 down would score 114-106 on the spare instead of disputing.
+		const g = chainOf("nba final, read after the game");
+		const seat3Off: Derive = (s, p, b) => (s === 3 && p === "/results/cc394a49-c3d1-4b8c-bba2-8ebbb8326c09" ? (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, HomeScore: "99" })) : b);
+		const four = g.startReadings!;
+		const r = (seat: number, kind: 0 | 1 | 2) => ({ seat, kind, homeScore: 0, awayScore: 0 });
+		const rows: [string, ChainGame["startReadings"]][] = [
+			["no readings", []],
+			["three readings", four.slice(0, 3)],
+			["five readings", [...four, r(4, 1)]],
+			["out of order", [four[1], four[0], four[2], four[3]]],
+			["a seat twice", [four[0], four[0], four[2], four[3]]],
+			["a seat outside the table", [four[0], four[1], four[2], r(5, 1)]],
+			["seat 1 silent", [r(1, 0), four[1], four[2], four[3]]],
+			["seat 2 silent", [four[0], r(2, 0), four[2], four[3]]],
+			["a kind that isn't one of the three", [four[0], four[1], { ...four[2], kind: 3 as unknown as 1 }, four[3]]],
+		];
+		for (const [what, startReadings] of rows) {
+			const t = saved(seat3Off, LATE);
+			const o = scoreGameSync({ ...g, startReadings }, KEYS, PAYOUT, LATE, t.send);
+			expect({ what, got: [o.decision.action, o.decision.why, t.asked.length] }).toEqual({ what, got: ["wait", "no start report on chain", 0] });
+		}
+		// The control: the four readings verification writes, which read, and the dissent at seat 3 is seen.
+		const t = saved(seat3Off, LATE);
+		const o = scoreGameSync(g, KEYS, PAYOUT, LATE, t.send);
+		expect([o.decision.action, o.decision.why]).toEqual(["dispute", "two finals differ"]);
 	});
 
 	test("before the start, nothing is asked", () => {
@@ -143,7 +165,7 @@ describe("one run", () => {
 			}
 		}
 		expect(compared).toBe(CASES.length * 4);
-		// The comparison covered every kind of decision, not one kind sixteen times.
+		// The comparison covered every kind of decision, not one kind every time.
 		expect([...actions].sort()).toEqual(["dispute", "score", "start", "void", "wait"]);
 	});
 
@@ -168,5 +190,47 @@ describe("one run", () => {
 			return saved(undefined, NOW).send(q);
 		});
 		expect([v.decision.action, v.decision.why]).toEqual(["wait", "seat 3's board is silent: transport"]);
+	});
+
+	test("async, after n: seats 1 and 2 answer without a final at once, the spare's final arrives last, and the run waits for it: a dispute, never a void", async () => {
+		// Cleveland at Philadelphia, created without a seat 3 hint, so the spare counts; read after n
+		// from the answers saved at 03:32, with seats 1 and 2 derived back to a game still on.
+		const base = chainOf("nba final, read after the game");
+		const g: ChainGame = { ...base, hints: [], startReadings: base.startReadings!.map((r) => (r.seat === 3 ? { ...r, kind: 0 as const } : r)) };
+		const stillOn = (spareFinal: boolean): Derive => (s, p, b) => {
+			if (s === 1 && p.includes("/v1/games?")) {
+				const c = copy(b) as { data: Record<string, any>[] };
+				for (const x of c.data) if (x.home_team?.full_name === "Philadelphia 76ers") Object.assign(x, { status: "4th Qtr", status_state: "in_progress", period: 4 });
+				return c;
+			}
+			if (s === 2 && p.startsWith("/games?league=NBA")) {
+				const c = copy(b) as { results: Record<string, any>[] };
+				for (const x of c.results) if (x.gameId === 340484) x.status = "in progress";
+				return c;
+			}
+			if (s === 4 && !spareFinal && p.includes("basketball_nba")) return (copy(b) as Record<string, any>[]).map((x) => (x.id === "110e33c79c5ec8c0377702aff685f83b" ? { ...x, completed: false } : x));
+			return b;
+		};
+		const after = g.start! + g.n + 60;
+		const go = async (spareFinal: boolean) => {
+			const t = saved(stillOn(spareFinal), LATE);
+			const answered: number[] = [];
+			const o = await scoreGameAsync(g, KEYS, PAYOUT, after, async (q) => {
+				const seat = locate(q)!.seat;
+				if (seat === 4) await new Promise((r) => setTimeout(r, 25));
+				answered.push(seat);
+				return t.send(q);
+			});
+			expect(t.misses).toEqual([]);
+			return { o, answered };
+		};
+		const { o, answered } = await go(true);
+		// The spare's answer came last, and the run read it before deciding.
+		expect(answered.at(-1)).toBe(4);
+		expect(o.decision.readings.map((r) => [r.seat, r.kind])).toEqual([[1, "no_final"], [2, "no_final"], [3, "silent"], [4, "final"]]);
+		expect([o.decision.action, o.decision.why, o.report?.kind]).toEqual(["dispute", "after n: finals beside answers without a final", 4]);
+		// The control: without the spare's final, the same run is the hour-24 void.
+		const none = (await go(false)).o;
+		expect([none.decision.action, none.report?.kind]).toEqual(["void", 3]);
 	});
 });

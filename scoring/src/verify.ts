@@ -1,17 +1,25 @@
 // The start's rule: when a game's start is written, and which time is written.
 //
 // The spec rules that the start is written once, at verification, by a first-n reporter, and is
-// never corrected. It does not say which feeds must agree that the game exists or which time is
-// written; this rule is the writer's proposal on the PR, with three ruled parts in it:
+// never corrected. The rule below says which feeds must agree that the game exists, which record on
+// each feed is the game, and which time is written:
 //
-//   (2) seat 3's hint is checked against seat 3's board while the game is listed: the same two
-//       teams, the same home and away, the time at the start. A hint that fails makes seat 3
-//       silent for that game, never wrong.
-//   (3) the start is the scheduled time from the counting seats, the earliest where they differ by
-//       minutes. Seat 4's actual start never sets it. What to do when they differ by more is the
-//       writer's to propose: see START_SPREAD.
-//   (1) where the spec leaves it open, the spare stands in for a counting seat that is silent for
-//       the game. A seat that answered without a final is not silent.
+//   * Seat 3's hint is checked against seat 3's board while the game is listed: the same two teams,
+//     the same home and away, the time at the start. A hint that fails makes seat 3 silent for that
+//     game, never wrong.
+//   * The start is the scheduled time from the counting seats, the earliest where they differ by
+//     minutes. Seat 4's actual start never sets it.
+//   * The spare stands in for a counting seat that is silent for the whole game. A seat that
+//     answered without a final is not silent.
+//   * The game is the one the creator's date names. On each seat read by team, the record nearest
+//     the date is the game, and a hint never chooses another one here: a seat whose hint names a
+//     different record makes the run wait. At scoring, hints still choose among the records in
+//     the window (src/pick.ts).
+//   * The start is written only if scoring will read the same game. Once a start is chosen, each
+//     counting seat read by team is read again as scoring will read it: in [start, start + n), with
+//     the hints and without the date. Each must read the same record inside that window.
+//   * No start is written for a game already over. While any reading verification takes by team
+//     shows the game final, nothing is written. A game still in play gets its start, late.
 //
 // As built:
 //
@@ -34,16 +42,18 @@
 import { silent } from "./run";
 import type { Decision } from "./chain";
 import type { BoardCheck } from "./readers/board3";
-import type { Reading, Seat } from "./types";
+import type { Game, Reading, Seat } from "./types";
+import { inWindow, windowOf } from "./window";
 
 /**
  * The most the counting seats' scheduled times may differ by, in seconds, for the earliest to be
- * written. Measured on D1's 138 games: the seats agreed to the minute on 137, and the 138th differed
- * by 20 minutes (a late tip-off two seats moved toward). The two games of a doubleheader, or a
- * series' games on consecutive days, sit hours apart, so an hour separates "the same game, a
- * schedule a few minutes off" from "two different games". More than this, and nothing is written:
- * a start cannot be corrected once written, and a start an hour or more off either strands the game
- * outside its own window or lets an earlier game between the same two teams score it.
+ * written. Measured on the readers' 138 saved games: the seats agreed to the minute on 137, and the
+ * 138th differed by 20 minutes (a late tip-off two seats moved toward). The two games of a
+ * doubleheader, or a series' games on consecutive days, sit hours apart, so an hour separates "the
+ * same game, a schedule a few minutes off" from "two different games". More than this, and nothing
+ * is written: a start cannot be corrected once written, and a start an hour or more off either
+ * strands the game outside its own window or lets an earlier game between the same two teams score
+ * it.
  */
 export const START_SPREAD = 3600;
 
@@ -55,7 +65,7 @@ export const START_SPREAD = 3600;
  */
 export const START_BOUND = 86_400;
 
-/** What verification saw: seats 1, 2 and 4 read by team near the date; seat 3's board checked. */
+/** What verification saw: seats 1, 2 and 4 read by team near the date, without hints; seat 3's board checked. */
 export interface Seen {
 	readonly 1: Reading;
 	readonly 2: Reading;
@@ -63,10 +73,14 @@ export interface Seen {
 	readonly 4: Reading;
 }
 
-/** The game as verification needs it: the date its creator gave. */
+/** The game as verification needs it: the date its creator gave, and its creation hints. */
 export interface Verifying {
 	readonly date: number;
+	readonly hints: Game["hints"];
 }
+
+/** The seats verification reads by team; seat 3's board is checked apart. */
+export const READ_BY_TEAM: readonly (1 | 2 | 4)[] = Object.freeze([1, 2, 4] as const);
 
 /** True when a time is within START_BOUND of the date, both ends in. */
 function inRange(t: number, g: Verifying): boolean {
@@ -83,7 +97,15 @@ function within(times: readonly number[]): boolean {
 	return Math.max(...times) - Math.min(...times) <= START_SPREAD;
 }
 
-/** What verification decides: a start, or a wait. */
+/** The ids a seat's creation hints name, each once. */
+function hintedIds(g: Verifying, seat: Seat): string[] {
+	return [...new Set(g.hints.filter((h) => h.seat === seat).map((h) => h.id))];
+}
+
+/**
+ * What verification decides from what it saw: a start, or a wait. A start decided here is not yet
+ * written: confirmStart reads the counting seats again as scoring will, and only then is it.
+ */
 export function decideStart(g: Verifying, seen: Seen): Decision {
 	const seat3Reading = (): Reading =>
 		seen[3].kind === "listed"
@@ -91,6 +113,18 @@ export function decideStart(g: Verifying, seen: Seen): Decision {
 			: silent(3, seen[3].kind === "fails" ? `silent for the game: ${seen[3].why}` : seen[3].why);
 	const readings = (): Reading[] => [seen[1], seen[2], seat3Reading(), seen[4]];
 	const wait = (why: string): Decision => ({ action: "wait", readings: readings(), why });
+
+	// No start for a game already over: a start written now would score at once, on a known result.
+	for (const seat of READ_BY_TEAM) {
+		if (seen[seat].kind === "final") return wait(`seat ${seat} shows the game final`);
+	}
+	// The date names the game. A seat that lists it, and whose hint names another record, waits.
+	for (const seat of READ_BY_TEAM) {
+		const r = seen[seat];
+		const named = hintedIds(g, seat);
+		if (named.length === 0 || listedAt(r, g) === null) continue;
+		if (named.length !== 1 || named[0] !== r.record?.id) return wait(`seat ${seat}'s hint names another record than the one nearest the date`);
+	}
 
 	for (const seat of [1, 2] as const) {
 		const r = seen[seat];
@@ -121,5 +155,34 @@ export function decideStart(g: Verifying, seen: Seen): Decision {
 	return { action: "start", start: Math.min(t1, t2), readings: [seen[1], seen[2], down, r4], why: "seats 1 and 2 list the game within an hour, and the spare stands in for seat 3" };
 }
 
-/** The seats verification reads by team; seat 3's board is checked apart. */
-export const READ_BY_TEAM: readonly Seat[] = Object.freeze([1, 2, 4] as const);
+/**
+ * The seats a start counts that are read by team: seats 1 and 2, and the spare when it stands in
+ * for seat 3. These are the seats confirmStart reads again.
+ */
+export function countingByTeam(start: Decision): readonly Seat[] {
+	const seat3 = start.readings.find((r) => r.seat === 3);
+	return seat3 === undefined || seat3.kind === "silent" ? [1, 2, 4] : [1, 2];
+}
+
+/**
+ * The start, once each counting seat read by team has been read again as scoring will read it
+ * (`again`, in seat order, for the seats countingByTeam names): in the game's window from the start
+ * chosen, with the hints and without the date. Each must read the record verification found,
+ * inside that window, and not yet final. Anything else and nothing is written: a start that
+ * scoring then can't read the game from would leave the game verified and never scored.
+ */
+export function confirmStart(start: Decision, game: Game, again: readonly Reading[]): Decision {
+	if (start.action !== "start") return start;
+	const wait = (why: string): Decision => ({ action: "wait", readings: start.readings, why });
+	const w = windowOf(game);
+	for (const seat of countingByTeam(start)) {
+		const r = again.find((x) => x.seat === seat);
+		const was = start.readings.find((x) => x.seat === seat);
+		if (r === undefined || was === undefined) return wait(`seat ${seat} was not read again`);
+		if (r.kind === "final") return wait(`seat ${seat} shows the game final`);
+		if (r.kind === "silent") return wait(`seat ${seat} can't read the game as scoring will: ${r.detail}`);
+		const inside = r.record !== null && r.record.time !== null && inWindow(r.record.time, w);
+		if (!inside || r.record?.id !== was.record?.id) return wait(`seat ${seat} reads another record, or none, in the game's window: ${r.detail}`);
+	}
+	return start;
+}

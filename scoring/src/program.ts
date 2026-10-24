@@ -5,8 +5,14 @@
 // rule, inside the fingerprint. The clock picks inside n or after, so it must be the chain's time
 // (see rule.ts); a clock that is not a whole, positive, safe number of seconds decides nothing.
 //
+// A key decides only whether the run can read at all. A seat whose key is missing decides nothing,
+// before any request is sent, and so does a seat whose feed refuses its key (an answer of 401, 403
+// or 429), the moment that answer comes back. A login problem makes the program say nothing; it
+// never makes a feed silent, so it never decides on fewer seats.
+//
 //   unverified   the start's rule (verify.ts): seats 1, 2 and 4 read by team near the creator's
-//                date, seat 3's board checked against its hint.
+//                date, seat 3's board checked against its hint, then the counting seats read
+//                again as scoring will read them.
 //   verified     from the start: every seat read in the game's window, and the agreement rule
 //                (rule.ts) at the run's hour, inside n or after.
 //   disputed     from the dispute record's day-7 clock: every seat read fresh, and the day-7 rule.
@@ -16,7 +22,7 @@
 // synchronous transport (the Chainlink workflow's) or an asynchronous one (a sealed machine's
 // fetch). A transport that throws makes that seat silent, never the run's decision.
 
-import type { ChainGame, Decision, Report } from "./chain";
+import { READING_KIND, type ChainGame, type Decision, type Report, type ReportReading } from "./chain";
 import { readerFor, seatsFor } from "./index";
 import { keyFor, type Keys } from "./keys";
 import { checkBoard, type BoardCheck, type BoardRun } from "./readers/board3";
@@ -26,12 +32,15 @@ import { countingFor, decide, decideDay7, silentForGame } from "./rule";
 import { MAX_REQUESTS, runAsync, runSync, silent } from "./run";
 import { leagueRow } from "./table";
 import type { Game, HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
-import { START_BOUND, decideStart } from "./verify";
+import { START_BOUND, confirmStart, countingByTeam, decideStart } from "./verify";
 
 /** One step of a run: read one seat, or check seat 3's board. */
 type Job = { readonly kind: "read"; readonly seat: Seat; readonly run: ReaderRun } | { readonly kind: "board"; readonly run: BoardRun };
 type Done = Reading | BoardCheck;
 type Plan = Generator<Job, Decision, Done>;
+
+/** Every seat's key, once each is known to be there. */
+type Held = Readonly<Record<Seat, string>>;
 
 /** What a run decided, and the report it writes: null when it writes nothing. */
 export interface Outcome {
@@ -41,6 +50,9 @@ export interface Outcome {
 
 const ENDED = new Set(["scored", "voided", "released"]);
 
+/** The answers that say a feed refused the key: unauthorised, forbidden, and over the key's quota. */
+const REFUSED: ReadonlySet<number> = new Set([401, 403, 429]);
+
 function nothing(why: string): Decision {
 	return { action: "wait", readings: [], why };
 }
@@ -49,24 +61,54 @@ function wholeSeconds(v: unknown): v is number {
 	return typeof v === "number" && Number.isSafeInteger(v) && v > 0;
 }
 
+/** Each seat's key, or the first seat without one. */
+function held(keys: Keys, seats: readonly Seat[]): Held | Seat {
+	const out: Partial<Record<Seat, string>> = {};
+	for (const seat of seats) {
+		const key = keyFor(keys, seat);
+		if (key === null) return seat;
+		out[seat] = key;
+	}
+	return out as Held;
+}
+
+/**
+ * A start report this program could have written: one reading per seat of the table, in seat
+ * order, each of the three kinds, with seats 1 and 2 answering (verification writes nothing
+ * unless both list the game). Anything else, an empty list included, decides nothing: which seats
+ * count rests on it.
+ */
+function startReportReadable(readings: readonly ReportReading[] | null, seats: readonly Seat[]): boolean {
+	if (readings === null || readings.length !== seats.length) return false;
+	const kinds: readonly number[] = Object.values(READING_KIND);
+	for (let i = 0; i < seats.length; i++) {
+		if (readings[i].seat !== seats[i] || !kinds.includes(readings[i].kind)) return false;
+	}
+	const answers = (seat: Seat) => readings.find((r) => r.seat === seat)?.kind !== READING_KIND.silent;
+	return answers(1) && answers(2);
+}
+
 function* plan(game: ChainGame, keys: Keys, now: number): Plan {
 	if (leagueRow(game.league) === null) return nothing("league not offered");
 	if (ENDED.has(game.status)) return nothing("the game has ended");
 	if (!wholeSeconds(game.date) || !wholeSeconds(game.n) || !wholeSeconds(game.day7) || !wholeSeconds(now)) {
 		return nothing("the game's clocks are not readable");
 	}
+	const seats = seatsFor(game.league);
+	const k = held(keys, seats);
+	if (typeof k === "number") return nothing(`seat ${k} has no key`);
 
-	if (game.status === "unverified") return yield* verifying(game, keys, now);
+	if (game.status === "unverified") return yield* verifying(game, k, now);
 
 	const start = game.start;
 	if (start === null || !wholeSeconds(start)) return nothing("no start on chain");
 	// Which seats count rests on the start report's readings; without them, nothing is decided.
-	if (game.startReadings === null) return nothing("no start report on chain");
+	if (!startReportReadable(game.startReadings, seats)) return nothing("no start report on chain");
 	const down = silentForGame(game);
 
 	if (game.status === "verified") {
 		if (now < start) return nothing("before the start");
-		const readings = yield* readAll(game, start, keys, now, down);
+		const readings = yield* readAll(game, start, k, now, down);
 		return decide(readings, countingFor(down), now < start + game.n);
 	}
 
@@ -74,17 +116,17 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
 	const record = game.dispute;
 	if (record === null || !wholeSeconds(record.at)) return nothing("no dispute record on chain");
 	if (now < record.at + game.day7) return nothing("before day 7");
-	const fresh = yield* readAll(game, start, keys, now, down);
-	return decideDay7(fresh, record.readings, seatsFor(game.league));
+	const fresh = yield* readAll(game, start, k, now, down);
+	return decideDay7(fresh, record.readings, seats, down);
 }
 
 /**
  * Every seat in the table, in seat order, read in the game's window: four readings, always ("the
  * program always asks four feeds"). A seat silent for the game reads silent without a request, as
- * D1's seat 3 reader already does for a game created without a hint, so a final it might give for
+ * the seat 3 reader already does for a game created without a hint, so a final it might give for
  * a hint that failed verification can never count.
  */
-function* readAll(game: ChainGame, start: number, keys: Keys, now: number, down: Seat | null): Generator<Job, Reading[], Done> {
+function* readAll(game: ChainGame, start: number, keys: Held, now: number, down: Seat | null): Generator<Job, Reading[], Done> {
 	const g: Game = { league: game.league, home: game.home, away: game.away, start, n: game.n, hints: game.hints };
 	const out: Reading[] = [];
 	for (const seat of seatsFor(game.league)) {
@@ -92,35 +134,66 @@ function* readAll(game: ChainGame, start: number, keys: Keys, now: number, down:
 			out.push(silent(seat, "silent for the game"));
 			continue;
 		}
-		const key = keyFor(keys, seat);
-		if (key === null) {
-			out.push(silent(seat, "no key"));
-			continue;
-		}
-		out.push((yield { kind: "read", seat, run: readerFor(seat)({ game: g, now, key }) }) as Reading);
+		out.push((yield { kind: "read", seat, run: readerFor(seat)({ game: g, now, key: keys[seat] }) }) as Reading);
 	}
 	return out;
 }
 
-/** Verification: seats 1, 2 and 4 read by team within a day of the date, nearest it; seat 3's board checked. */
-function* verifying(game: ChainGame, keys: Keys, now: number): Plan {
+/**
+ * Verification. Seats 1, 2 and 4 are read by team within a day of the date, nearest it, without
+ * their hints: the date names the game, and decideStart holds each seat's hint to that record.
+ * Seat 3's board is checked against its hint. If that gives a start, each counting seat read by
+ * team is read again as scoring will read it, and confirmStart writes the start only if each reads
+ * the same record in the window.
+ */
+function* verifying(game: ChainGame, keys: Held, now: number): Plan {
 	// The range the games set accepts a start in: [date - START_BOUND, date + START_BOUND], both ends in.
-	const probe: Game = { league: game.league, home: game.home, away: game.away, start: game.date - START_BOUND, n: 2 * START_BOUND + 1, hints: game.hints };
+	const range = { league: game.league, home: game.home, away: game.away, start: game.date - START_BOUND, n: 2 * START_BOUND + 1 };
+	const byTeamProbe: Game = { ...range, hints: [] };
 	const byTeam = function* (seat: Seat): Generator<Job, Reading, Done> {
-		const key = keyFor(keys, seat);
-		if (key === null) return silent(seat, "no key");
-		return (yield { kind: "read", seat, run: readerFor(seat)({ game: probe, now, key, near: game.date }) }) as Reading;
+		return (yield { kind: "read", seat, run: readerFor(seat)({ game: byTeamProbe, now, key: keys[seat], near: game.date }) }) as Reading;
 	};
 	const r1 = yield* byTeam(1);
 	const r2 = yield* byTeam(2);
 	let board: BoardCheck;
 	const hint = hintOf(game.hints);
-	const key3 = keyFor(keys, 3);
 	if ("none" in hint) board = { kind: "fails", why: hint.none };
-	else if (key3 === null) board = { kind: "silent", why: "no key" };
-	else board = (yield { kind: "board", run: checkBoard({ game: probe, now, key: key3 }) }) as BoardCheck;
+	else board = (yield { kind: "board", run: checkBoard({ game: { ...range, hints: game.hints }, now, key: keys[3], near: game.date }) }) as BoardCheck;
 	const r4 = yield* byTeam(4);
-	return decideStart({ date: game.date }, { 1: r1, 2: r2, 3: board, 4: r4 });
+	const chosen = decideStart({ date: game.date, hints: game.hints }, { 1: r1, 2: r2, 3: board, 4: r4 });
+	if (chosen.action !== "start") return chosen;
+
+	// Read as scoring will: the window from the start chosen, with the hints, without the date.
+	const g: Game = { league: game.league, home: game.home, away: game.away, start: chosen.start, n: game.n, hints: game.hints };
+	const again: Reading[] = [];
+	for (const seat of countingByTeam(chosen)) {
+		again.push((yield { kind: "read", seat, run: readerFor(seat)({ game: g, now, key: keys[seat] }) }) as Reading);
+	}
+	return confirmStart(chosen, g, again);
+}
+
+/** The transport for one job, noting the first answer that refuses the key. */
+function watched<T extends HttpResponse | Promise<HttpResponse>>(send: (req: HttpRequest) => T): { send: (req: HttpRequest) => T; refused: () => number | null } {
+	let refused: number | null = null;
+	const note = (res: HttpResponse): HttpResponse => {
+		if (refused === null && REFUSED.has(res.status)) refused = res.status;
+		return res;
+	};
+	return {
+		send: (req) => {
+			const res = send(req);
+			return (res instanceof Promise ? res.then(note) : note(res)) as T;
+		},
+		refused: () => refused,
+	};
+}
+
+function seatOf(job: Job): Seat {
+	return job.kind === "read" ? job.seat : 3;
+}
+
+function refusedKey(job: Job, status: number): Outcome {
+	return { decision: nothing(`seat ${seatOf(job)}'s key was refused: http ${status}`), report: null };
 }
 
 function boardSync(run: BoardRun, send: (req: HttpRequest) => HttpResponse): BoardCheck {
@@ -163,7 +236,11 @@ export function scoreGameSync(
 	let step = p.next(undefined as unknown as Done);
 	while (!step.done) {
 		const job = step.value;
-		step = p.next(job.kind === "read" ? runSync(job.seat, job.run, send) : boardSync(job.run, send));
+		const t = watched(send);
+		const done = job.kind === "read" ? runSync(job.seat, job.run, t.send) : boardSync(job.run, t.send);
+		const status = t.refused();
+		if (status !== null) return refusedKey(job, status);
+		step = p.next(done);
 	}
 	return { decision: step.value, report: toReport(game.id, step.value, payout) };
 }
@@ -180,7 +257,11 @@ export async function scoreGameAsync(
 	let step = p.next(undefined as unknown as Done);
 	while (!step.done) {
 		const job = step.value;
-		step = p.next(job.kind === "read" ? await runAsync(job.seat, job.run, send) : await boardAsync(job.run, send));
+		const t = watched(send);
+		const done = job.kind === "read" ? await runAsync(job.seat, job.run, t.send) : await boardAsync(job.run, t.send);
+		const status = t.refused();
+		if (status !== null) return refusedKey(job, status);
+		step = p.next(done);
 	}
 	return { decision: step.value, report: toReport(game.id, step.value, payout) };
 }

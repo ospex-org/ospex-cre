@@ -22,7 +22,7 @@ import { scoreGameSync } from "../src/program";
 import { decideDay7 } from "../src/rule";
 import type { Seat } from "../src/types";
 import { NOW } from "./cases";
-import { KEY, at, locate, saved, type Derive } from "./fixtures";
+import { KEY, at, copy, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, SEATS4, STATES, chainOf, reading, reportReading, type State } from "./rule-helpers";
 
 const KEYS = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
@@ -38,7 +38,7 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 			const ps = [p1, p2, p3, p4];
 			const fresh = SEATS4.map((s, i) => reading(s, ps[i][0]));
 			const recorded = SEATS4.map((s, i) => reportReading(s, ps[i][1]));
-			const d = decideDay7(fresh, recorded, SEATS4);
+			const d = decideDay7(fresh, recorded, SEATS4, null);
 			total++;
 			// Every source is the seat's latest: fresh when it answered, else what the record carried.
 			const sources = d.readings.map((got) => (got.kind === "silent" ? "silent" : got.kind === "no_final" ? "none" : got.home === 27 && got.away === 20 ? "A" : "B"));
@@ -62,6 +62,7 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 				seats.map((s, i) => reading(s, fresh[i])),
 				seats.map((s, i) => reportReading(s, recorded[i])),
 				seats,
+				null,
 			);
 			return d.action === "score" ? `score ${d.home}-${d.away}` : `${d.action}: ${d.why}`;
 		};
@@ -163,6 +164,7 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 			[reading(1, "A"), reading(2, "A"), reading(3, "A"), reading(4, "silent")],
 			[reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), { seat: 4, kind: 1, homeScore: 14, awayScore: 10 }],
 			SEATS4,
+			null,
 		);
 		expect([d.action, d.readings[3]]).toEqual([
 			"score",
@@ -180,5 +182,67 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 			scores: [0, 0],
 			sources: ["1:final/final", "2:final/final", "3:silent/silent for the game", "4:final/recorded at the dispute"],
 		});
+	});
+
+	test("the seat silent for the game is silent on day 7, whatever the dispute record carries for it", () => {
+		// Built by hand: seats 1, 2 and 4 agree, seat 3's recorded final would make a fourth source.
+		const fresh = [reading(1, "A"), reading(2, "B"), reading(3, "silent"), reading(4, "silent")];
+		const recorded = [reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "A"), reportReading(4, "A")];
+		const down = decideDay7(fresh, recorded, SEATS4, 3);
+		expect([down.action, down.why, down.readings[2].detail]).toEqual(["void", "day 7: a source is silent", "silent for the game"]);
+		// The control: the same readings with seat 3 counting settle on three.
+		const counting = decideDay7(fresh, recorded, SEATS4, null);
+		expect(counting.action === "score" ? [counting.home, counting.away] : counting.action).toEqual([27, 20]);
+	});
+
+	test("end to end: a dispute record carrying a final for the seat silent for the game never settles the game on it", () => {
+		// Washington at San Francisco, seat 3's hint failed at verification, so seat 3 is silent for the
+		// game. The record (from somewhere other than this program, which never asks that seat) carries
+		// seat 3 and the spare at 23-17, and seat 2 now dissents at 17-23. Taking seat 3's recorded final
+		// would settle 23-17 on three; it is silent, so the game voids.
+		const base = chainOf("nfl final");
+		const id = "00000000-0000-4000-8000-000000000000";
+		const seat2Dissents: Derive = (s, p, b) => {
+			if (s !== 2 || !p.startsWith("/games?league=NFL")) return b;
+			const c = copy(b) as { results: Record<string, any>[] };
+			for (const g of c.results) if (g.teams?.home?.team === "San Francisco 49ers" && g.status === "final") g.scoreboard.score = { home: 17, away: 23 };
+			return c;
+		};
+		const record = [reportReading(1, "silent"), reportReading(2, "silent"), { seat: 3, kind: 2 as const, homeScore: 23, awayScore: 17 }, spareFinal];
+		const game = (seat3: 0 | 1) => ({
+			...base,
+			hints: [{ seat: 3, id }],
+			startReadings: base.startReadings!.map((r) => (r.seat === 3 ? { ...r, kind: seat3 } : r)),
+			status: "disputed" as const,
+			dispute: { at: DISPUTED_AT, readings: record },
+		});
+		const go = (g: ReturnType<typeof game>) => {
+			const t = saved(seat2Dissents, DAY7_RUN);
+			const o = scoreGameSync(g, KEYS, PAYOUT, DAY7_RUN, t.send);
+			expect(t.misses).toEqual([]);
+			return [o.decision.action, o.decision.why, o.decision.readings.map((r) => `${r.seat}:${r.kind === "final" ? `${r.home}-${r.away}` : r.detail}`)];
+		};
+		expect(go(game(0))).toEqual(["void", "day 7: a source is silent", ["1:23-17", "2:17-23", "3:silent for the game", "4:23-17"]]);
+		// The control: the same record with seat 3 counting, its fresh read silent, settles on its recorded final.
+		expect(go(game(1))).toEqual(["score", "day 7: three sources or more, the same final", ["1:23-17", "2:17-23", "3:23-17", "4:23-17"]]);
+	});
+
+	test("end to end: with seat 3 silent for the game and the spare past its retention, day 7 neither writes early nor settles on three", () => {
+		const base = chainOf("nfl final");
+		const game = { ...base, status: "disputed" as const, dispute: { at: DISPUTED_AT, readings: [reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), spareFinal] } };
+		const deadline = DISPUTED_AT + game.day7;
+		const at = (now: number) => {
+			const t = saved(undefined, DAY7_RUN);
+			const o = scoreGameSync(game, KEYS, PAYOUT, now, t.send);
+			expect(t.misses).toEqual([]);
+			return { action: o.decision.action, why: o.decision.why, asked: t.asked.length, spare: o.decision.readings[3]?.detail ?? null };
+		};
+		// The spare keeps a game 66 hours: by day 7 its fresh read is past retention, and its recorded final stands in.
+		expect(deadline - base.start!).toBeGreaterThan(66 * 3600);
+		expect(at(deadline - 1)).toEqual({ action: "wait", why: "before day 7", asked: 0, spare: null });
+		for (const now of [deadline, deadline + 1]) {
+			expect({ now: now - deadline, got: at(now) }).toEqual({ now: now - deadline, got: { action: "void", why: "day 7: a source is silent", asked: at(now).asked, spare: "recorded at the dispute" } });
+			expect(at(now).asked).toBeGreaterThan(0);
+		}
 	});
 });

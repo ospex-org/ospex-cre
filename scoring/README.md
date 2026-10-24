@@ -126,12 +126,18 @@ inside the fingerprint. For a game whose start is written:
 * **The hour-24 void** comes only from start + n, and only when no seat that answers shows a final.
   At least two counting seats must answer, the after-n count, since a void is never taken inside
   the window.
-* **A disagreement** is either of two things. Any two finals that differ, from any seat, at any
-  hour. Or, after n, finals beside answers without one. The first run that sees it builds the
-  dispute record, with every reading.
+* **A disagreement** is either of two things. Any two finals that differ, from any seat. Or, after
+  n, finals beside answers without one. The run that sees it builds the dispute record, with every
+  reading.
+  * Inside n, two finals that differ build it only once every seat the run reads shows a final
+    (each seat but one silent for the whole game). Until then the run waits, so a feed still
+    catching up is not frozen into the record as "no final": day 7 reads the record for any seat it
+    can no longer ask.
+  * From start + n, any disagreement builds it at once.
 * **Day 7** counts from the dispute record. Each seat's latest reading counts: fresh if it answers,
-  otherwise the one the record carried. The game settles only when four sources are on record,
-  none silent, and at least three give the same final. Anything else voids.
+  otherwise the one the record carried. A seat silent for the whole game is silent here too,
+  whatever the record carries for it. The game settles only when four sources are on record, none
+  silent, and at least three give the same final. Anything else voids.
 * **The spare** (seat 4) is asked on every run.
   * Its final counts toward a disagreement like any other seat's.
   * Its answer without a final never blocks a score.
@@ -142,21 +148,33 @@ inside the fingerprint. For a game whose start is written:
 
 ## The start
 
-[`src/verify.ts`](src/verify.ts) is the start's rule, written once at verification. It is
-proposed on the PR; three of its parts are ruled.
+[`src/verify.ts`](src/verify.ts) is the start's rule, written once at verification.
 
+* **The date says which game.** Seats 1, 2 and 4 are read by team without their hints, and among
+  records of the two teams the one nearest the creator's date is the game. A seat whose hint names
+  a different record makes the run wait. (At scoring, hints still choose among the records in the
+  window.)
 * **Seats 1 and 2** must each list the game by team, within a day of the creator's date either way:
   the games set's `START_BOUND`, a fixed 24 hours whatever the game's n, and the only range it
-  accepts a start in. Among records of the two teams, the one nearest the date is the game.
+  accepts a start in.
 * **The times.** Their two times must lie within an hour of each other (`START_SPREAD`).
 * **Seat 3's check.** Seat 3's hint is checked against its board
   ([`src/readers/board3.ts`](src/readers/board3.ts)): the same two teams, the game's home and
   away, at a time within the hour.
   * A hint that fails makes seat 3 silent for the game, never wrong, and the spare must then list
     the game within the hour.
-  * A board that can't be read this time makes the run wait.
+  * A board that can't be read this time makes the run wait. So does a row of it the program can't
+    read (an id that isn't text, or the hint's row without readable teams or time), and so does a
+    board that doesn't yet list any game at or after the date: a hint not on the board fails only
+    once the board reaches the date.
 * **The start written** is the earliest of the counting seats' scheduled times. The spare's time
   never sets it.
+* **Verify the way you'll score.** Before the start is written, each counting seat read by team
+  (seats 1 and 2, and the spare when it stands in) is read again as scoring will read it: in
+  [start, start + n), with the hints, without the date. Each must read the same record, inside
+  that window.
+* **Never a finished game.** While any reading verification takes by team shows the game final,
+  nothing is written. A game still in play gets its start, late.
 * **Otherwise** nothing is written, and a later run tries again.
 
 ## One run
@@ -169,9 +187,13 @@ transport, each seat's key and the payout address.
   A game that has ended takes nothing.
 * **What it returns:** its decision and the report ([`src/report.ts`](src/report.ts), the games
   set's `Report`, enum numbers included). A wait returns no report.
-* **What a key and the payout can do.** A key decides only whether its own seat can be asked; a
-  missing key is a silent seat on that run. The payout lands in the report's payout field and
+* **What a key and the payout can do.** A key decides only whether the run can read at all. A
+  seat whose key is missing decides nothing, before any request is sent, and so does a seat whose
+  feed refuses the key (401, 403 or 429). It is never read as a silent seat, which would let a key
+  choose between a score, a dispute and a void. The payout lands in the report's payout field and
   nowhere else.
+* **The start report.** A verified game decides nothing unless its start report holds one reading
+  per seat, in seat order, with seats 1 and 2 answering: which seats count rests on it.
 
 ## The cases record
 

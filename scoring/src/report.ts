@@ -1,4 +1,4 @@
-// Turning a decision into the one report shape (B2). The payout address is the only thing here that
+// Turning a decision into the games set's one report shape. The payout address is the only thing here that
 // comes from outside the program, and it lands in its own field and nowhere else: it reaches no
 // count, no reading and no score.
 //

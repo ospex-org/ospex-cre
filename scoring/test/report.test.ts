@@ -1,8 +1,8 @@
-// The report the program builds is the games set's one shape (B2). The field names, their order
-// and the enum numbers below are copied as literals from ospex-contracts-v2,
-// src/games/IOspexGames.sol, on PR #37 at 3e9d549, unchanged from 3b23239 (`struct Report`, `struct Reading`, `enum
-// ReportKind`, `enum ReadingKind`). A change on this side shows here. A change in B2 shows only
-// when these literals are copied again: nothing here reads the other repository.
+// The report the program builds is the games set's one shape. The field names, their order and the
+// enum numbers below are copied as literals from ospex-contracts-v2, src/games/IOspexGames.sol, on
+// main at fe1f465 (`struct Report`, `struct Reading`, `enum ReportKind`, `enum ReadingKind`). A
+// change on this side shows here. A change in the games set shows only when these literals are
+// copied again: nothing here reads the other repository.
 
 import { describe, expect, test } from "bun:test";
 import { READING_KIND, REPORT_KIND, type Decision } from "../src/chain";
@@ -12,15 +12,15 @@ import { PAYOUT, SEATS4, reading } from "./rule-helpers";
 
 const readings: Reading[] = [reading(1, "A"), reading(2, "none"), reading(3, "silent"), { ...reading(4, "none"), home: null, away: null }];
 
-describe("the report, in B2's shape", () => {
-	test("the enum numbers are B2's", () => {
+describe("the report, in the games set's shape", () => {
+	test("the enum numbers are the games set's", () => {
 		// enum ReportKind { None, Start, Score, Void, Dispute }
 		expect({ ...REPORT_KIND }).toEqual({ start: 1, score: 2, void: 3, dispute: 4 });
 		// enum ReadingKind { Silent, AnsweredNoFinal, AnsweredFinal }
 		expect({ ...READING_KIND }).toEqual({ silent: 0, noFinal: 1, final: 2 });
 	});
 
-	test("the fields are B2's, in B2's order, for every kind of report", () => {
+	test("the fields are the games set's, in its order, for every kind of report", () => {
 		const decisions: Decision[] = [
 			{ action: "start", start: 1_792_000_000, readings, why: "" },
 			{ action: "score", home: 27, away: 20, readings, why: "" },
@@ -34,9 +34,9 @@ describe("the report, in B2's shape", () => {
 			// struct Reading { seat, kind, homeScore, awayScore }
 			for (const x of r.readings) expect(Object.keys(x)).toEqual(["seat", "kind", "homeScore", "awayScore"]);
 		}
-		// Each kind fills only its own fields; the rest are zero, as B2 requires.
+		// Each kind fills only its own fields; the rest are zero, as the games set requires.
 		expect(got.map((r) => [r.gameId, r.kind, r.start, r.homeScore, r.awayScore, r.payout])).toEqual([
-			["7", 1, 1_792_000_000, 0, 0, NO_PAYOUT], // a start pays nothing: B2 refuses any other payout
+			["7", 1, 1_792_000_000, 0, 0, NO_PAYOUT], // a start pays nothing: the games set refuses any other payout
 			["7", 2, 0, 27, 20, PAYOUT],
 			["7", 3, 0, 0, 0, PAYOUT],
 			["7", 4, 0, 0, 0, NO_PAYOUT], // a dispute record credits nothing

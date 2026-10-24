@@ -1,7 +1,7 @@
 // What the program reads from the chain about a game, what a run decides, and the one report shape
 // it hands back to be written.
 //
-// The report shape and its enum numbers follow the games set's interface (B2: ospex-contracts-v2,
+// The report shape and its enum numbers follow the games set's interface (ospex-contracts-v2,
 // src/games/IOspexGames.sol). The report call takes the enums as numbers, so the numbers here are
 // part of the shape. Nothing here names a feed: a reading carries its seat.
 

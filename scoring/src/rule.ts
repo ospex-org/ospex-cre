@@ -1,11 +1,13 @@
 // The agreement rule: what one run's readings add up to for a game whose start is written.
 //
-// From the spec (docs/spec-v3.md in ospex-contracts-v2, "The scoring program" and "How a game
-// ends"), as this file reads it. Every count below is a constant here, inside the fingerprint, and
-// nothing handed in at runtime changes one. The run's clock does pick which count applies, three
-// inside n or two after, and the games set stores no reading to check it against: so the clock
-// must be the chain's time, taken by the workflow from its runtime and never from a setting, and
-// program.ts decides nothing on a clock it can't read.
+// From the spec (docs/spec-v3.md in ospex-contracts-v2 at commit fe1f465, "The scoring program" and
+// "How a game ends"), as this file reads it, with one change that text does not carry yet: inside
+// n, a disagreement posts the dispute record only once every seat read shows a final (Disagree,
+// below). Every count below is a constant here, inside the fingerprint, and nothing handed in at
+// runtime changes one. The run's clock does pick which count applies, three inside n or two after,
+// and the games set stores no reading to check it against: so the clock must be the chain's time,
+// taken by the workflow from its runtime and never from a setting, and program.ts decides nothing
+// on a clock it can't read.
 //
 //   Inside n   Every counting seat answers with a final, and the finals are the same: the same
 //              points for both teams. A silent counting seat blocks, and so does one that has not
@@ -18,10 +20,14 @@
 //              answer as a score's would: "the same proof as a score: three feeds inside the
 //              window and two after". A void is never taken inside the window, so its count is
 //              always the after-n count: at least two counting seats answer, each without a final.
-//   Disagree   Any two finals that differ, from any seat asked, the spare's included, at any hour.
-//              From start + n also: with at least two counting seats answering, the answers are
-//              neither a score nor a void, so finals stand beside answers without one. The first
-//              run that sees either posts the dispute record, with every reading.
+//   Disagree   Any two finals that differ, from any seat asked, the spare's included. Inside n the
+//              run waits until every seat it reads (each seat but one silent for the whole game)
+//              shows a final: the dispute record is what day 7 reads for a seat it can no longer
+//              ask, so a record posted while a feed is still catching up would freeze that feed's
+//              "no final" for the week. From start + n, two finals that differ post the record at
+//              once, and so do finals beside answers without one, with at least two counting seats
+//              answering: neither a score nor a void. The run that sees either posts the dispute
+//              record, with every reading.
 //   Day 7      See decideDay7.
 //
 // The spare is asked on every run. Its final counts toward a disagreement like any other seat's.
@@ -79,6 +85,11 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 	const first = finals[0];
 
 	if (finals.some((f) => f.home !== first.home || f.away !== first.away)) {
+		// Inside n, every seat read must show a final first: the counting seats and the spare.
+		const read = [...new Set([...counting, SPARE])];
+		if (inside && read.some((s) => of(s).kind !== "final")) {
+			return { action: "wait", readings, why: "inside n: two finals differ, and a seat has no final yet" };
+		}
 		return { action: "dispute", readings, why: "two finals differ" };
 	}
 
@@ -108,15 +119,21 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
  * reading counts: fresh if the feed answers now, otherwise the one the dispute record carried; a
  * seat with neither is silent. The game settles only when four sources are on record, none silent,
  * and at least three of them give the same final. Anything else is a void: 2-2, a silent fourth,
- * or a league with fewer than four feeds: college today has three feeds, so a week-long dispute
- * voids there.
+ * or a league with fewer than four feeds.
+ *
+ * `down` is the seat silent for the whole game, if one is. It is silent here too, whatever the
+ * dispute record carries for it: this program never asks that seat, so a final on record for it
+ * could only have come from somewhere else. A game with such a seat has three sources at most, so
+ * a dispute on it voids.
  */
 export function decideDay7(
 	fresh: readonly Reading[],
 	recorded: readonly ReportReading[],
 	seats: readonly Seat[],
+	down: Seat | null,
 ): Decision {
 	const sources: Reading[] = seats.map((seat) => {
+		if (seat === down) return silent(seat, "silent for the game");
 		const now = fresh.find((r) => r.seat === seat);
 		if (now !== undefined && now.kind !== "silent") return now;
 		const then = recorded.find((r) => r.seat === seat);
