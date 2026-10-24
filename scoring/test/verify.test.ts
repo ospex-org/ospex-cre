@@ -1,4 +1,4 @@
-// The start's rule (verify.ts): proposed on the PR, with Vince's rulings of 10/22 in it. Seat 3's
+// The start's rule (verify.ts): proposed on the PR, with its ruled parts in it. Seat 3's
 // hint is checked against its board; a hint that fails makes seat 3 silent for the game and the
 // spare stands in; the start is the earliest counting seat's scheduled time when the counting seats
 // lie within an hour, and nothing is written when they lie further apart; the spare's time never

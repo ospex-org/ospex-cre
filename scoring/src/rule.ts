@@ -12,7 +12,7 @@
 //              yet answered with a final: inside n that is a game still on, or a feed still
 //              catching up, and the run waits.
 //   After n    Two counting seats answer with the same final and the third is silent. A seat that
-//              answered without a final is not silent (Vince, 10/22), so two finals beside an
+//              answered without a final is not silent, so two finals beside an
 //              answer without one are not enough.
 //   Void       Only from start + n. No seat that answers shows a final, and the counting seats
 //              answer as a score's would: "the same proof as a score: three feeds inside the
@@ -50,7 +50,7 @@ export const AGREE = deepFreeze({
  * The seat that is silent for the whole game, if one is: seat 3, unless the game was created with a
  * usable seat 3 hint and the start report shows seat 3 passed its board check (an answer without a
  * final: "listed on the board"). A hint that failed the check makes seat 3 silent for that game,
- * never wrong (Vince, 10/22, ruling 2), and so does any start report that doesn't show the pass:
+ * never wrong, and so does any start report that doesn't show the pass:
  * seat 3's points are bound to the game only by that check. Seats 1 and 2 are read by team and must
  * list the game before its start is written, so neither is ever silent for a whole game.
  */
@@ -108,8 +108,8 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
  * reading counts: fresh if the feed answers now, otherwise the one the dispute record carried; a
  * seat with neither is silent. The game settles only when four sources are on record, none silent,
  * and at least three of them give the same final. Anything else is a void: 2-2, a silent fourth,
- * or a league with fewer than four feeds (the 10/17 ruling: "College today has three feeds, so a
- * week-long dispute voids there").
+ * or a league with fewer than four feeds: college today has three feeds, so a week-long dispute
+ * voids there.
  */
 export function decideDay7(
 	fresh: readonly Reading[],
