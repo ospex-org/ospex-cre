@@ -13,7 +13,7 @@ import { request } from "../src/readers/request";
 import { runSync } from "../src/run";
 import type { Game, HttpResponse, Reading, Seat } from "../src/types";
 import { START_BOUND, START_SPREAD, decideStart } from "../src/verify";
-import { NOW } from "./cases";
+import { LATE, NOW } from "./cases";
 import { KEY, at, copy, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, chainOf } from "./rule-helpers";
 
@@ -190,6 +190,27 @@ describe("seat 3's hint, checked against its board", () => {
 		// The control: another row's time unreadable says nothing about the hint, and the hint still binds.
 		const v = verify(unverified("nfl not final"), anyRow((r) => ({ ...r, MatchTime: "TBD" })));
 		expect([v.action, v.start, v.report?.readings[2]]).toEqual(["start", "2026-10-23T00:15:00Z", [3, 1]]);
+	});
+
+	test("the two-stage case end to end: a malformed board row writes no start, and the normal start then disputes a dissenting seat 3", () => {
+		// Stage 1, at 17:30 on 22 Oct: the hinted row's id null makes the run wait, with no start report.
+		const malformed = verify(unverified("nfl not final"), board("NFL", BEARS, (r) => ({ ...r, ID: null })));
+		expect([malformed.action, malformed.report]).toEqual(["wait", null]);
+		// The board as saved writes the start, with seat 3 counting.
+		const t = saved(undefined, NOW);
+		const start = scoreGameSync(unverified("nfl not final"), KEYS, PAYOUT, NOW, t.send);
+		expect([start.decision.action, start.report?.readings.map((r) => [r.seat, r.kind])]).toEqual(["start", [[1, 1], [2, 1], [3, 1], [4, 1]]]);
+		// Stage 2, the same game read at 03:32 on 23 Oct with that start report and seat 3's result derived to 31-24.
+		const seat3Dissents: Derive = (s, p, b) => (s === 3 && p === `/results/${BEARS}` ? (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, HomeScore: "31" })) : b);
+		const game: ChainGame = { ...chainOf("nfl final, read after the game"), startReadings: start.report!.readings };
+		const t2 = saved(seat3Dissents, LATE);
+		const o = scoreGameSync(game, KEYS, PAYOUT, LATE, t2.send);
+		expect(t2.misses).toEqual([]);
+		expect([o.decision.action, o.decision.why, o.decision.readings.map((r) => (r.kind === "final" ? `${r.seat}:${r.home}-${r.away}` : `${r.seat}:${r.detail}`))]).toEqual([
+			"dispute",
+			"two finals differ",
+			["1:30-24", "2:30-24", "3:31-24", "4:30-24"],
+		]);
 	});
 
 	test("a hint the board doesn't list fails only once the board reaches the game's date; before that the run waits", () => {
