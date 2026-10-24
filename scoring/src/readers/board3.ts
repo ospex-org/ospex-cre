@@ -1,4 +1,4 @@
-// Seat 3's board, read once, at verification (Vince, 10/22, ruling 2 on this card).
+// Seat 3's board, read once, at verification.
 //
 // Seat 3 is read by its creation hint, and its results carry no team names and no time, so its
 // points are the feed's own home and away, bound to the game only by the hint. Verification checks

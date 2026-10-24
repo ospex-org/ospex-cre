@@ -2,7 +2,7 @@
 //
 // The spec rules that the start is written once, at verification, by a first-n reporter, and is
 // never corrected. It does not say which feeds must agree that the game exists or which time is
-// written; this rule is the writer's proposal on the PR, with Vince's three rulings of 10/22 in it:
+// written; this rule is the writer's proposal on the PR, with three ruled parts in it:
 //
 //   (2) seat 3's hint is checked against seat 3's board while the game is listed: the same two
 //       teams, the same home and away, the time at the start. A hint that fails makes seat 3

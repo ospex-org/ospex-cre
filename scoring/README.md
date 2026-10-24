@@ -117,7 +117,7 @@ inside the fingerprint. For a game whose start is written:
   points for both teams. A silent counting seat blocks. So does one that hasn't answered with a
   final yet: the run waits.
 * **After n**, two counting seats with the same final are enough when the third is silent. A seat
-  that answered without a final isn't silent (ruled 22 Oct), so that is a disagreement, not a score.
+  that answered without a final isn't silent, so that is a disagreement, not a score.
 * **The hour-24 void** comes only from start + n, and only when no seat that answers shows a final.
   At least two counting seats must answer, the after-n count, since a void is never taken inside
   the window.
@@ -138,7 +138,7 @@ inside the fingerprint. For a game whose start is written:
 ## The start
 
 [`src/verify.ts`](src/verify.ts) is the start's rule, written once at verification. It is
-proposed on the PR, with Vince's rulings of 22 Oct.
+proposed on the PR; three of its parts are ruled.
 
 * **Seats 1 and 2** must each list the game by team, within a day of the creator's date either way:
   the games set's `START_BOUND`, a fixed 24 hours whatever the game's n, and the only range it
