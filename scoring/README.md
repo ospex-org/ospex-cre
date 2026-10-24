@@ -1,11 +1,11 @@
 # scoring
 
-The v3 scoring program's readers and its feed table. For one game, it reads each of the four
-feeds and says, feed by feed, whether the feed was silent, answered without a final, or
-answered with a final and its two scores. Deciding what those readings add up to (the
-agreement rule, the hour-24 void, the dispute record and day 7) is the next piece, built on this
-one. This folder imports nothing from Chainlink, so the Chainlink workflow and the open path's
-sealed machine run the same files.
+The v3 scoring program. For one game, it reads each of the four feeds and says, feed by feed,
+whether the feed was silent, answered without a final, or answered with a final and its two
+scores. Then it decides by one fixed rule what those readings add up to: a start, a score, the
+hour-24 void, a dispute record, a day-7 result, or nothing yet. It builds the one report shape
+the games set takes. This folder imports nothing from Chainlink, so the Chainlink workflow and
+the open path's sealed machine run the same files. Its entry point is `src/program.ts`.
 
 ## The feed table
 
@@ -108,6 +108,85 @@ or not at all past 66 hours. The cap is 12 requests per seat per game (`MAX_REQU
 one can leave seats 1 and 2 silent for want of requests.
 Each game is read on its own: a slate of games costs the sum.
 
+## What the readings decide
+
+[`src/rule.ts`](src/rule.ts) holds the agreement rule, and every count in it is a constant
+inside the fingerprint. For a game whose start is written:
+
+* **Inside n**, every counting seat answers with a final, and the finals are the same: the same
+  points for both teams. A silent counting seat blocks. So does one that hasn't answered with a
+  final yet: the run waits.
+* **After n**, two counting seats with the same final are enough when the third is silent. A seat
+  that answered without a final isn't silent, so that is a disagreement, not a score.
+* **The hour-24 void** comes only from start + n, and only when no seat that answers shows a final.
+  At least two counting seats must answer, the after-n count, since a void is never taken inside
+  the window.
+* **A disagreement** is either of two things. Any two finals that differ, from any seat, at any
+  hour. Or, after n, finals beside answers without one. The first run that sees it builds the
+  dispute record, with every reading.
+* **Day 7** counts from the dispute record. Each seat's latest reading counts: fresh if it answers,
+  otherwise the one the record carried. The game settles only when four sources are on record,
+  none silent, and at least three give the same final. Anything else voids.
+* **The spare** (seat 4) is asked on every run.
+  * Its final counts toward a disagreement like any other seat's.
+  * Its answer without a final never blocks a score.
+  * It **stands in for seat 3 for a game whose seat 3 is silent for the whole game**: a game
+    created without a usable seat 3 hint, or one whose start report doesn't show seat 3 passed its
+    board check. Then seats 1, 2 and 4 count, inside n and after.
+  * A seat silent on one run is just silent on that run; the spare does not stand in for it.
+
+## The start
+
+[`src/verify.ts`](src/verify.ts) is the start's rule, written once at verification. It is
+proposed on the PR; three of its parts are ruled.
+
+* **Seats 1 and 2** must each list the game by team, within a day of the creator's date either way:
+  the games set's `START_BOUND`, a fixed 24 hours whatever the game's n, and the only range it
+  accepts a start in. Among records of the two teams, the one nearest the date is the game.
+* **The times.** Their two times must lie within an hour of each other (`START_SPREAD`).
+* **Seat 3's check.** Seat 3's hint is checked against its board
+  ([`src/readers/board3.ts`](src/readers/board3.ts)): the same two teams, the game's home and
+  away, at a time within the hour.
+  * A hint that fails makes seat 3 silent for the game, never wrong, and the spare must then list
+    the game within the hour.
+  * A board that can't be read this time makes the run wait.
+* **The start written** is the earliest of the counting seats' scheduled times. The spare's time
+  never sets it.
+* **Otherwise** nothing is written, and a later run tries again.
+
+## One run
+
+[`src/program.ts`](src/program.ts) takes the game as the chain holds it, the run's clock, a
+transport, each seat's key and the payout address.
+
+* **By status.** An unverified game goes through verification. A verified game is read in its
+  window and decided by the rule at the run's hour. A disputed game waits for its day-7 clock.
+  A game that has ended takes nothing.
+* **What it returns:** its decision and the report ([`src/report.ts`](src/report.ts), the games
+  set's `Report`, enum numbers included). A wait returns no report.
+* **What a key and the payout can do.** A key decides only whether its own seat can be asked; a
+  missing key is a silent seat on that run. The payout lands in the report's payout field and
+  nowhere else.
+
+## The cases record
+
+`cases/` holds odd games, one JSON file each, by seat. Each file has:
+
+* the game as the chain holds it;
+* the run's clock;
+* the exact payloads the run rests on: seat, path and SHA-256 of a saved answer under `fixtures/`;
+* the outcome, and why.
+
+`test/cases-record.test.ts` replays every case with those payloads and nothing else. A case
+fails when:
+
+* a payload's bytes change;
+* the run asks for something the case doesn't list, or stops asking for something it does;
+* the outcome differs.
+
+The public cases record lives in ospex-artifacts. To pin a new odd game, save its payloads under
+`fixtures/` and add a case here.
+
 ## Running
 
 ```bash
@@ -127,6 +206,8 @@ bun run replay --game game.json --at 2026-10-23T03:32:00Z
 A game file holds what the chain holds for a game: `league`, `home`, `away`, `start` (an ISO time
 with its zone, or unix seconds), `n` in seconds, and `hints` (`[{ "seat": 3, "id": "..." }]`).
 A request the saved answers don't hold is listed, and that seat reads silent.
+
+Rebuilding the workflow id from source is in [`../BUILD.md`](../BUILD.md).
 
 ## Fixtures
 
