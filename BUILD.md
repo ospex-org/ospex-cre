@@ -53,12 +53,25 @@ Expected for v2's live workflow, `osverify`:
 | binary | `5929b9c675ae03ec67e6a5b4adba8ff2be5164e41e7dcdbe7b670954638da755` |
 | id | `0x0097efdade80ff0a9557d927a1c07075a453bba9cd0fae7e22519c613ec47805`, the id the registry holds |
 
-For a new deploy, set the config's values on the command line. B5's deploy script does this
-with the reporter's predicted address:
+For a new deploy, set every field of the spec's `config` on the command line, and the owner. A
+field left out keeps v2's value. A deploy script does this with the reporter's predicted address:
 
 ```bash
-bun build/fingerprint.ts <spec.json> --set receiverAddress=0x... --json
+bun build/fingerprint.ts <spec.json> --set receiverAddress=0x... --set eventAddress=0x... \
+  --set secretOwner=0x... --owner 0x... --json
 ```
+
+The script refuses an unknown flag, a second spec path and a flag without its value, so a mistyped
+flag can't fall back to the spec's own values and report them as matching. `--set=key=value` and
+`--owner=0x...` read the same as the spaced forms.
+
+## What this rebuild covers
+
+The steps above rebuild v2's live workflow, `oracle/`, which does not import `scoring/`. So the id
+shows the method, and nothing about the scoring program. The scoring program enters an id only
+through the workflow that imports it, and that workflow's id is rebuilt the same way once it
+exists. Its own check: change one count in `AGREE` (`scoring/src/rule.ts`) and rebuild, and the id
+moves; restore it, and the id comes back.
 
 ## Traps
 
@@ -82,8 +95,10 @@ On Windows 11, Bun 1.3.14, CLI v1.22.0, on 22 Oct 2026:
 * The deploy's 19:39 compile on 28 Jun and today's are byte-identical, both the wasm (`5434b2f3…`)
   and Bun's bundle (`95e04a91…`).
 
+On Linux, Bun 1.3.14, CLI v1.21.0, on 24 Oct 2026: one independent rebuild matched all three values
+above.
+
 Not yet checked:
 
-* A rebuild on Linux. javy is a different binary there, and so is the CLI. Hermes runs these steps
-  on the box from a clean clone, and the result goes on OSP-88.
+* Linux with the pinned CLI v1.22.0. javy is a different binary there, and so is the CLI.
 * Any CLI after v1.22.0. A newer encoder could change the compressed bytes, and the id with them.

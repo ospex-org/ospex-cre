@@ -14,8 +14,8 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { configBytes, sha256 } from "./config";
+import { join, resolve } from "node:path";
+import { configBytes, parseArgs, sha256, workflowName, type Args } from "./config";
 
 interface Spec {
 	readonly name: string;
@@ -36,23 +36,19 @@ function fail(message: string): never {
 	process.exit(1);
 }
 
-const args = process.argv.slice(2);
-const specPath = args.find((a) => !a.startsWith("--") && !args[args.indexOf(a) - 1]?.match(/^--(set|owner)$/));
-if (specPath === undefined) fail("usage: bun build/fingerprint.ts <spec.json> [--set key=value]... [--owner 0x...] [--json]");
-const spec = JSON.parse(readFileSync(specPath, "utf8")) as Spec;
-const root = resolve(dirname(specPath), "..");
-
-const values: Record<string, string> = { ...spec.config };
-let owner = spec.owner;
-for (let i = 0; i < args.length; i++) {
-	if (args[i] === "--set") {
-		const [k, ...v] = (args[++i] ?? "").split("=");
-		if (k === "" || v.length === 0) fail(`--set wants key=value, got ${args[i]}`);
-		values[k] = v.join("=");
-	} else if (args[i] === "--owner") {
-		owner = args[++i] ?? "";
-	}
+let args: Args;
+try {
+	args = parseArgs(process.argv.slice(2));
+} catch (e) {
+	fail(`${(e as Error).message}\nusage: bun build/fingerprint.ts <spec.json> [--set key=value]... [--owner 0x...] [--json]`);
 }
+const specPath = args.spec;
+const spec = JSON.parse(readFileSync(specPath, "utf8")) as Spec;
+// The repository's root is this script's own: a spec may sit anywhere, its paths are the repository's.
+const root = resolve(import.meta.dir, "..");
+
+const values: Record<string, string> = { ...spec.config, ...args.set };
+const owner = args.owner ?? spec.owner;
 if (!ADDRESS.test(owner)) fail("the owner is not an address");
 // A run with --set or --owner computes a new id; the spec's expected values belong to the spec's own inputs.
 const changed = owner !== spec.owner || Object.entries(values).some(([k, v]) => spec.config[k] !== v);
@@ -60,10 +56,7 @@ const expect = changed ? {} : (spec.expect ?? {});
 
 // The workflow name the CLI will hash is the target's workflow-name in workflow.yaml.
 const workflowDir = join(root, spec.workflow);
-const yaml = readFileSync(join(workflowDir, "workflow.yaml"), "utf8").split(/\r?\n/);
-const at = yaml.findIndex((l) => l.trim() === `${spec.target}:`);
-const nameLine = at < 0 ? undefined : yaml.slice(at + 1).find((l) => /^\s+workflow-name:/.test(l));
-const yamlName = nameLine?.split(":")[1]?.trim().replace(/^"|"$/g, "");
+const yamlName = workflowName(readFileSync(join(workflowDir, "workflow.yaml"), "utf8"), spec.target);
 if (yamlName !== spec.name) fail(`workflow.yaml names the ${spec.target} workflow ${JSON.stringify(yamlName)}, the spec ${JSON.stringify(spec.name)}`);
 if (!existsSync(join(workflowDir, "node_modules"))) fail(`run \`bun install --frozen-lockfile\` in ${spec.workflow}/ first`);
 
@@ -118,7 +111,7 @@ const result = {
 	matches: Object.fromEntries(checks.map(([k, got, want]) => [k, want === undefined ? "no expectation" : got === want])),
 	notes: toolNotes,
 };
-if (args.includes("--json")) console.log(JSON.stringify(result, null, 2));
+if (args.json) console.log(JSON.stringify(result, null, 2));
 else {
 	console.log(`${spec.name}: ${id}`);
 	for (const [k, got, want] of checks) console.log(`  ${k.padEnd(7)} ${got}  ${want === undefined ? "(no expectation)" : got === want ? "matches" : `DIFFERS from ${want}`}`);
