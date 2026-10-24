@@ -1,0 +1,188 @@
+nba: seat 2 "Los Angeles Clippers" joins la-clippers by hand (mascot Clippers on both lists)
+nba: seat 3 "Los Angeles Clippers" joins la-clippers by hand
+nba: seat 4 "Los Angeles Clippers" joins la-clippers by hand
+nba: seat 4 "Golden State Warriors Blue" joins nothing
+nba: seat 4 "Golden State Warriors Gold" joins nothing
+mlb: seat 2 "Athletics" joins oakland-athletics by hand (mascot Athletics on both lists)
+mlb: seat 4 "Athletics" joins oakland-athletics by hand
+mlb: seat 4 "American League" joins nothing
+mlb: seat 4 "National League" joins nothing
+nhl: seat 2 "Utah Mammoth" joins utah-hockey-club by hand (mascot Mammoth on both lists)
+nhl: seat 3 "Utah Mammoth" joins utah-hockey-club by hand
+nhl: seat 4 "Utah Mammoth" joins utah-hockey-club by hand
+nhl: seat 4 "Arizona Coyotes" joins nothing
+ncaaf: seat 2 "Appalachian State" joins app-state-mountaineers by hand (mascot Mountaineers on both lists)
+ncaaf: seat 2 "Connecticut" joins uconn-huskies by hand (mascot Huskies on both lists)
+ncaaf: seat 2 "Louisiana-Lafayette" joins louisiana-ragin-cajuns by hand (mascot Ragin' Cajuns on both lists)
+ncaaf: seat 2 "Louisiana-Monroe" joins ul-monroe-warhawks by hand (mascot Warhawks on both lists)
+ncaaf: seat 2 "Miami (FL)" joins miami-hurricanes by hand (mascot Hurricanes on both lists)
+ncaaf: seat 2 "Mississippi" joins ole-miss-rebels by hand (mascot Rebels on both lists)
+ncaaf: seat 2 "Sam Houston State" joins sam-houston-bearkats by hand (mascot Bearkats on both lists)
+ncaaf: seat 2 "Southern Mississippi" joins southern-miss-golden-eagles by hand (mascot Golden Eagles on both lists)
+ncaaf: seat 3 "Appalachian St" joins app-state-mountaineers by hand
+ncaaf: seat 3 "Central Florida" joins ucf-knights by hand
+ncaaf: seat 3 "Connecticut" joins uconn-huskies by hand
+ncaaf: seat 3 "Louisiana-Lafayette" joins louisiana-ragin-cajuns by hand
+ncaaf: seat 3 "Louisiana-Monroe" joins ul-monroe-warhawks by hand
+ncaaf: seat 3 "Miami Florida" joins miami-hurricanes by hand
+ncaaf: seat 3 "Miami Ohio" joins miami-oh-redhawks by hand
+ncaaf: seat 3 "Mississippi" joins ole-miss-rebels by hand
+ncaaf: seat 3 "N. Dakota State" joins north-dakota-state-bison by hand
+ncaaf: seat 3 "North Carolina State" joins nc-state-wolfpack by hand
+ncaaf: seat 3 "Tex San Antonio" joins utsa-roadrunners by hand
+ncaaf: seat 4 "Youngstown St Penguins" joins youngstown-state-penguins by hand
+ncaaf: seat 4 "Albany" joins ualbany-great-danes by hand
+ncaaf: seat 4 "Kentucky State University Thorobreds" joins kentucky-state-thorobreds by hand
+ncaaf: seat 4 "Appalachian State Mountaineers" joins app-state-mountaineers by hand
+ncaaf: seat 4 "Citadel Bulldogs" joins the-citadel-bulldogs by hand
+ncaaf: seat 4 "Dixie State Trailblazers" joins utah-tech-trailblazers by hand
+ncaaf: seat 4 "Grambling State Tigers" joins grambling-tigers by hand
+ncaaf: seat 4 "Houston Baptist Huskies" joins houston-christian-huskies by hand
+ncaaf: seat 4 "LIU Sharks" joins long-island-university-sharks by hand
+ncaaf: seat 4 "McNeese State Cowboys" joins mcneese-cowboys by hand
+ncaaf: seat 4 "Nicholls State Colonels" joins nicholls-colonels by hand
+ncaaf: seat 4 "Presbyterian College Blue Hose" joins presbyterian-blue-hose by hand
+ncaaf: seat 4 "Sam Houston State Bearkats" joins sam-houston-bearkats by hand
+ncaaf: seat 4 "Southeastern Louisiana Lions" joins se-louisiana-lions by hand
+ncaaf: seat 4 "Southern Mississippi Golden Eagles" joins southern-miss-golden-eagles by hand
+ncaaf: seat 4 "Southern University Jaguars" joins southern-jaguars by hand
+ncaaf: seat 4 "St. Francis (PA) Red Flash" joins saint-francis-red-flash by hand
+ncaaf: seat 4 "St. Thomas (MN) Tommies" joins st-thomas-minnesota-tommies by hand
+ncaaf: seat 4 "UMass Minutemen" joins massachusetts-minutemen by hand
+ncaaf: seat 4 "Yale University Bulldogs" joins yale-bulldogs by hand
+ncaaf: seat 4 "Occidental Tigers" joins nothing
+ncaaf: seat 4 "Savannah State Tigers" joins nothing
+ncaaf: seat 4 "Wisconsin-Whitewater Warhawks" joins nothing
+ncaab: "Georgia" stays georgia-bulldogs's though an entry outside the league's teams carries it: Seat 1's list also has an entry named only Georgia (abbreviation GEO), with no school name and no conference: a touring side, not a school. Seats 2 and 3 write the University of Georgia as Georgia, so the name stays the school's.
+ncaab: seat 2 "Albany" joins ualbany-great-danes by hand (mascot Great Danes on both lists)
+ncaab: seat 2 "American" joins american-university-eagles by hand (mascot Eagles on both lists)
+ncaab: seat 2 "Appalachian State" joins app-state-mountaineers by hand (mascot Mountaineers on both lists)
+ncaab: seat 2 "Arkansas-Little Rock" joins little-rock-trojans by hand (mascot Trojans on both lists)
+ncaab: seat 2 "College of Charleston" joins charleston-cougars by hand (mascot Cougars on both lists)
+ncaab: seat 2 "Connecticut" joins uconn-huskies by hand (mascot Huskies on both lists)
+ncaab: seat 2 "Detroit" joins detroit-mercy-titans by hand (mascot Titans on both lists)
+ncaab: seat 2 "Illinois-Chicago" joins uic-flames by hand (mascot Flames on both lists)
+ncaab: seat 2 "Louisiana-Lafayette" joins louisiana-ragin-cajuns by hand (mascot Ragin' Cajuns on both lists)
+ncaab: seat 2 "Louisiana-Monroe" joins ul-monroe-warhawks by hand (mascot Warhawks on both lists)
+ncaab: seat 2 "LSU-New Orleans" joins new-orleans-privateers by hand (mascot Privateers on both lists)
+ncaab: seat 2 "McNeese State" joins mcneese-cowboys by hand (mascot Cowboys on both lists)
+ncaab: seat 2 "Miami (FL)" joins miami-hurricanes by hand (mascot Hurricanes on both lists)
+ncaab: seat 2 "Mississippi" joins ole-miss-rebels by hand (mascot Rebels on both lists)
+ncaab: seat 2 "Nebraska-Omaha" joins omaha-mavericks by hand (mascot Mavericks on both lists)
+ncaab: seat 2 "Nicholls State" joins nicholls-colonels by hand (mascot Colonels on both lists)
+ncaab: seat 2 "Prairie View" joins prairie-view-a-and-m-panthers by hand (mascot Panthers on both lists)
+ncaab: seat 2 "Queens (NC)" joins queens-university-royals by hand (mascot Royals on both lists)
+ncaab: seat 2 "Rio Grande Valley" joins ut-rio-grande-valley-vaqueros by hand (mascot Vaqueros on both lists)
+ncaab: seat 2 "Sam Houston State" joins sam-houston-bearkats by hand (mascot Bearkats on both lists)
+ncaab: seat 2 "SE Missouri State" joins southeast-missouri-state-redhawks by hand (mascot Redhawks on both lists)
+ncaab: seat 2 "Seattle" joins seattle-u-redhawks by hand (mascot Redhawks on both lists)
+ncaab: seat 2 "Southeastern Louisiana" joins se-louisiana-lions by hand (mascot Lions on both lists)
+ncaab: seat 2 "Southern Mississippi" joins southern-miss-golden-eagles by hand (mascot Golden Eagles on both lists)
+ncaab: seat 2 "St. Joseph's (PA)" joins saint-josephs-hawks by hand (mascot Hawks on both lists)
+ncaab: seat 2 "St. Mary's (CA)" joins saint-marys-gaels by hand (mascot Gaels on both lists)
+ncaab: seat 2 "St. Peter's" joins saint-peters-peacocks by hand (mascot Peacocks on both lists)
+ncaab: seat 2 "St. Thomas (MN)" joins st-thomas-minnesota-tommies by hand (mascot Tommies on both lists)
+ncaab: seat 2 "Stonehill College" joins stonehill-skyhawks by hand (mascot Skyhawks on both lists)
+ncaab: seat 2 "Tennessee-Martin" joins ut-martin-skyhawks by hand (mascot Skyhawks on both lists)
+ncaab: seat 2 "Texas-Arlington" joins ut-arlington-mavericks by hand (mascot Mavericks on both lists)
+ncaab: seat 2 "UMKC" joins kansas-city-roos by hand (mascot Roos on both lists)
+ncaab: seat 2 "Virginia Commonwealth" joins vcu-rams by hand (mascot Rams on both lists)
+ncaab: seat 4 "Alabama St Hornets" joins alabama-state-hornets by hand
+ncaab: seat 4 "Alcorn St Braves" joins alcorn-state-braves by hand
+ncaab: seat 4 "Arizona St Sun Devils" joins arizona-state-sun-devils by hand
+ncaab: seat 4 "Arkansas St Red Wolves" joins arkansas-state-red-wolves by hand
+ncaab: seat 4 "Chicago St Cougars" joins chicago-state-cougars by hand
+ncaab: seat 4 "Cleveland St Vikings" joins cleveland-state-vikings by hand
+ncaab: seat 4 "Colorado St Rams" joins colorado-state-rams by hand
+ncaab: seat 4 "Coppin St Eagles" joins coppin-state-eagles by hand
+ncaab: seat 4 "Delaware St Hornets" joins delaware-state-hornets by hand
+ncaab: seat 4 "East Tennessee St Buccaneers" joins east-tennessee-state-buccaneers by hand
+ncaab: seat 4 "Florida St Seminoles" joins florida-state-seminoles by hand
+ncaab: seat 4 "Fresno St Bulldogs" joins fresno-state-bulldogs by hand
+ncaab: seat 4 "Georgia St Panthers" joins georgia-state-panthers by hand
+ncaab: seat 4 "Illinois St Redbirds" joins illinois-state-redbirds by hand
+ncaab: seat 4 "Indiana St Sycamores" joins indiana-state-sycamores by hand
+ncaab: seat 4 "Jackson St Tigers" joins jackson-state-tigers by hand
+ncaab: seat 4 "Jacksonville St Gamecocks" joins jacksonville-state-gamecocks by hand
+ncaab: seat 4 "Kansas St Wildcats" joins kansas-state-wildcats by hand
+ncaab: seat 4 "Kennesaw St Owls" joins kennesaw-state-owls by hand
+ncaab: seat 4 "Michigan St Spartans" joins michigan-state-spartans by hand
+ncaab: seat 4 "Mississippi St Bulldogs" joins mississippi-state-bulldogs by hand
+ncaab: seat 4 "Missouri St Bears" joins missouri-state-bears by hand
+ncaab: seat 4 "Montana St Bobcats" joins montana-state-bobcats by hand
+ncaab: seat 4 "Morehead St Eagles" joins morehead-state-eagles by hand
+ncaab: seat 4 "Morgan St Bears" joins morgan-state-bears by hand
+ncaab: seat 4 "Murray St Racers" joins murray-state-racers by hand
+ncaab: seat 4 "New Mexico St Aggies" joins new-mexico-state-aggies by hand
+ncaab: seat 4 "Norfolk St Spartans" joins norfolk-state-spartans by hand
+ncaab: seat 4 "North Dakota St Bison" joins north-dakota-state-bison by hand
+ncaab: seat 4 "Northwestern St Demons" joins northwestern-state-demons by hand
+ncaab: seat 4 "Oklahoma St Cowboys" joins oklahoma-state-cowboys by hand
+ncaab: seat 4 "Oregon St Beavers" joins oregon-state-beavers by hand
+ncaab: seat 4 "Portland St Vikings" joins portland-state-vikings by hand
+ncaab: seat 4 "Sacramento St Hornets" joins sacramento-state-hornets by hand
+ncaab: seat 4 "San Diego St Aztecs" joins san-diego-state-aztecs by hand
+ncaab: seat 4 "San José St Spartans" joins san-jose-state-spartans by hand
+ncaab: seat 4 "Savannah St Tigers" joins savannah-state-tigers by hand
+ncaab: seat 4 "South Carolina St Bulldogs" joins south-carolina-state-bulldogs by hand
+ncaab: seat 4 "South Dakota St Jackrabbits" joins south-dakota-state-jackrabbits by hand
+ncaab: seat 4 "Tennessee St Tigers" joins tennessee-state-tigers by hand
+ncaab: seat 4 "Washington St Cougars" joins washington-state-cougars by hand
+ncaab: seat 4 "Wichita St Shockers" joins wichita-state-shockers by hand
+ncaab: seat 4 "Wright St Raiders" joins wright-state-raiders by hand
+ncaab: seat 4 "Youngstown St Penguins" joins youngstown-state-penguins by hand
+ncaab: seat 4 "Boston Univ. Terriers" joins boston-university-terriers by hand
+ncaab: seat 4 "Army Knights" joins army-black-knights by hand
+ncaab: seat 4 "Florida Int'l Golden Panthers" joins florida-international-panthers by hand
+ncaab: seat 4 "Gardner-Webb Bulldogs" joins gardner-webb-runnin-bulldogs by hand
+ncaab: seat 4 "Grand Canyon Antelopes" joins grand-canyon-lopes by hand
+ncaab: seat 4 "Long Beach St 49ers" joins long-beach-state-beach by hand
+ncaab: seat 4 "Albany Great Danes" joins ualbany-great-danes by hand
+ncaab: seat 4 "American Eagles" joins american-university-eagles by hand
+ncaab: seat 4 "Appalachian St Mountaineers" joins app-state-mountaineers by hand
+ncaab: seat 4 "Arkansas-Little Rock Trojans" joins little-rock-trojans by hand
+ncaab: seat 4 "Cal Baptist Lancers" joins california-baptist-lancers by hand
+ncaab: seat 4 "Central Connecticut St Blue Devils" joins central-connecticut-blue-devils by hand
+ncaab: seat 4 "CSU Bakersfield Roadrunners" joins cal-state-bakersfield-roadrunners by hand
+ncaab: seat 4 "CSU Fullerton Titans" joins cal-state-fullerton-titans by hand
+ncaab: seat 4 "CSU Northridge Matadors" joins cal-state-northridge-matadors by hand
+ncaab: seat 4 "Dixie State Trailblazers" joins utah-tech-trailblazers by hand
+ncaab: seat 4 "Fort Wayne Mastodons" joins purdue-fort-wayne-mastodons by hand
+ncaab: seat 4 "Grambling St Tigers" joins grambling-tigers by hand
+ncaab: seat 4 "GW Revolutionaries" joins george-washington-revolutionaries by hand
+ncaab: seat 4 "IUPUI Jaguars" joins iu-indianapolis-jaguars by hand
+ncaab: seat 4 "LIU Sharks" joins long-island-university-sharks by hand
+ncaab: seat 4 "Loyola (Chi) Ramblers" joins loyola-chicago-ramblers by hand
+ncaab: seat 4 "Loyola (MD) Greyhounds" joins loyola-maryland-greyhounds by hand
+ncaab: seat 4 "Miss Valley St Delta Devils" joins mississippi-valley-state-delta-devils by hand
+ncaab: seat 4 "Mt. St. Mary's Mountaineers" joins mount-st-marys-mountaineers by hand
+ncaab: seat 4 "N Colorado Bears" joins northern-colorado-bears by hand
+ncaab: seat 4 "Nicholls St Colonels" joins nicholls-colonels by hand
+ncaab: seat 4 "Prairie View Panthers" joins prairie-view-a-and-m-panthers by hand
+ncaab: seat 4 "Sam Houston St Bearkats" joins sam-houston-bearkats by hand
+ncaab: seat 4 "SE Missouri St Redhawks" joins southeast-missouri-state-redhawks by hand
+ncaab: seat 4 "Seattle Redhawks" joins seattle-u-redhawks by hand
+ncaab: seat 4 "St. Francis (PA) Red Flash" joins saint-francis-red-flash by hand
+ncaab: seat 4 "St. Francis BKN Terriers" joins st-francis-brooklyn-terriers by hand
+ncaab: seat 4 "St. Thomas (MN) Tommies" joins st-thomas-minnesota-tommies by hand
+ncaab: seat 4 "Tenn-Martin Skyhawks" joins ut-martin-skyhawks by hand
+ncaab: seat 4 "Texas A&M-CC Islanders" joins texas-a-and-m-corpus-christi-islanders by hand
+ncaab: seat 4 "UMKC Kangaroos" joins kansas-city-roos by hand
+ncaab: seat 2 "West Florida" joins nothing
+ncaab: seat 4 "Baldwin Wallace Yellow Jackets" joins nothing: a school outside the league's teams carries it too
+ncaab: seat 4 "Brescia Bearcats" joins nothing: a school outside the league's teams carries it too
+ncaab: seat 4 "Cincinnati Clermont" joins nothing: a school outside the league's teams carries it too
+ncaab: seat 4 "Clinton Bears" joins nothing
+ncaab: seat 4 "Defiance College Yellow Jackets" joins nothing
+ncaab: seat 4 "Gallaudet Bison" joins nothing
+ncaab: seat 4 "Georgia Southwestern State Hurricanes" joins nothing
+ncaab: seat 4 "Immaculata Mighty Macs" joins nothing: a school outside the league's teams carries it too
+ncaab: seat 4 "John Jay College Bloodhounds" joins nothing: a school outside the league's teams carries it too
+ncaab: seat 4 "Johnson And Wales (NC) Wildcats" joins nothing
+ncaab: seat 4 "Kansas Christian Falcons" joins nothing: a school outside the league's teams carries it too
+ncaab: seat 4 "North American Stallions" joins nothing: a school outside the league's teams carries it too
+ncaab: seat 4 "Pfeiffer Falcons" joins nothing
+ncaab: seat 4 "Regent University Royals" joins nothing
+ncaab: seat 4 "Sonoma State Seawolves" joins nothing: a school outside the league's teams carries it too
+ncaab: seat 4 "Spalding Golden Eagles" joins nothing
+ncaab: seat 4 "Western State Colorado Mountaineers" joins nothing
