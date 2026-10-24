@@ -1,7 +1,7 @@
 // The real games the suite reads, and what each seat must say about each, frozen as literals.
 //
 // Every game is real and every answer is a saved fixture. Each case reads at its own clock, and a
-// request saved before and after a game ends is answered as of that clock. Three clocks:
+// request saved before and after a game ends is answered as of that clock. Four clocks:
 //   NOW,  just after the first capture (17:30 UTC on 22 Oct 2026): a game that had not finished
 //         then reads "no final", seat 4 is silent about games older than it keeps, and seat 1's
 //         plan then refused hockey and college (401);
@@ -9,7 +9,9 @@
 //         the same requests once they had ended;
 //   MID,  just after the afternoon capture of 23 Oct (19:30 UTC), once seat 1 answered hockey and
 //         college: its finals and games not final in those leagues, and the doubleheader, the
-//         series and the listed-twice game that the "only one" rule in src/pick.ts turns on.
+//         series and the listed-twice game that the "only one" rule in src/pick.ts turns on;
+//   NIGHT, just after the capture of 24 Oct (03:47 UTC): Friday night's three games, read by every
+//         seat once they had ended, seat 1 among them in hockey and college football.
 //
 // Seat 3 is read by the game's seat 3 hint: its results carry no team names and no time, so the
 // hint is the only thing that ties a result to a game (src/readers/seat3.ts). The games still on
@@ -24,6 +26,7 @@ import { at } from "./fixtures";
 export const NOW = at("2026-10-22T17:30:00Z");
 export const LATE = at("2026-10-23T03:32:00Z");
 export const MID = at("2026-10-23T19:30:00Z");
+export const NIGHT = at("2026-10-24T03:47:00Z");
 
 export interface Expected {
 	readonly kind: "silent" | "no_final" | "final";
@@ -77,6 +80,7 @@ const APP_STATE = g("ncaaf", "Appalachian State", "James Madison", "2026-10-22T2
 // Friday night's games, each with the id seat 3 listed it under on 22 Oct.
 const HABS = g("nhl", "Chicago Blackhawks", "Montreal Canadiens", "2026-10-24T00:00:00Z", "efc9f85a-5d46-490f-b2c5-6e8e75ad2aef");
 const CAVALIERS = g("ncaaf", "Virginia", "Duke", "2026-10-23T23:00:00Z", "0edb4d8e-710e-4f0d-b346-366b03cbb4bb");
+const BREWERS = g("mlb", "Milwaukee Brewers", "Tampa Bay Rays", "2026-10-24T00:00:00Z", "122d7737-bc9a-4f7a-a444-c9cee9a7e750");
 
 // The games the "only one" rule turns on.
 const HAWAII = g("ncaab", "Hawaii", "Seattle U", "2026-11-03T04:59:00Z");
@@ -143,7 +147,7 @@ export const CASES: readonly Case[] = [
 	{
 		name: "mlb not final: Tampa Bay at Milwaukee",
 		now: NOW,
-		game: g("mlb", "Milwaukee Brewers", "Tampa Bay Rays", "2026-10-24T00:00:00Z", "122d7737-bc9a-4f7a-a444-c9cee9a7e750"),
+		game: BREWERS,
 		expect: {
 			1: noFinal("scheduled", "15467432", 0, 0),
 			2: noFinal("scheduled", "349332"),
@@ -496,6 +500,42 @@ export const CASES: readonly Case[] = [
 		game: g("mlb", "Chicago Cubs", "Chicago White Sox", "2026-08-19T18:20:00Z"),
 		expect: { 1: final(0, 3, "5059675"), 2: final(0, 3, "337877") },
 	},
+	// Friday night's three games, read by the same requests once they had ended. Seat 3's results
+	// are the ids it listed them under on 22 Oct; seat 4's times are the actual starts (23:06, 00:09
+	// and 00:16 UTC), inside each window.
+	{
+		name: "ncaaf final, read after the game: Duke at Virginia, 19-16 Duke",
+		now: NIGHT,
+		game: CAVALIERS,
+		expect: {
+			1: final(16, 19, "457380"),
+			2: final(16, 19, "339623"),
+			3: final(16, 19, "0edb4d8e-710e-4f0d-b346-366b03cbb4bb"),
+			4: final(16, 19, "a493efd6ef737f676a45aacc0eaf7be8"),
+		},
+	},
+	{
+		name: "nhl final, read after the game: Montreal at Chicago, 4-1 Montreal",
+		now: NIGHT,
+		game: HABS,
+		expect: {
+			1: final(1, 4, "3328214"),
+			2: final(1, 4, "347317"),
+			3: final(1, 4, "efc9f85a-5d46-490f-b2c5-6e8e75ad2aef"),
+			4: final(1, 4, "db9d82d62d8f222bfd835100662c6ac6"),
+		},
+	},
+	{
+		name: "mlb final, read after the game: Tampa Bay at Milwaukee, World Series game 1, 3-2 Milwaukee",
+		now: NIGHT,
+		game: BREWERS,
+		expect: {
+			1: final(3, 2, "15467432"),
+			2: final(3, 2, "349332"),
+			3: final(3, 2, "122d7737-bc9a-4f7a-a444-c9cee9a7e750"),
+			4: final(3, 2, "e4c03eec29795f56b6b06c313d3af271"),
+		},
+	},
 ];
 
 /**
@@ -510,7 +550,6 @@ export const PENDING: Readonly<Record<Seat, Readonly<Record<string, string>>>> =
 		postponed: "the seat has no postponed word: the 11 Jun rainout reads canceled at its own time",
 	},
 	3: {
-		mlb: "the one game still listed, World Series game 1, ends Friday night; its final is read then",
 		ncaab: "the league had not started: the seat listed no game",
 		postponed: "no postponed game in the seat's five days at capture, and results older than that answer nothing by id",
 		canceled: "no cancelled game in the seat's five days at capture",

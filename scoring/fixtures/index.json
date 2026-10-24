@@ -1492,5 +1492,185 @@
     "sha256": "f1a3536f8a054de6027102e3eaed805fb2b11bf13c006ba10ccd52d86f932ddb",
     "bytes": 187,
     "capturedAt": "2026-10-23T19:19:45.729Z"
+  },
+  {
+    "seat": 1,
+    "path": "/ncaaf/v1/games?dates[]=2026-10-22&per_page=100",
+    "status": 200,
+    "file": "seat1/ncaaf/ncaaf-v1-games-dates-2026-10-22-per-page-100-at-20261024T0345z.json",
+    "sha256": "4b608186bdbc84d4bf859b2ad6547768cb9ba6821e199c820ae02c1a3f934d7f",
+    "bytes": 2528,
+    "capturedAt": "2026-10-24T03:45:06.828Z"
+  },
+  {
+    "seat": 1,
+    "path": "/ncaaf/v1/games?dates[]=2026-10-23&per_page=100",
+    "status": 200,
+    "file": "seat1/ncaaf/ncaaf-v1-games-dates-2026-10-23-per-page-100-at-20261024T0345z.json",
+    "sha256": "35c1ce5004b031b0f8b3a90f160d2059ad31f2c86b15fdf8069a1f6a8b3b36ce",
+    "bytes": 2545,
+    "capturedAt": "2026-10-24T03:45:18.194Z"
+  },
+  {
+    "seat": 1,
+    "path": "/ncaaf/v1/games?dates[]=2026-10-24&per_page=100",
+    "status": 200,
+    "file": "seat1/ncaaf/ncaaf-v1-games-dates-2026-10-24-per-page-100-at-20261024T0345z.json",
+    "sha256": "4aa36aadf033e6feaf0ad5ecf22846c61bf25d61b47b9b5338b60aef97cfabce",
+    "bytes": 63297,
+    "capturedAt": "2026-10-24T03:45:31.307Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NCAAF&date=2026-10-22",
+    "status": 200,
+    "file": "seat2/ncaaf/games-league-ncaaf-date-2026-10-22-at-20261024T0345z.json",
+    "sha256": "a915c267a232cf75aed64e04b75f80e35feac43a651a812a50daee89406c531f",
+    "bytes": 3803,
+    "capturedAt": "2026-10-24T03:45:31.892Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NCAAF&date=2026-10-23",
+    "status": 200,
+    "file": "seat2/ncaaf/games-league-ncaaf-date-2026-10-23-at-20261024T0345z.json",
+    "sha256": "54131faef6e796685e28f1067636d2a2b1132e5fed1fa7506369c3ea14b595c1",
+    "bytes": 6107,
+    "capturedAt": "2026-10-24T03:45:33.017Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NCAAF&date=2026-10-24",
+    "status": 200,
+    "file": "seat2/ncaaf/games-league-ncaaf-date-2026-10-24-at-20261024T0345z.json",
+    "sha256": "b9708ac88724f527331b0dc587ee43cc191944bff8e25fb7df22b40753ec3d7e",
+    "bytes": 47340,
+    "capturedAt": "2026-10-24T03:45:34.528Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/0edb4d8e-710e-4f0d-b346-366b03cbb4bb",
+    "status": 200,
+    "file": "seat3/ncaaf/results-0edb4d8e-710e-4f0d-b346-366b03cbb4bb-at-20261024T0345z.json",
+    "sha256": "2d15ffc851b6d4d4e5e57eeee3bd192139ebd821130f148a12a52b62f24830ed",
+    "bytes": 203,
+    "capturedAt": "2026-10-24T03:45:35.076Z"
+  },
+  {
+    "seat": 4,
+    "path": "/v4/sports/americanfootball_ncaaf/scores/?daysFrom=3&dateFormat=iso&apiKey=SEATKEY",
+    "status": 200,
+    "file": "seat4/ncaaf/v4-sports-americanfootball-ncaaf-scores-daysfrom-3-dateformat-iso-at-20261024T0345z.json",
+    "sha256": "7728ea40294e65d35fa2ba9bae944ffc6dba6d4a7961e84510d5c76a6694ac26",
+    "bytes": 19525,
+    "capturedAt": "2026-10-24T03:45:35.383Z"
+  },
+  {
+    "seat": 1,
+    "path": "/nhl/v1/games?dates[]=2026-10-23&per_page=100",
+    "status": 200,
+    "file": "seat1/nhl/nhl-v1-games-dates-2026-10-23-per-page-100-at-20261024T0345z.json",
+    "sha256": "5acd055d6044b9e57026c5006dc35d38c869dc9fb757046d0f26e19360d811e1",
+    "bytes": 1143,
+    "capturedAt": "2026-10-24T03:45:44.142Z"
+  },
+  {
+    "seat": 1,
+    "path": "/nhl/v1/games?dates[]=2026-10-24&per_page=100",
+    "status": 200,
+    "file": "seat1/nhl/nhl-v1-games-dates-2026-10-24-per-page-100-at-20261024T0345z.json",
+    "sha256": "9bc443416985d473c09b68b6b3bfc844045f92a2f8e4a41dcb6c22e36abdcb71",
+    "bytes": 6241,
+    "capturedAt": "2026-10-24T03:45:57.116Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NHL&date=2026-10-23",
+    "status": 200,
+    "file": "seat2/nhl/games-league-nhl-date-2026-10-23-at-20261024T0345z.json",
+    "sha256": "bf2fb83f382880409d576d9815085d22e6a9f21ce0aef33ea08d5724e642a80e",
+    "bytes": 2612,
+    "capturedAt": "2026-10-24T03:45:57.233Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NHL&date=2026-10-24",
+    "status": 200,
+    "file": "seat2/nhl/games-league-nhl-date-2026-10-24-at-20261024T0345z.json",
+    "sha256": "f00242333aff718e74c092f8a2771166a51765c4cfe8d25c1e5f274cfbf01009",
+    "bytes": 13623,
+    "capturedAt": "2026-10-24T03:45:58.849Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/efc9f85a-5d46-490f-b2c5-6e8e75ad2aef",
+    "status": 200,
+    "file": "seat3/nhl/results-efc9f85a-5d46-490f-b2c5-6e8e75ad2aef-at-20261024T0345z.json",
+    "sha256": "27d9a6f1b73f11d9c68acbe94221cc286511d2de56dacdd054baf82c8e8f1d40",
+    "bytes": 201,
+    "capturedAt": "2026-10-24T03:45:59.097Z"
+  },
+  {
+    "seat": 4,
+    "path": "/v4/sports/icehockey_nhl/scores/?daysFrom=3&dateFormat=iso&apiKey=SEATKEY",
+    "status": 200,
+    "file": "seat4/nhl/v4-sports-icehockey-nhl-scores-daysfrom-3-dateformat-iso-at-20261024T0345z.json",
+    "sha256": "6dd81dd2d97378bbc8ed7af23939e8b49e122e5f288ba1eae0c7de7353a23eec",
+    "bytes": 8309,
+    "capturedAt": "2026-10-24T03:45:59.216Z"
+  },
+  {
+    "seat": 1,
+    "path": "/mlb/v1/games?dates[]=2026-10-23&per_page=100",
+    "status": 200,
+    "file": "seat1/mlb/mlb-v1-games-dates-2026-10-23-per-page-100-at-20261024T0346z.json",
+    "sha256": "da9b01565b0290e1e9eaf08f39e6716c930dcffe0b679af21254d5fd28c60455",
+    "bytes": 35,
+    "capturedAt": "2026-10-24T03:46:10.140Z"
+  },
+  {
+    "seat": 1,
+    "path": "/mlb/v1/games?dates[]=2026-10-24&per_page=100",
+    "status": 200,
+    "file": "seat1/mlb/mlb-v1-games-dates-2026-10-24-per-page-100-at-20261024T0346z.json",
+    "sha256": "6ab15ce1e8efbb24ff7f652d80ecdef323225b1c53c5704fca357593b55b9a11",
+    "bytes": 1678,
+    "capturedAt": "2026-10-24T03:46:23.295Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=MLB&date=2026-10-23",
+    "status": 200,
+    "file": "seat2/mlb/games-league-mlb-date-2026-10-23-at-20261024T0346z.json",
+    "sha256": "77c9a293766112883092e61224755e25eb0bb3d535a601235e0adc82b96e8b73",
+    "bytes": 1371,
+    "capturedAt": "2026-10-24T03:46:23.471Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=MLB&date=2026-10-24",
+    "status": 200,
+    "file": "seat2/mlb/games-league-mlb-date-2026-10-24-at-20261024T0346z.json",
+    "sha256": "0a7099ea19664a997ab8ffa86d79f5c6a275b396e9aef4868d1acca637d8eba3",
+    "bytes": 1223,
+    "capturedAt": "2026-10-24T03:46:25.031Z"
+  },
+  {
+    "seat": 3,
+    "path": "/results/122d7737-bc9a-4f7a-a444-c9cee9a7e750",
+    "status": 200,
+    "file": "seat3/mlb/results-122d7737-bc9a-4f7a-a444-c9cee9a7e750-at-20261024T0346z.json",
+    "sha256": "3242e719dea14a7e8e67dafe2e2844f1d9e124ce24e95e30041f56f4de5b9641",
+    "bytes": 201,
+    "capturedAt": "2026-10-24T03:46:25.366Z"
+  },
+  {
+    "seat": 4,
+    "path": "/v4/sports/baseball_mlb/scores/?daysFrom=3&dateFormat=iso&apiKey=SEATKEY",
+    "status": 200,
+    "file": "seat4/mlb/v4-sports-baseball-mlb-scores-daysfrom-3-dateformat-iso-at-20261024T0346z.json",
+    "sha256": "837caff750d666d6f725a91482a9987ab058e48dcff4c0f38ced7cdd97716644",
+    "bytes": 575,
+    "capturedAt": "2026-10-24T03:46:25.472Z"
   }
 ]

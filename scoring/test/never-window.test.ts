@@ -130,7 +130,7 @@ describe("never: a final outside the window counts", () => {
 			expect({ case: c.name, record: reading.record }).toEqual({ case: c.name, record: { id: c.expect[3]!.id!, time: null } });
 			read3++;
 		}
-		expect(read3).toBe(13);
+		expect(read3).toBe(16);
 	});
 });
 
