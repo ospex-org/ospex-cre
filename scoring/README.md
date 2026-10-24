@@ -145,8 +145,9 @@ inside the fingerprint. For a game whose start is written:
 [`src/verify.ts`](src/verify.ts) is the start's rule, written once at verification. It is
 proposed on the PR, with Vince's rulings of 22 Oct.
 
-* **Seats 1 and 2** must each list the game by team, within n of the creator's date: the range the
-  games set accepts. Among records of the two teams, the one nearest the date is the game.
+* **Seats 1 and 2** must each list the game by team, within a day of the creator's date either way:
+  the games set's `START_BOUND`, a fixed 24 hours whatever the game's n, and the only range it
+  accepts a start in. Among records of the two teams, the one nearest the date is the game.
 * **The times.** Their two times must lie within an hour of each other (`START_SPREAD`).
 * **Seat 3's check.** Seat 3's hint is checked against its board
   ([`src/readers/board3.ts`](src/readers/board3.ts)): the same two teams, the game's home and
