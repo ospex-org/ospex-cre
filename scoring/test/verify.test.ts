@@ -353,4 +353,34 @@ describe("finding the game near the creator's date", () => {
 		const between = verify(unverified("nfl not final", { date: at("2026-10-23T02:15:00Z"), hints: [] }), dh);
 		expect([between.action, between.why]).toEqual(["wait", "seat 1 is silent: ambiguous"]);
 	});
+
+	test("the nearest decides only when nothing else could be the game: a third record that could be leaves the seat silent", () => {
+		// The doubleheader again, created for the first game, with a third record at seat 1 of a kind
+		// the only-one rule counts: one of the game's teams beside a name the lists don't know, inside
+		// the window, or the two teams with no game time. Seat 1 has no hint, so the rule decides.
+		const beside = (third: (g: Record<string, any>) => Record<string, any>): Derive => (seat, path, body) => {
+			const b = dh(seat, path, body);
+			if (seat !== 1 || !path.startsWith("/nfl/v1/games?")) return b;
+			const c = b as { data: Record<string, any>[] };
+			const g = c.data.find((x) => x.id === 1392309);
+			if (g) c.data.push(third({ ...g, id: 9_999_003 }));
+			return c;
+		};
+		const game = unverified("nfl not final", { date: at("2026-10-23T00:15:00Z") });
+		const rows: [string, Derive, string, string | null][] = [
+			["the doubleheader alone", dh, "start", "2026-10-23T00:15:00Z"],
+			[
+				"beside one team and an unknown name",
+				beside((g) => ({ ...g, date: "2026-10-23T08:15:00.000Z", visitor_team: { ...g.visitor_team, full_name: "Springfield Isotopes" } })),
+				"wait",
+				"seat 1 is silent: ambiguous",
+			],
+			["beside the two teams with no time", beside((g) => ({ ...g, date: null })), "wait", "seat 1 is silent: ambiguous"],
+		];
+		const got = rows.map(([what, derive]) => {
+			const v = verify(game, derive);
+			return [what, v.action, v.action === "start" ? v.start : v.why];
+		});
+		expect(got).toEqual(rows.map(([what, , action, then]) => [what, action, then]));
+	});
 });
