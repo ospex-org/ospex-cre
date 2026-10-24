@@ -651,6 +651,18 @@
   "to": "if (near !== undefined && chosen.length > 2 && rivals.length === chosen.length) {"
  },
  {
+  "id": "N8",
+  "file": "scoring/src/pick.ts",
+  "from": "(unplaced(r) && earlier(r))",
+  "to": "(near === undefined && unplaced(r) && earlier(r))"
+ },
+ {
+  "id": "N9",
+  "file": "scoring/src/pick.ts",
+  "from": "if (near !== undefined && chosen.length > 1 && rivals.length === chosen.length) {",
+  "to": "if (near !== undefined && chosen.length > 1 && rivals.filter((r) => !unplaced(r)).length === chosen.length) {"
+ },
+ {
   "id": "Rd1",
   "file": "scoring/src/readers/seat1.ts",
   "from": "return pick(SEAT, ask.game, listings, ask.near);",

@@ -527,4 +527,53 @@ describe("finding the game near the creator's date", () => {
 		});
 		expect(got).toEqual(rows.map(([what, , action, then]) => [what, action, then]));
 	});
+
+	test("a record the lists can't place, earlier in the range than a record of the two teams, makes verification wait, the doubleheader's first game included", () => {
+		// The readers' only-one rule holds at verification as at scoring: a record whose two names the
+		// lists don't know, inside the window and earlier than a record of the two teams, may be the
+		// game itself, listed in a way the lists don't know. Verification reads without hints, and no
+		// hint overrides it here: the run waits, and a game that never verifies ends in the day-30
+		// release. "Earlier" is earlier than any record of the two teams in the range, so in the
+		// doubleheader a record between the two games keeps the first game from verifying, though the
+		// first is the record nearest its date. At the nearest record's own instant or later, and after
+		// the game in the one-game case, the nearest decides. The extra record sits at seat 1, which has
+		// no hint at verification, and every row's other seats are as saved or as the doubleheader.
+		const unplacedAt = (base: Derive | undefined, time: string): Derive => (seat, path, body) => {
+			const b = base === undefined ? body : base(seat, path, body);
+			if (seat !== 1 || !path.startsWith("/nfl/v1/games?")) return b;
+			const c = copy(b) as { data: Record<string, any>[] };
+			const g = c.data.find((x) => x.id === 1392309);
+			if (g) {
+				c.data.push({
+					...g,
+					id: 9_999_003,
+					date: time,
+					home_team: { ...g.home_team, full_name: "Shelbyville Shelbyvillians" },
+					visitor_team: { ...g.visitor_team, full_name: "Springfield Isotopes" },
+				});
+			}
+			return c;
+		};
+		const one = unverified("nfl not final");
+		const first = unverified("nfl not final", { date: at("2026-10-23T00:15:00Z"), hints: [{ seat: 3, id: BEARS }, ...FIRST] });
+		const second = unverified("nfl not final", { date: at("2026-10-23T04:00:00Z"), hints: [] });
+		const WAIT = "seat 1 is silent: ambiguous";
+		const rows: [string, ChainGame, Derive | undefined, string, string][] = [
+			["one game, as saved", one, undefined, "start", "2026-10-23T00:15:00Z"],
+			["one game, an unplaced record at 22:15 the evening before", one, unplacedAt(undefined, "2026-10-22T22:15:00.000Z"), "wait", WAIT],
+			["one game, an unplaced record at 02:00, after it", one, unplacedAt(undefined, "2026-10-23T02:00:00.000Z"), "start", "2026-10-23T00:15:00Z"],
+			["the doubleheader's first game", first, dh, "start", "2026-10-23T00:15:00Z"],
+			["the doubleheader's first game, an unplaced record at 02:00, between the two games", first, unplacedAt(dh, "2026-10-23T02:00:00.000Z"), "wait", WAIT],
+			["the doubleheader's first game, an unplaced record at 06:00, after both", first, unplacedAt(dh, "2026-10-23T06:00:00.000Z"), "start", "2026-10-23T00:15:00Z"],
+			["the doubleheader's second game", second, dh, "start", "2026-10-23T04:15:00Z"],
+			["the doubleheader's second game, an unplaced record at 22:15 the evening before", second, unplacedAt(dh, "2026-10-22T22:15:00.000Z"), "wait", WAIT],
+			["the doubleheader's second game, an unplaced record at 04:15, the nearest record's own instant", second, unplacedAt(dh, "2026-10-23T04:15:00.000Z"), "start", "2026-10-23T04:15:00Z"],
+			["the doubleheader's second game, an unplaced record at 06:00, after both", second, unplacedAt(dh, "2026-10-23T06:00:00.000Z"), "start", "2026-10-23T04:15:00Z"],
+		];
+		const got = rows.map(([what, game, derive]) => {
+			const v = verify(game, derive);
+			return [what, v.action, v.action === "start" ? v.start : v.why];
+		});
+		expect(got).toEqual(rows.map(([what, , , action, then]) => [what, action, then]));
+	});
 });
