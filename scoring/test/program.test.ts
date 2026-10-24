@@ -12,7 +12,9 @@ import { PAYOUT, chainOf } from "./rule-helpers";
 const KEYS = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
 
 function asked(game: ChainGame, now = NOW) {
-	const t = saved(undefined, now);
+	// The saved answers take a clock in unix seconds and refuse a larger one, so a run whose clock is
+	// past that is served the answers as of NOW: a transport that would answer, which it must not ask.
+	const t = saved(undefined, Number.isFinite(now) && now > 1e11 ? NOW : now);
 	const o = scoreGameSync(game, KEYS, PAYOUT, now, t.send);
 	return { action: o.decision.action, why: o.decision.why, report: o.report, seats: t.asked.map((q) => locate(q)!.seat), misses: t.misses };
 }

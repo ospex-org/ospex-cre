@@ -86,9 +86,17 @@ describe("the start's rule, on the real saved answers", () => {
 		const o = scoreGameSync(unverified("nfl not final"), KEYS, PAYOUT, NOW, (q) => (locate(q)?.seat === 2 ? { status: 503, body: "" } : t.send(q)));
 		expect([o.decision.action, o.decision.why, o.report]).toEqual(["wait", "seat 2 is silent: http 503", null]);
 		// Seat 2 answers, but lists no game of the two teams: it answered, and it does not list the game.
-		const empty: Derive = (s, p, b) => (s === 2 && p.startsWith("/games?league=NFL") ? { ...(b as object), results: [] } : b);
-		const v = verify(unverified("nfl not final"), empty);
-		expect([v.action, v.why]).toEqual(["wait", "seat 2 does not list the game within a day of its date"]);
+		// An NBA game, so every date seat 2 asks still lists other games: a date that answers with
+		// nothing at all leaves a seat silent, not "absent" (src/pick.ts), and NFL's off days do that.
+		const sixers = unverified("nba not final");
+		const names = new Set([sixers.home, sixers.away]);
+		const unlisted: Derive = (s, p, b) => {
+			if (s !== 2 || !p.startsWith("/games?league=NBA")) return b;
+			const c = copy(b) as { results: Record<string, any>[] };
+			return { ...c, results: c.results.filter((g) => !(names.has(g.teams?.home?.team) && names.has(g.teams?.away?.team))) };
+		};
+		const v = verify(sixers, unlisted);
+		expect([v.action, v.why, v.seats[1]]).toEqual(["wait", "seat 2 does not list the game within a day of its date", "2:no_final"]);
 	});
 });
 
@@ -245,10 +253,13 @@ describe("the start's time (ruling 3)", () => {
 		const v = verify(long);
 		expect([v.action, v.start]).toEqual(["start", "2026-10-23T00:15:00Z"]);
 		// The date a day and a minute before the real 00:15: inside this game's n, outside the games set's day.
+		// Seat 1's answers for the other days in that range list no NFL game, and a date that answers
+		// with nothing leaves a seat silent rather than saying the game is absent (src/pick.ts). Either
+		// way nothing is written; the range's own edges are the test above.
 		const t = saved(undefined, NOW);
 		const far = scoreGameSync({ ...long, date: at("2026-10-23T00:15:00Z") - START_BOUND - 60, hints: [] }, KEYS, PAYOUT, NOW, t.send);
 		expect(t.misses).toEqual([]);
-		expect([far.decision.action, far.decision.why]).toEqual(["wait", "seat 1 does not list the game within a day of its date"]);
+		expect([far.decision.action, far.decision.why]).toEqual(["wait", "seat 1 is silent: empty listing"]);
 	});
 
 	test("a start report carries the zero address as its payout, whatever payout is handed in: a start pays nothing", () => {
