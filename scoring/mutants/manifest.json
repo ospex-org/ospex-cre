@@ -1,0 +1,977 @@
+[
+ {
+  "id": "M0",
+  "file": "scoring/src/program.ts",
+  "from": "// One run of the scoring program for one game:",
+  "to": "// One run of the scoring program for one game (m0):",
+  "control": true
+ },
+ {
+  "id": "NL1",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tif (finalsCounted === AGREE.insideN) {",
+  "to": "\t\tif (finalsCounted >= AGREE.afterN) {"
+ },
+ {
+  "id": "NL2",
+  "file": "scoring/src/program.ts",
+  "from": "\tif (typeof k === \"number\") return nothing(`seat ${k} has no key`);",
+  "to": "\tif (false) return nothing(`seat ${k} has no key`);"
+ },
+ {
+  "id": "NL3",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (best !== null && best.count >= AGREE.day7Agree) {",
+  "to": "\tif (best !== null && best.count >= AGREE.afterN) {"
+ },
+ {
+  "id": "NL4",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (finals.length === 0) return { action: \"void\", readings, why: \"after n: every seat that answers shows no final\" };",
+  "to": "\tif (finalsCounted === 0) return { action: \"void\", readings, why: \"after n: every seat that answers shows no final\" };"
+ },
+ {
+  "id": "R1",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (finals.some((f) => f.home !== first.home || f.away !== first.away)) {",
+  "to": "\tif (finals.some((f) => f.home !== first.home)) {"
+ },
+ {
+  "id": "R2",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (finals.some((f) => f.home !== first.home || f.away !== first.away)) {",
+  "to": "\tif (false) {"
+ },
+ {
+  "id": "R3",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (finalsCounted >= AGREE.afterN && withoutFinal === 0) {",
+  "to": "\tif (finalsCounted >= AGREE.afterN) {"
+ },
+ {
+  "id": "R4",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (answeredCounted < AGREE.afterN) return { action: \"wait\", readings, why: \"after n: fewer than two counting seats answer\" };",
+  "to": "\tif (answeredCounted < 1) return { action: \"wait\", readings, why: \"after n: fewer than two counting seats answer\" };"
+ },
+ {
+  "id": "R5",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (sources.some((r) => r.kind === \"silent\")) return { action: \"void\", readings: sources, why: \"day 7: a source is silent\" };",
+  "to": "\tif (false) return { action: \"void\", readings: sources, why: \"day 7: a source is silent\" };"
+ },
+ {
+  "id": "R6",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (seats.length < AGREE.day7Sources) return { action: \"void\", readings: sources, why: \"day 7: fewer than four feeds\" };",
+  "to": "\tif (seats.length < 3) return { action: \"void\", readings: sources, why: \"day 7: fewer than four feeds\" };"
+ },
+ {
+  "id": "R7",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tif (now !== undefined && now.kind !== \"silent\") return now;",
+  "to": "\t\tif (now !== undefined) return now;"
+ },
+ {
+  "id": "R8",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tif (then !== undefined && then.kind !== READING_KIND.silent) return fromReportReading(then, \"recorded at the dispute\");",
+  "to": "\t\tif (then !== undefined) return fromReportReading(then, \"recorded at the dispute\");"
+ },
+ {
+  "id": "R9",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (\"none\" in hintOf(game.hints)) return 3;",
+  "to": "\tif (false) return 3;"
+ },
+ {
+  "id": "R11",
+  "file": "scoring/src/rule.ts",
+  "from": "\treturn down === null ? COUNTING : COUNTING.map((s) => (s === down ? SPARE : s));",
+  "to": "\treturn COUNTING;"
+ },
+ {
+  "id": "R12",
+  "file": "scoring/src/rule.ts",
+  "from": "\treturn { action: \"dispute\", readings, why: \"after n: finals beside answers without a final\" };",
+  "to": "\treturn { action: \"wait\", readings, why: \"after n: finals beside answers without a final\" };"
+ },
+ {
+  "id": "R13",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (inside) {",
+  "to": "\tif (!inside) {"
+ },
+ {
+  "id": "R14",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tconst count = sources.filter((s) => s.kind === \"final\" && s.home === r.home && s.away === r.away).length;",
+  "to": "\t\tconst count = sources.filter((s) => s.kind === \"final\" && s.home === r.home).length;"
+ },
+ {
+  "id": "R15",
+  "file": "scoring/src/rule.ts",
+  "from": "\tconst answeredCounted = counted.filter((r) => r.kind !== \"silent\").length;",
+  "to": "\tconst answeredCounted = counted.length;"
+ },
+ {
+  "id": "R16",
+  "file": "scoring/src/rule.ts",
+  "from": "\tinsideN: 3,",
+  "to": "\tinsideN: 2,"
+ },
+ {
+  "id": "R17",
+  "file": "scoring/src/rule.ts",
+  "from": "\tday7Agree: 3,",
+  "to": "\tday7Agree: 2,"
+ },
+ {
+  "id": "R18",
+  "file": "scoring/src/rule.ts",
+  "from": "\tafterN: 2,",
+  "to": "\tafterN: 1,"
+ },
+ {
+  "id": "R19",
+  "file": "scoring/src/rule.ts",
+  "from": "\tday7Sources: 4,",
+  "to": "\tday7Sources: 3,"
+ },
+ {
+  "id": "P1",
+  "file": "scoring/src/program.ts",
+  "from": "\t\treturn decide(readings, countingFor(down), now < start + game.n);",
+  "to": "\t\treturn decide(readings, countingFor(down), now <= start + game.n);"
+ },
+ {
+  "id": "P2",
+  "file": "scoring/src/program.ts",
+  "from": "\t\tif (now < start) return nothing(\"before the start\");",
+  "to": "\t\tif (now < start - 3600) return nothing(\"before the start\");"
+ },
+ {
+  "id": "P3",
+  "file": "scoring/src/program.ts",
+  "from": "\tif (now < record.at + game.day7) return nothing(\"before day 7\");",
+  "to": "\tif (now < record.at) return nothing(\"before day 7\");"
+ },
+ {
+  "id": "P4",
+  "file": "scoring/src/program.ts",
+  "from": "\t\tif (seat === down) {",
+  "to": "\t\tif (false) {"
+ },
+ {
+  "id": "P5",
+  "file": "scoring/src/program.ts",
+  "from": "run: readerFor(seat)({ game: byTeamProbe, now, key: keys[seat], near: game.date }) }) as Reading;",
+  "to": "run: readerFor(seat)({ game: byTeamProbe, now, key: keys[seat] }) }) as Reading;"
+ },
+ {
+  "id": "P7",
+  "file": "scoring/src/program.ts",
+  "from": "\treturn decideDay7(fresh, record.readings, seats, down);",
+  "to": "\treturn decideDay7(fresh, [], seats, down);"
+ },
+ {
+  "id": "P8",
+  "file": "scoring/src/program.ts",
+  "from": "\tif (\"none\" in hint) board = { kind: \"fails\", why: hint.none };",
+  "to": "\tif (\"none\" in hint) board = { kind: \"silent\", why: hint.none };"
+ },
+ {
+  "id": "P10",
+  "file": "scoring/src/program.ts",
+  "from": "\tif (ENDED.has(game.status)) return nothing(\"the game has ended\");",
+  "to": "\tif (false) return nothing(\"the game has ended\");"
+ },
+ {
+  "id": "P11",
+  "file": "scoring/src/program.ts",
+  "from": "\tfor (const seat of seatsFor(game.league)) {",
+  "to": "\tfor (const seat of [1, 2, 3] as Seat[]) {"
+ },
+ {
+  "id": "V1",
+  "file": "scoring/src/verify.ts",
+  "from": "export const START_SPREAD = 3600;",
+  "to": "export const START_SPREAD = 7200;"
+ },
+ {
+  "id": "V2",
+  "file": "scoring/src/verify.ts",
+  "from": "\treturn Math.max(...times) - Math.min(...times) <= START_SPREAD;",
+  "to": "\treturn Math.max(...times) - Math.min(...times) < START_SPREAD;"
+ },
+ {
+  "id": "V3",
+  "file": "scoring/src/verify.ts",
+  "from": "start: Math.min(t1, t2, board.time), readings: readings()",
+  "to": "start: Math.max(t1, t2, board.time), readings: readings()"
+ },
+ {
+  "id": "V4",
+  "file": "scoring/src/verify.ts",
+  "from": "\treturn { action: \"start\", start: Math.min(t1, t2), readings: [seen[1], seen[2], down, r4]",
+  "to": "\treturn { action: \"start\", start: Math.min(t1, t2, t4), readings: [seen[1], seen[2], down, r4]"
+ },
+ {
+  "id": "V5",
+  "file": "scoring/src/verify.ts",
+  "from": "\tif (board.kind === \"silent\") return wait(",
+  "to": "\tif (false) return wait("
+ },
+ {
+  "id": "V6",
+  "file": "scoring/src/verify.ts",
+  "from": "\tfor (const seat of [1, 2] as const) {",
+  "to": "\tfor (const seat of [1] as const) {"
+ },
+ {
+  "id": "V8",
+  "file": "scoring/src/verify.ts",
+  "from": "\tif (!within([t1, t2, t4])) return settled(",
+  "to": "\tif (false) return settled("
+ },
+ {
+  "id": "V9",
+  "file": "scoring/src/verify.ts",
+  "from": "\tif (!within([t1, t2])) return wait(",
+  "to": "\tif (false) return wait("
+ },
+ {
+  "id": "V11",
+  "file": "scoring/src/verify.ts",
+  "from": "\tif (t4 === null) return settled(",
+  "to": "\tif (false) return settled("
+ },
+ {
+  "id": "B1",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\tif (boardHome !== home || boardAway !== away) return { kind: \"fails\", why: \"other teams\" };",
+  "to": "\tif (boardHome !== home && boardAway !== away) return { kind: \"fails\", why: \"other teams\" };"
+ },
+ {
+  "id": "B2",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\t\treturn { kind: \"fails\", why: \"hint not on the board\" };",
+  "to": "\t\treturn { kind: \"silent\", why: \"hint not on the board\" };"
+ },
+ {
+  "id": "B3",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\tif (rows.length > 1) return { kind: \"fails\", why: \"hint listed twice on the board\" };",
+  "to": "\tif (false) return { kind: \"fails\", why: \"hint listed twice on the board\" };"
+ },
+ {
+  "id": "B4",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\tif (!res.ok) return { kind: \"silent\", why: res.detail };",
+  "to": "\tif (!res.ok) return { kind: \"fails\", why: res.detail };"
+ },
+ {
+  "id": "B5",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "? t : `${t}Z`);",
+  "to": "? t : `${t}-05:00`);"
+ },
+ {
+  "id": "B6",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\t\tif (id.toLowerCase() === hint.id) rows.push(r);",
+  "to": "\t\tif (true) rows.push(r);"
+ },
+ {
+  "id": "B7",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "if (homeName === null || awayName === null || time === null) return",
+  "to": "if (homeName === null || awayName === null) return"
+ },
+ {
+  "id": "T1",
+  "file": "scoring/src/report.ts",
+  "from": "\t\thomeScore: r.home ?? 0,",
+  "to": "\t\thomeScore: r.away ?? 0,"
+ },
+ {
+  "id": "T2",
+  "file": "scoring/src/report.ts",
+  "from": "homeScore: d.home, awayScore: d.away, readings, payout };",
+  "to": "homeScore: d.away, awayScore: d.home, readings, payout };"
+ },
+ {
+  "id": "T3",
+  "file": "scoring/src/report.ts",
+  "from": "\tif (!ADDRESS.test(payout) || ZERO.test(payout)) throw",
+  "to": "\tif (!ADDRESS.test(payout)) throw"
+ },
+ {
+  "id": "T4",
+  "file": "scoring/src/report.ts",
+  "from": "const GAME_ID = /^[1-9][0-9]{0,77}$/;",
+  "to": "const GAME_ID = /^[0-9]+$/;"
+ },
+ {
+  "id": "T5",
+  "file": "scoring/src/report.ts",
+  "from": "\tif (r.kind === \"silent\") return { seat: r.seat, kind: READING_KIND.silent, homeScore: 0, awayScore: 0 };",
+  "to": "\tif (r.kind === \"silent\") return { seat: r.seat, kind: READING_KIND.silent, homeScore: r.home ?? 0, awayScore: r.away ?? 0 };"
+ },
+ {
+  "id": "T6",
+  "file": "scoring/src/report.ts",
+  "from": "\t\t\treturn { gameId, kind: REPORT_KIND.void, start: 0,",
+  "to": "\t\t\treturn { gameId, kind: REPORT_KIND.dispute, start: 0,"
+ },
+ {
+  "id": "C1",
+  "file": "scoring/src/chain.ts",
+  "from": "export const READING_KIND = Object.freeze({ silent: 0, noFinal: 1, final: 2 } as const);",
+  "to": "export const READING_KIND = Object.freeze({ silent: 0, noFinal: 1, final: 3 } as const);"
+ },
+ {
+  "id": "C2",
+  "file": "scoring/src/chain.ts",
+  "from": "\tif (r.kind === READING_KIND.final) {",
+  "to": "\tif (r.kind === READING_KIND.noFinal) {"
+ },
+ {
+  "id": "C3",
+  "file": "scoring/src/chain.ts",
+  "from": "export const REPORT_KIND = Object.freeze({ start: 1, score: 2, void: 3, dispute: 4 } as const);",
+  "to": "export const REPORT_KIND = Object.freeze({ start: 1, score: 2, void: 4, dispute: 3 } as const);"
+ },
+ {
+  "id": "K1",
+  "file": "scoring/src/keys.ts",
+  "from": "\treturn typeof k === \"string\" && k !== \"\" ? k : null;",
+  "to": "\treturn typeof k === \"string\" ? k : null;"
+ },
+ {
+  "id": "K2",
+  "file": "scoring/src/keys.ts",
+  "from": "\tif (!Object.prototype.hasOwnProperty.call(keys, seat)) return null;",
+  "to": "\tif (!(seat in keys)) return null;"
+ },
+ {
+  "id": "N1",
+  "file": "scoring/src/pick.ts",
+  "from": "Math.abs((r.time as number) - near);",
+  "to": "(r.time as number) - near;"
+ },
+ {
+  "id": "N2",
+  "file": "scoring/src/pick.ts",
+  "from": "return distance(first) < distance(second) ? readingOf(seat, game.league, first, home) : silent(seat, \"ambiguous\");",
+  "to": "return readingOf(seat, game.league, first, home);"
+ },
+ {
+  "id": "B8",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\tif (boardHome === null || boardAway === null) return { kind: \"fails\", why: \"a team name the lists don't know\" };",
+  "to": "\tif (false) return { kind: \"fails\", why: \"a team name the lists don't know\" };"
+ },
+ {
+  "id": "adv-X0",
+  "file": "scoring/src/program.ts",
+  "from": "// One run of the scoring program for one game:",
+  "to": "// One run of the scoring program for one game (x0):",
+  "control": true
+ },
+ {
+  "id": "adv-A1",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (finals.some((f) => f.home !== first.home || f.away !== first.away)) {",
+  "to": "\tif (finals.some((f) => (f.home as number) + (f.away as number) !== (first.home as number) + (first.away as number))) {"
+ },
+ {
+  "id": "adv-A2",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (finals.some((f) => f.home !== first.home || f.away !== first.away)) {",
+  "to": "\tif (finals.some((f) => Math.max(f.home as number, f.away as number) !== Math.max(first.home as number, first.away as number) || Math.min(f.home as number, f.away as number) !== Math.min(first.home as number, first.away as number))) {"
+ },
+ {
+  "id": "adv-A3",
+  "file": "scoring/src/rule.ts",
+  "from": "\tif (finals.some((f) => f.home !== first.home || f.away !== first.away)) {",
+  "to": "\tif (finals.some((f) => f.away !== first.away)) {"
+ },
+ {
+  "id": "adv-A7",
+  "file": "scoring/src/rule.ts",
+  "from": "\tconst finals = readings.filter((r) => r.kind === \"final\");",
+  "to": "\tconst finals = readings.filter((r) => r.kind === \"final\" && counting.includes(r.seat));"
+ },
+ {
+  "id": "adv-A4",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tconst count = sources.filter((s) => s.kind === \"final\" && s.home === r.home && s.away === r.away).length;",
+  "to": "\t\tconst count = sources.filter((s) => s.home === r.home && s.away === r.away).length;"
+ },
+ {
+  "id": "adv-A5",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tconst count = sources.filter((s) => s.kind === \"final\" && s.home === r.home && s.away === r.away).length;",
+  "to": "\t\tconst count = sources.filter((s) => s.kind === \"final\" && Math.max(s.home as number, s.away as number) === Math.max(r.home as number, r.away as number) && Math.min(s.home as number, s.away as number) === Math.min(r.home as number, r.away as number)).length;"
+ },
+ {
+  "id": "adv-A6",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tconst count = sources.filter((s) => s.kind === \"final\" && s.home === r.home && s.away === r.away).length;",
+  "to": "\t\tconst count = sources.filter((s) => s.kind === \"final\" && (s.home as number) + (s.away as number) === (r.home as number) + (r.away as number)).length;"
+ },
+ {
+  "id": "adv-A18",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tif (now !== undefined && now.kind !== \"silent\") return now;",
+  "to": "\t\tif (now !== undefined && now.kind === \"final\") return now;"
+ },
+ {
+  "id": "adv-A19",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tif (then !== undefined && then.kind !== READING_KIND.silent) return fromReportReading(then, \"recorded at the dispute\");",
+  "to": "\t\tif (then !== undefined && then.kind === READING_KIND.final) return fromReportReading(then, \"recorded at the dispute\");"
+ },
+ {
+  "id": "adv-Pa",
+  "file": "scoring/src/program.ts",
+  "from": "\tif (now < record.at + game.day7) return nothing(\"before day 7\");",
+  "to": "\tif (now <= record.at + game.day7) return nothing(\"before day 7\");"
+ },
+ {
+  "id": "adv-Pb",
+  "file": "scoring/src/program.ts",
+  "from": "\tif (!wholeSeconds(game.date) || !wholeSeconds(game.n) || !wholeSeconds(game.day7) || !wholeSeconds(now)) {",
+  "to": "\tif (!wholeSeconds(game.date) || !wholeSeconds(game.n) || !wholeSeconds(now)) {"
+ },
+ {
+  "id": "adv-Pc",
+  "file": "scoring/src/program.ts",
+  "from": "\tif (!wholeSeconds(game.date) || !wholeSeconds(game.n) || !wholeSeconds(game.day7) || !wholeSeconds(now)) {",
+  "to": "\tif (!wholeSeconds(game.date) || !wholeSeconds(game.n) || !wholeSeconds(game.day7)) {"
+ },
+ {
+  "id": "adv-Pd",
+  "file": "scoring/src/program.ts",
+  "from": "\tif (start === null || !wholeSeconds(start)) return nothing(\"no start on chain\");",
+  "to": "\tif (start === null) return nothing(\"no start on chain\");"
+ },
+ {
+  "id": "adv-Pe",
+  "file": "scoring/src/program.ts",
+  "from": "\tif (record === null || !wholeSeconds(record.at)) return nothing(\"no dispute record on chain\");",
+  "to": "\tif (record === null) return nothing(\"no dispute record on chain\");"
+ },
+ {
+  "id": "adv-Ph",
+  "file": "scoring/src/program.ts",
+  "from": "\tconst fresh = yield* readAll(game, start, k, now, down);",
+  "to": "\tconst fresh = yield* readAll(game, start, k, now, null);"
+ },
+ {
+  "id": "adv-Va",
+  "file": "scoring/src/verify.ts",
+  "from": "\tif (board.kind === \"listed\" && inRange(board.time, g) && within([t1, t2, board.time])) {",
+  "to": "\tif (board.kind === \"listed\" && inRange(board.time, g) && within([t1, board.time])) {"
+ },
+ {
+  "id": "adv-Vb",
+  "file": "scoring/src/verify.ts",
+  "from": "\tif (board.kind === \"listed\" && inRange(board.time, g) && within([t1, t2, board.time])) {",
+  "to": "\tif (board.kind === \"listed\" && inRange(board.time, g) && within([t2, board.time])) {"
+ },
+ {
+  "id": "adv-Vc",
+  "file": "scoring/src/verify.ts",
+  "from": "\tif (!within([t1, t2, t4])) return settled(",
+  "to": "\tif (!within([t1, t4])) return settled("
+ },
+ {
+  "id": "adv-Vd",
+  "file": "scoring/src/verify.ts",
+  "from": "\tif (!within([t1, t2, t4])) return settled(",
+  "to": "\tif (!within([t2, t4])) return settled("
+ },
+ {
+  "id": "adv-Ba",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\t\tif (r === null || id === null) return { kind: \"silent\", why: \"unreadable record\" };",
+  "to": "\t\tif (r === null || id === null) continue;"
+ },
+ {
+  "id": "adv-Bb",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\t\tif (id.toLowerCase() === hint.id) rows.push(r);",
+  "to": "\t\tif (id === hint.id) rows.push(r);"
+ },
+ {
+  "id": "adv-Bd",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "return parseIsoSeconds(/(Z|[+-]\\d{2}:?\\d{2})$/.test(t) ? t : `${t}Z`);",
+  "to": "return parseIsoSeconds(`${t}Z`);"
+ },
+ {
+  "id": "adv-Be",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\tconst t = s.trim();",
+  "to": "\tconst t = s;"
+ },
+ {
+  "id": "adv-Bf",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\tif (home === null || away === null || home === away) return { kind: \"fails\", why: \"game teams unknown\" };",
+  "to": "\tif (home === away && home !== null) return { kind: \"fails\", why: \"game teams unknown\" };"
+ },
+ {
+  "id": "adv-Ta",
+  "file": "scoring/src/report.ts",
+  "from": "const ADDRESS = /^0x[0-9a-fA-F]{40}$/;",
+  "to": "const ADDRESS = /^0x[0-9a-fA-F]{40}/;"
+ },
+ {
+  "id": "adv-Tb",
+  "file": "scoring/src/report.ts",
+  "from": "\t\tawayScore: r.away ?? 0,",
+  "to": "\t\tawayScore: r.home ?? 0,"
+ },
+ {
+  "id": "adv-Ca",
+  "file": "scoring/src/chain.ts",
+  "from": "\t\treturn { seat, kind: \"no_final\", home: r.homeScore, away: r.awayScore, recorded: null, detail, record: null };",
+  "to": "\t\treturn { seat, kind: \"no_final\", home: null, away: null, recorded: null, detail, record: null };"
+ },
+ {
+  "id": "S1",
+  "file": "scoring/src/rule.ts",
+  "from": "\treturn atStart !== undefined && atStart.kind === READING_KIND.noFinal ? null : 3;",
+  "to": "\treturn atStart === undefined || atStart.kind !== READING_KIND.silent ? null : 3;"
+ },
+ {
+  "id": "S2",
+  "file": "scoring/src/rule.ts",
+  "from": "\treturn atStart !== undefined && atStart.kind === READING_KIND.noFinal ? null : 3;",
+  "to": "\treturn atStart !== undefined && atStart.kind !== READING_KIND.silent ? null : 3;"
+ },
+ {
+  "id": "S3",
+  "file": "scoring/src/program.ts",
+  "from": "\tif (!startReportReadable(game.startReadings, seats)) return nothing(\"no start report on chain\");",
+  "to": "\tif (game.startReadings === null) return nothing(\"no start report on chain\");"
+ },
+ {
+  "id": "V7",
+  "file": "scoring/src/verify.ts",
+  "from": "\tif (board.kind === \"listed\" && inRange(board.time, g) && within([t1, t2, board.time])) {",
+  "to": "\tif (board.kind === \"listed\" && within([t1, t2, board.time])) {"
+ },
+ {
+  "id": "V10",
+  "file": "scoring/src/verify.ts",
+  "from": "\treturn inRange(r.record.time, g) ? r.record.time : null;",
+  "to": "\treturn r.record.time;"
+ },
+ {
+  "id": "V12",
+  "file": "scoring/src/verify.ts",
+  "from": "\treturn t >= g.date - START_BOUND && t <= g.date + START_BOUND;",
+  "to": "\treturn t >= g.date - START_BOUND && t < g.date + START_BOUND;"
+ },
+ {
+  "id": "V13",
+  "file": "scoring/src/verify.ts",
+  "from": "\treturn t >= g.date - START_BOUND && t <= g.date + START_BOUND;",
+  "to": "\treturn t > g.date - START_BOUND && t <= g.date + START_BOUND;"
+ },
+ {
+  "id": "V14",
+  "file": "scoring/src/verify.ts",
+  "from": "\treturn t >= g.date - START_BOUND && t <= g.date + START_BOUND;",
+  "to": "\treturn t >= g.date - 2 * START_BOUND && t <= g.date + 2 * START_BOUND;"
+ },
+ {
+  "id": "P6",
+  "file": "scoring/src/program.ts",
+  "from": "start: game.date - START_BOUND, n: 2 * START_BOUND + 1 };",
+  "to": "start: game.date, n: START_BOUND };"
+ },
+ {
+  "id": "adv-Pg",
+  "file": "scoring/src/program.ts",
+  "from": "start: game.date - START_BOUND, n: 2 * START_BOUND + 1 };",
+  "to": "start: game.date - START_BOUND, n: 2 * START_BOUND };",
+  "survives": "equivalent: a record at exactly date + START_BOUND falls outside the shorter probe window, where the reader still returns it as 'outside window' with its time, and the start rule's own range check takes that time either way"
+ },
+ {
+  "id": "P12",
+  "file": "scoring/src/program.ts",
+  "from": "start: game.date - START_BOUND, n: 2 * START_BOUND + 1 };",
+  "to": "start: game.date - game.n, n: 2 * game.n + 1 };"
+ },
+ {
+  "id": "T7",
+  "file": "scoring/src/report.ts",
+  "from": "readings, payout: NO_PAYOUT };\n\t\tcase \"score\":",
+  "to": "readings, payout };\n\t\tcase \"score\":"
+ },
+ {
+  "id": "T8",
+  "file": "scoring/src/report.ts",
+  "from": "readings, payout: NO_PAYOUT };\n\t}",
+  "to": "readings, payout };\n\t}"
+ },
+ {
+  "id": "N3",
+  "file": "scoring/src/pick.ts",
+  "from": "if (near !== undefined && chosen.length > 1 && rivals.length === chosen.length) {",
+  "to": "if (near !== undefined && chosen.length > 1 && true) {"
+ },
+ {
+  "id": "N4",
+  "file": "scoring/src/pick.ts",
+  "from": "if (near !== undefined && chosen.length > 1 && rivals.length === chosen.length) {",
+  "to": "if (near === undefined && chosen.length > 1 && rivals.length === chosen.length) {"
+ },
+ {
+  "id": "N5",
+  "file": "scoring/src/pick.ts",
+  "from": "return distance(first) < distance(second) ? readingOf(seat, game.league, first, home) : silent(seat, \"ambiguous\");",
+  "to": "return distance(first) <= distance(second) ? readingOf(seat, game.league, first, home) : silent(seat, \"ambiguous\");"
+ },
+ {
+  "id": "N6",
+  "file": "scoring/src/pick.ts",
+  "from": "[...chosen].sort((x, y) => distance(x) - distance(y));",
+  "to": "[...chosen].sort((x, y) => distance(y) - distance(x));"
+ },
+ {
+  "id": "N7",
+  "file": "scoring/src/pick.ts",
+  "from": "if (near !== undefined && chosen.length > 1 && rivals.length === chosen.length) {",
+  "to": "if (near !== undefined && chosen.length > 2 && rivals.length === chosen.length) {"
+ },
+ {
+  "id": "Rd1",
+  "file": "scoring/src/readers/seat1.ts",
+  "from": "return pick(SEAT, ask.game, listings, ask.near);",
+  "to": "return pick(SEAT, ask.game, listings);"
+ },
+ {
+  "id": "Rd2",
+  "file": "scoring/src/readers/seat2.ts",
+  "from": "return pick(SEAT, ask.game, listings, ask.near);",
+  "to": "return pick(SEAT, ask.game, listings);"
+ },
+ {
+  "id": "Rd4",
+  "file": "scoring/src/readers/seat4.ts",
+  "from": "return pick(SEAT, ask.game, [records], ask.near);",
+  "to": "return pick(SEAT, ask.game, [records]);"
+ },
+ {
+  "id": "K3",
+  "file": "scoring/src/program.ts",
+  "from": "boardSync(job.run, t.send);\n\t\tconst status = t.refused();\n\t\tif (status !== null) return refusedKey(job, status);",
+  "to": "boardSync(job.run, t.send);\n\t\tconst status = t.refused();"
+ },
+ {
+  "id": "K4",
+  "file": "scoring/src/program.ts",
+  "from": "boardAsync(job.run, t.send);\n\t\tconst status = t.refused();\n\t\tif (status !== null) return refusedKey(job, status);",
+  "to": "boardAsync(job.run, t.send);\n\t\tconst status = t.refused();"
+ },
+ {
+  "id": "K5",
+  "file": "scoring/src/program.ts",
+  "from": "new Set([401, 403, 429]);",
+  "to": "new Set([401]);"
+ },
+ {
+  "id": "K6",
+  "file": "scoring/src/program.ts",
+  "from": "new Set([401, 403, 429]);",
+  "to": "new Set([401, 403]);"
+ },
+ {
+  "id": "K7",
+  "file": "scoring/src/program.ts",
+  "from": "if (refused === null && REFUSED.has(res.status)) refused = res.status;",
+  "to": "if (false) refused = res.status;"
+ },
+ {
+  "id": "K8",
+  "file": "scoring/src/program.ts",
+  "from": "return (res instanceof Promise ? res.then(note) : note(res)) as T;",
+  "to": "return (res instanceof Promise ? res : note(res)) as T;"
+ },
+ {
+  "id": "K9",
+  "file": "scoring/src/program.ts",
+  "from": "\t\tif (key === null) return seat;",
+  "to": "\t\tif (key === null) continue;"
+ },
+ {
+  "id": "G5a",
+  "file": "scoring/src/program.ts",
+  "from": "if (readings === null || readings.length !== seats.length) return false;",
+  "to": "if (readings === null) return false;"
+ },
+ {
+  "id": "G5b",
+  "file": "scoring/src/program.ts",
+  "from": "if (readings[i].seat !== seats[i] || !kinds.includes(readings[i].kind)) return false;",
+  "to": "if (!kinds.includes(readings[i].kind)) return false;"
+ },
+ {
+  "id": "G5c",
+  "file": "scoring/src/program.ts",
+  "from": "if (readings[i].seat !== seats[i] || !kinds.includes(readings[i].kind)) return false;",
+  "to": "if (readings[i].seat !== seats[i]) return false;"
+ },
+ {
+  "id": "G5d",
+  "file": "scoring/src/program.ts",
+  "from": "\treturn answers(1) && answers(2);",
+  "to": "\treturn answers(1);"
+ },
+ {
+  "id": "G5e",
+  "file": "scoring/src/program.ts",
+  "from": "\treturn answers(1) && answers(2);",
+  "to": "\treturn answers(2);"
+ },
+ {
+  "id": "I1",
+  "file": "scoring/src/program.ts",
+  "from": "const byTeamProbe: Game = { ...range, hints: [] };",
+  "to": "const byTeamProbe: Game = { ...range, hints: game.hints };"
+ },
+ {
+  "id": "I2",
+  "file": "scoring/src/program.ts",
+  "from": "\treturn confirmStart(chosen, g, again);",
+  "to": "\treturn chosen;"
+ },
+ {
+  "id": "I3",
+  "file": "scoring/src/program.ts",
+  "from": "start: chosen.start, n: game.n, hints: game.hints };",
+  "to": "start: chosen.start, n: game.n, hints: [] };"
+ },
+ {
+  "id": "I4",
+  "file": "scoring/src/program.ts",
+  "from": "again.push((yield { kind: \"read\", seat, run: readerFor(seat)({ game: g, now, key: keys[seat] }) }) as Reading);",
+  "to": "again.push((yield { kind: \"read\", seat, run: readerFor(seat)({ game: g, now, key: keys[seat], near: game.date }) }) as Reading);"
+ },
+ {
+  "id": "I5",
+  "file": "scoring/src/program.ts",
+  "from": "now, key: keys[3], near: game.date }) }) as BoardCheck;",
+  "to": "now, key: keys[3] }) }) as BoardCheck;"
+ },
+ {
+  "id": "V15",
+  "file": "scoring/src/verify.ts",
+  "from": "\t\tif (seen[seat].kind === \"final\") return wait(`seat ${seat} shows the game final`);",
+  "to": "\t\tif (false) return wait(`seat ${seat} shows the game final`);"
+ },
+ {
+  "id": "V16",
+  "file": "scoring/src/verify.ts",
+  "from": "\t\tif (named.length !== 1 || named[0] !== r.record?.id) return wait(",
+  "to": "\t\tif (false) return wait("
+ },
+ {
+  "id": "V17",
+  "file": "scoring/src/verify.ts",
+  "from": "\t\tif (named.length !== 1 || named[0] !== r.record?.id) return wait(",
+  "to": "\t\tif (named[0] !== r.record?.id) return wait("
+ },
+ {
+  "id": "V18",
+  "file": "scoring/src/verify.ts",
+  "from": "\t\tif (named.length === 0 || listedAt(r, g) === null) continue;",
+  "to": "\t\tif (named.length === 0) continue;"
+ },
+ {
+  "id": "V19",
+  "file": "scoring/src/verify.ts",
+  "from": "\treturn seat3 === undefined || seat3.kind === \"silent\" ? [1, 2, 4] : [1, 2];",
+  "to": "\treturn [1, 2];"
+ },
+ {
+  "id": "V20",
+  "file": "scoring/src/verify.ts",
+  "from": "\treturn seat3 === undefined || seat3.kind === \"silent\" ? [1, 2, 4] : [1, 2];",
+  "to": "\treturn [1, 2, 4];"
+ },
+ {
+  "id": "V21",
+  "file": "scoring/src/verify.ts",
+  "from": "\t\tif (r.kind === \"final\") return wait(`seat ${seat} shows the game final`);",
+  "to": "\t\tif (false) return wait(`seat ${seat} shows the game final`);"
+ },
+ {
+  "id": "V22",
+  "file": "scoring/src/verify.ts",
+  "from": "\t\tif (r.kind === \"silent\") return wait(`seat ${seat} can't read",
+  "to": "\t\tif (false) return wait(`seat ${seat} can't read"
+ },
+ {
+  "id": "V23",
+  "file": "scoring/src/verify.ts",
+  "from": "\t\tif (!inside || r.record?.id !== was.record?.id) return wait(",
+  "to": "\t\tif (r.record?.id !== was.record?.id) return wait("
+ },
+ {
+  "id": "V24",
+  "file": "scoring/src/verify.ts",
+  "from": "\t\tif (!inside || r.record?.id !== was.record?.id) return wait(",
+  "to": "\t\tif (!inside) return wait("
+ },
+ {
+  "id": "V25",
+  "file": "scoring/src/verify.ts",
+  "from": "\t\tconst inside = r.record !== null && r.record.time !== null && inWindow(r.record.time, w);",
+  "to": "\t\tconst inside = r.record !== null;"
+ },
+ {
+  "id": "V26",
+  "file": "scoring/src/verify.ts",
+  "from": "\t\tif (r === undefined || was === undefined) return wait(",
+  "to": "\t\tif (false) return wait("
+ },
+ {
+  "id": "B9",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\t\tif (r === null || id === null) return { kind: \"silent\", why: \"unreadable record\" };\n\t\tif (id.toLowerCase() === hint.id) rows.push(r);",
+  "to": "\t\tif (r === null) return { kind: \"silent\", why: \"unreadable record\" };\n\t\tif (id !== null && id.toLowerCase() === hint.id) rows.push(r);"
+ },
+ {
+  "id": "B10",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\t\tif (date === undefined || last === null || last < date) return",
+  "to": "\t\tif (false) return"
+ },
+ {
+  "id": "B11",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\t\tif (date === undefined || last === null || last < date) return",
+  "to": "\t\tif (date === undefined || last === null || last <= date) return"
+ },
+ {
+  "id": "B12",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\t\tif (t !== null && (last === null || t > last)) last = t;",
+  "to": "\t\tif (t !== null) last = t;"
+ },
+ {
+  "id": "B13",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "\t\tif (date === undefined || last === null || last < date) return",
+  "to": "\t\tif (last === null || last < (date as number)) return"
+ },
+ {
+  "id": "B14",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "if (homeName === null || awayName === null || time === null) return",
+  "to": "if (awayName === null || time === null) return"
+ },
+ {
+  "id": "B15",
+  "file": "scoring/src/readers/board3.ts",
+  "from": "if (homeName === null || awayName === null || time === null) return",
+  "to": "if (homeName === null || time === null) return"
+ },
+ {
+  "id": "R20",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tif (inside && read.some((s) => of(s).kind !== \"final\")) {",
+  "to": "\t\tif (false) {"
+ },
+ {
+  "id": "R21",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tconst read = [...new Set([...counting, SPARE])];",
+  "to": "\t\tconst read = counting;"
+ },
+ {
+  "id": "R22",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tconst read = [...new Set([...counting, SPARE])];",
+  "to": "\t\tconst read = [1, 2, 3, 4] as Seat[];"
+ },
+ {
+  "id": "R23",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tif (inside && read.some((s) => of(s).kind !== \"final\")) {",
+  "to": "\t\tif (read.some((s) => of(s).kind !== \"final\")) {"
+ },
+ {
+  "id": "R24",
+  "file": "scoring/src/rule.ts",
+  "from": "\t\tif (seat === down) return silent(seat, \"silent for the game\");",
+  "to": "\t\tif (false) return silent(seat, \"silent for the game\");"
+ },
+ {
+  "id": "P13",
+  "file": "scoring/src/program.ts",
+  "from": "\treturn decideDay7(fresh, record.readings, seats, down);",
+  "to": "\treturn decideDay7(fresh, record.readings, seats, null);"
+ },
+ {
+  "id": "F1",
+  "file": "build/config.ts",
+  "from": "\t\tif (flag !== \"--set\" && flag !== \"--owner\") throw new Error(`unknown flag ${flag}`);",
+  "to": "\t\tif (false) throw new Error(`unknown flag ${flag}`);"
+ },
+ {
+  "id": "F2",
+  "file": "build/config.ts",
+  "from": "\t\t\tif (spec !== null) throw new Error(",
+  "to": "\t\t\tif (false) throw new Error("
+ },
+ {
+  "id": "F3",
+  "file": "build/config.ts",
+  "from": "\t\t\tif (next === undefined || next.startsWith(\"-\")) throw",
+  "to": "\t\t\tif (next === undefined) throw"
+ },
+ {
+  "id": "F4",
+  "file": "build/config.ts",
+  "from": "\t\tif (at <= 0 || at === value.length - 1) throw",
+  "to": "\t\tif (at <= 0) throw"
+ },
+ {
+  "id": "F5",
+  "file": "build/config.ts",
+  "from": "\t\tif (Object.prototype.hasOwnProperty.call(set, key)) throw",
+  "to": "\t\tif (false) throw"
+ },
+ {
+  "id": "F6",
+  "file": "build/config.ts",
+  "from": "\t\t\tif (owner !== null) throw new Error(\"--owner given twice\");",
+  "to": "\t\t\tif (false) throw new Error(\"--owner given twice\");"
+ },
+ {
+  "id": "F7",
+  "file": "build/config.ts",
+  "from": "\t\t\tif (eq >= 0) throw new Error(\"--json takes no value\");",
+  "to": "\t\t\tif (false) throw new Error(\"--json takes no value\");"
+ },
+ {
+  "id": "F8",
+  "file": "build/config.ts",
+  "from": "\t\tif (!/^\\s/.test(l)) return null;",
+  "to": "\t\tif (!/^\\s/.test(l)) continue;"
+ },
+ {
+  "id": "F9",
+  "file": "build/config.ts",
+  "from": "\t\tif (eq >= 0) value = a.slice(eq + 1);",
+  "to": "\t\tif (false) value = a.slice(eq + 1);"
+ }
+]
