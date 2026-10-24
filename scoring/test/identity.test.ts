@@ -175,6 +175,20 @@ describe("never a finished game", () => {
 		expect([before.action, before.start]).toEqual(["start", "2026-10-23T00:15:00Z"]);
 	});
 
+	test("with seat 3 counting, the spare's final alone writes nothing, though the spare is never read again", () => {
+		// New England at Chicago at 17:30 on 22 Oct, before it was played; the spare's record derived final.
+		// Seat 3's hint passes, so only seats 1 and 2 are read again: the spare's final is seen once.
+		const spareFinal: Derive = (s, p, b) =>
+			s === 4 && p.includes("americanfootball_nfl")
+				? (copy(b) as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, completed: true, scores: [{ name: "Chicago Bears", score: "30" }, { name: "New England Patriots", score: "24" }] } : g))
+				: b;
+		const v = run(unverified("nfl not final"), NOW, spareFinal);
+		expect([v.action, v.why, v.report]).toEqual(["wait", "seat 4 shows the game final", null]);
+		// The control: the spare's real answer, not final.
+		const real = run(unverified("nfl not final"), NOW);
+		expect([real.action, real.why]).toEqual(["start", "seats 1, 2 and 3 list the game within an hour"]);
+	});
+
 	test("a date an hour after a finished game, with the next day's game also listed: the finished game is the nearest, and nothing is written", () => {
 		// The Lakers game at 02:00 on 22 Oct, final by 17:30; a copy of it 24 hours later, not started.
 		const next: Derive = (seat, path, body) => {

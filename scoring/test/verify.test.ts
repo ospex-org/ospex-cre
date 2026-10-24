@@ -193,22 +193,25 @@ describe("seat 3's hint, checked against its board", () => {
 	});
 
 	test("a hint the board doesn't list fails only once the board reaches the game's date; before that the run waits", () => {
-		// The board as saved at 17:30 on 22 Oct lists NFL games to 3 Nov. Derived: the hint's row gone,
-		// and every row at or after a cut-off gone with it, so the board's last game sits before the cut.
+		// The board as saved at 17:30 on 22 Oct lists NFL games from this one, at 00:15 on 23 Oct, to 3 Nov.
+		// Derived: the hint's row gone and every row at or after the date gone with it, which leaves none,
+		// so one game is added a second before the date. With or without one more at the date itself.
 		const date = at("2026-10-23T00:15:00Z");
 		const timeOf = (r: Record<string, unknown>) => at(`${String(r.MatchTime).trim()}Z`);
 		const saved3 = (derive: Derive): Record<string, unknown>[] => JSON.parse(saved(derive, NOW).send(request(3, "/odds/NFL?oddType=Game", KEY)).body);
 		const other = saved3((_s, _p, b) => b).find((r) => r.ID !== BEARS)!;
-		// The board cut so its last game is a second short of the date, with or without one game added at the date itself.
 		const cut = (addAtDate: boolean): Derive => (s, p, b) => {
 			if (s !== 3 || p !== "/odds/NFL?oddType=Game") return b;
 			const rows = (copy(b) as Record<string, unknown>[]).filter((r) => r.ID !== BEARS && timeOf(r) < date);
-			// The game at the date goes first: the board's latest game is found wherever it sits, not read off its last row.
-			return addAtDate ? [{ ...other, ID: "a game at the date", MatchTime: "2026-10-23T00:15:00" }, ...rows] : rows;
+			const before = { ...other, ID: "a game a second before the date", MatchTime: "2026-10-23T00:14:59" };
+			// The game at the date goes first and the earlier one last: the board's latest game is found
+			// wherever it sits, not read off its last row.
+			return addAtDate ? [{ ...other, ID: "a game at the date", MatchTime: "2026-10-23T00:15:00" }, ...rows, before] : [...rows, before];
 		};
 		const latest = (derive: Derive) => Math.max(...saved3(derive).map(timeOf));
-		// Short of the date: the board doesn't reach it yet, and the run waits.
-		expect(latest(cut(false))).toBeLessThan(date);
+		// Short of the date by a second: the board doesn't reach it yet, and the run waits.
+		expect(saved3(cut(false)).length).toBeGreaterThan(0);
+		expect(latest(cut(false))).toBe(date - 1);
 		const waits = verify(unverified("nfl not final"), cut(false));
 		expect([waits.action, waits.why, waits.report]).toEqual(["wait", "seat 3's board is silent: the board doesn't reach the game's date yet", null]);
 		// One game at the date itself: the board reaches it, and the hint fails.

@@ -184,6 +184,14 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 		});
 	});
 
+	test("a counting seat silent now and silent on record is silent for this run's reason; one on record with a final takes the record's", () => {
+		const fresh = [reading(1, "A"), reading(2, "A"), { ...reading(3, "silent"), detail: "http 503" }, reading(4, "A")];
+		const none = decideDay7(fresh, SEATS4.map((s) => reportReading(s, "silent")), SEATS4, null);
+		expect([none.action, none.why, none.readings[2].kind, none.readings[2].detail]).toEqual(["void", "day 7: a source is silent", "silent", "http 503"]);
+		const recorded = decideDay7(fresh, SEATS4.map((s) => reportReading(s, s === 3 ? "A" : "silent")), SEATS4, null);
+		expect([recorded.action, recorded.readings[2].kind, recorded.readings[2].detail]).toEqual(["score", "final", "recorded at the dispute"]);
+	});
+
 	test("the seat silent for the game is silent on day 7, whatever the dispute record carries for it", () => {
 		// Built by hand: seats 1, 2 and 4 agree, seat 3's recorded final would make a fourth source.
 		const fresh = [reading(1, "A"), reading(2, "B"), reading(3, "silent"), reading(4, "silent")];
