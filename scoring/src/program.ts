@@ -262,7 +262,7 @@ export function scoreGameSync(
 		if (status !== null) return refusedKey(job, status);
 		step = p.next(done);
 	}
-	return { decision: step.value, report: toReport(game.id, step.value, payout) };
+	return { decision: step.value, report: toReport(game.id, step.value, payout, game.payoutRefused) };
 }
 
 /** Decides one game with an asynchronous transport (a sealed machine's fetch), and builds its report. */
@@ -283,5 +283,5 @@ export async function scoreGameAsync(
 		if (status !== null) return refusedKey(job, status);
 		step = p.next(done);
 	}
-	return { decision: step.value, report: toReport(game.id, step.value, payout) };
+	return { decision: step.value, report: toReport(game.id, step.value, payout, game.payoutRefused) };
 }

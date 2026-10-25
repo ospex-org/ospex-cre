@@ -73,6 +73,20 @@ export interface ChainGame {
 	 * order they landed. The day-7 clock runs from `at`, the first; an update never moves it.
 	 */
 	readonly dispute: { readonly at: number; readonly records: readonly (readonly ReportReading[])[] } | null;
+	/**
+	 * What the games set refuses as the payout of a report that ends a game, besides address 0 and the
+	 * reserved range up to 0xffff: its own address, its coin's, and every address ever approved as a
+	 * reporter, retired ones included. Read from the games set with the rest of the game.
+	 */
+	readonly payoutRefused: PayoutRefused;
+}
+
+/** The addresses, besides 0 and the reserved range, that the games set never takes as a payout. */
+export interface PayoutRefused {
+	readonly gamesSet: string;
+	readonly coin: string;
+	/** Every address ever approved as a reporter, retired ones included. Never empty: the games set's constructor writes the first. */
+	readonly reporters: readonly string[];
 }
 
 /**

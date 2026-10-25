@@ -70,8 +70,17 @@ export function chainOf(caseName: string, over: Partial<ChainGame> = {}): ChainG
 			{ seat: 4, kind: 1, homeScore: 0, awayScore: 0 },
 		],
 		dispute: null,
+		payoutRefused: PAYOUT_REFUSED,
 		...over,
 	};
 }
 
-export const PAYOUT = "0x00000000000000000000000000000000000000a1";
+/** A payout the games set takes: above the reserved range, and none of the addresses below. */
+export const PAYOUT = "0x00000000000000000000000000000000000a1a1a";
+
+/** Stand-ins for the games set's own address, its coin's and its reporters, as the chain would give them. */
+export const PAYOUT_REFUSED = Object.freeze({
+	gamesSet: "0x6a6e6a6e6a6e6a6e6a6e6a6e6a6e6a6e6a6e6a6e",
+	coin: "0xc01dc01dc01dc01dc01dc01dc01dc01dc01dc01d",
+	reporters: Object.freeze(["0x7e9017e9017e9017e9017e9017e9017e9017e901", "0x7e9027e9027e9027e9027e9027e9027e9027e902"]),
+});

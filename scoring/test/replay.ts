@@ -14,6 +14,7 @@ import type { ChainGame, ReportReading } from "../src/chain";
 import { scoreGameSync } from "../src/program";
 import type { HttpRequest, HttpResponse, Seat } from "../src/types";
 import { INDEX, KEY, ROOT, at, bytesOf, locate } from "./fixtures";
+import { PAYOUT, PAYOUT_REFUSED } from "./rule-helpers";
 
 export const CASES_DIR = join(import.meta.dir, "..", "cases");
 
@@ -73,6 +74,7 @@ export function chainGameOf(c: CaseFile): ChainGame {
 		start: g.start === null ? null : at(g.start),
 		startReadings: g.startReadings === null ? null : g.startReadings.map((p) => ({ seat: p[0], kind: p[1], homeScore: 0, awayScore: 0 })),
 		dispute: g.dispute ? { at: at(g.dispute.at), records: g.dispute.records.map((r) => r.map(quad)) } : null,
+		payoutRefused: PAYOUT_REFUSED,
 	};
 }
 
@@ -111,7 +113,7 @@ export function replay(c: CaseFile): Replay {
 		return { status: entry.status, body: new TextDecoder().decode(bytes) };
 	};
 	const keys = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
-	const o = scoreGameSync(chainGameOf(c), keys, "0x00000000000000000000000000000000000000c5", at(c.run), send);
+	const o = scoreGameSync(chainGameOf(c), keys, PAYOUT, at(c.run), send);
 	const unasked = c.payloads.filter((p) => !asked.has(`${p.seat} ${p.path}`)).map((p) => `seat ${p.seat} ${p.path}`);
 	const r = o.report;
 	return {

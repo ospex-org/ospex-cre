@@ -25,7 +25,7 @@ import { START_SPREAD } from "../src/verify";
 import type { Keys } from "../src/index";
 import { LATE, NOW } from "./cases";
 import { KEY, copy, locate, saved, type Derive } from "./fixtures";
-import { PAYOUT, chainOf } from "./rule-helpers";
+import { PAYOUT, PAYOUT_REFUSED, chainOf } from "./rule-helpers";
 
 // Golden State at the Lakers, 127-105, inside its window at the suite's clock, as if created with a
 // seat 3 hint that passed verification. Seat 3's answer for the hint is derived: the real by-id
@@ -245,7 +245,7 @@ describe("never: how many must agree, or which seats count, from outside the fin
 	test("the payout lands in the payout field and nowhere else", () => {
 		const base = outcome(lakers3, ALL).report!;
 		expect({ kind: base.kind, home: base.homeScore, away: base.awayScore }).toEqual({ kind: 2, home: 127, away: 105 });
-		for (const payout of ["0x000000000000000000000000000000000000dEaD", "0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF", "0x0000000000000000000000000000000000000001"]) {
+		for (const payout of ["0x000000000000000000000000000000000001dEaD", "0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF", "0x0000000000000000000000000000000000010000"]) {
 			const r = outcome(lakers3, ALL, payout).report!;
 			expect(r.payout).toBe(payout);
 			expect({ ...r, payout: "" }).toEqual({ ...base, payout: "" });
@@ -262,6 +262,13 @@ describe("never: how many must agree, or which seats count, from outside the fin
 			"0xGGGG000000000000000000000000000000000000",
 			`${PAYOUT}ff`, // an address with more after it
 			` ${PAYOUT}`,
+			// What the games set refuses as a payout: the reserved range to its last address, its own
+			// address, its coin's, and its reporters', in either case.
+			"0x0000000000000000000000000000000000000001",
+			"0x000000000000000000000000000000000000ffff",
+			PAYOUT_REFUSED.gamesSet,
+			PAYOUT_REFUSED.coin.toUpperCase().replace("0X", "0x"),
+			...PAYOUT_REFUSED.reporters,
 		]) {
 			const t = saved(seat3Final, NOW);
 			expect({ bad, threw: throws(() => scoreGameSync(lakers3, ALL, bad, NOW, t.send)) }).toEqual({ bad, threw: true });
