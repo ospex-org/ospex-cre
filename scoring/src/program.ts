@@ -10,15 +10,15 @@
 // seat whose feed refuses its key (an answer of 400, 401, 402, 403 or 429), the moment that answer
 // comes back. A login problem makes the program say nothing; it never makes a feed silent, so it
 // never decides on fewer seats. A seat the run never asks needs no key: seat 3 for a game created
-// without a usable seat 3 hint, or once the start report shows it silent for the game; a seat past
-// its window (rule.ts, ASKED_FOR); and every seat on a disputed game's day-7 run.
+// without a usable seat 3 hint, or once the start report shows it silent for the game; a closed seat
+// (rule.ts, OPEN_FOR); and every seat on a disputed game's day-7 run, when every seat is closed.
 //
 //   unverified   the start's rule (verify.ts): seats 1, 2 and 4 read by team near the creator's
 //                date, seat 3's board checked against its hint (and its result read when the board
 //                no longer lists the hint), then every seat read again as scoring's first run will.
-//   verified     from the start: every seat the program still asks read in the game's window, and
+//   verified     from the start: every open seat read in the game's window, and
 //                the agreement rule (rule.ts) at the run's hour, inside n or after.
-//   disputed     a record, not a lock: every seat the program still asks read on every run, and the
+//   disputed     a record, not a lock: every open seat read on every run, and the
 //                game decided on every seat's vote (rule.ts, decideDisputed): a score the moment the
 //                votes agree, an update when a vote changes, and from the first record's day-7 clock,
 //                day 7, which asks no seat.
@@ -34,7 +34,7 @@ import { keyFor, type Keys } from "./keys";
 import { checkBoard, type BoardCheck, type BoardRun } from "./readers/board3";
 import { hintOf } from "./readers/seat3";
 import { toReport } from "./report";
-import { ASKED_FOR, answersOf, countingFor, decide, decideDisputed, lastRecorded, silentForGame } from "./rule";
+import { OPEN_FOR, answersOf, countingFor, decide, decideDisputed, lastRecorded, silentForGame } from "./rule";
 import { MAX_REQUESTS, runAsync, runSync, silent } from "./run";
 import { leagueRow } from "./table";
 import type { Game, HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
@@ -113,15 +113,15 @@ function inSeatOrder(readings: readonly ReportReading[], seats: readonly Seat[])
 
 /**
  * Why the program doesn't ask a seat about a game on this run, or null when it does. It never asks
- * the seat silent for the whole game; it stops asking a seat once that seat's window from the start
- * has closed (rule.ts, ASKED_FOR) and, for a disputed game, every seat from the day-7 clock
- * (`day7At`). A seat it has stopped asking keeps its vote, and nothing it says later is read.
+ * the seat silent for the whole game, and it never asks a closed seat: one whose window from the start
+ * has passed (rule.ts, OPEN_FOR) and, for a disputed game, every seat from the day-7 clock
+ * (`day7At`). A closed seat keeps its vote, and nothing it says later is read.
  */
 function notAsked(seat: Seat, start: number, now: number, down: Seat | null, day7At: number | null): string | null {
 	if (seat === down) return "silent for the game";
-	if (day7At !== null && now >= day7At) return "past day 7";
-	const window = ASKED_FOR[seat];
-	if (window !== null && now - start > window) return "past retention";
+	if (day7At !== null && now >= day7At) return "closed: day 7";
+	const window = OPEN_FOR[seat];
+	if (window !== null && now - start > window) return "closed: past its window";
 	return null;
 }
 
@@ -163,8 +163,8 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
 		return d.action === "dispute" ? { ...d, readings: answersOf(readings, seats, w) } : d;
 	}
 
-	// Disputed: a record, not a lock. Every seat still asked is read on every run until the votes
-	// agree, or day 7; the day-7 run asks no seat.
+	// Disputed: a record, not a lock. Every open seat is read on every run until the votes agree, or
+	// day 7, when every seat is closed and no seat is asked.
 	const record = game.dispute;
 	if (record === null || !wholeSeconds(record.at)) return nothing("no dispute record on chain");
 	if (record.records.length === 0 || !record.records.every((r) => inSeatOrder(r, seats))) return nothing("no dispute record on chain");
@@ -179,7 +179,7 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
  * program always asks four feeds"). A seat the run doesn't ask (`skip` says why) reads silent
  * without a request: the seat silent for the game, as the seat 3 reader already is for a game
  * created without a hint, so a final it might give for a hint that failed verification can never
- * count; and a seat the program has stopped asking.
+ * count; and a closed seat.
  */
 function* readAll(game: ChainGame, start: number, keys: Held, now: number, skip: (seat: Seat) => string | null): Generator<Job, Reading[], Done> {
 	const g: Game = { league: game.league, home: game.home, away: game.away, start, n: game.n, hints: game.hints };
@@ -198,8 +198,8 @@ function* readAll(game: ChainGame, start: number, keys: Held, now: number, skip:
 /**
  * Verification. Seats 1, 2 and 4 are read by team within a day of the date, nearest it, without
  * their hints: the date names the game, and decideStart holds each seat's hint to that record.
- * Seat 3's board is checked against its hint, the board's horizon being the game's own time at
- * seats 1 and 2 when both list it; a hint the board no longer lists is read by its result before
+ * Seat 3's board is checked against its hint, the board's horizon being the later of the game's own
+ * times at seats 1 and 2 when both list it; a hint the board no longer lists is read by its result before
  * seat 3 stands down, since the board drops a finished game. If that gives a start, every seat is
  * read again as scoring's first run will read it, and confirmStart writes the start only if that
  * read agrees.

@@ -1229,26 +1229,26 @@
  {
   "id": "Wn1",
   "file": "scoring/src/program.ts",
-  "from": "\tif (day7At !== null && now >= day7At) return \"past day 7\";",
-  "to": "\tif (false) return \"past day 7\";"
+  "from": "\tif (day7At !== null && now >= day7At) return \"closed: day 7\";",
+  "to": "\tif (false) return \"closed: day 7\";"
  },
  {
   "id": "Wn2",
   "file": "scoring/src/program.ts",
-  "from": "\tif (day7At !== null && now >= day7At) return \"past day 7\";",
-  "to": "\tif (day7At !== null && now > day7At) return \"past day 7\";"
+  "from": "\tif (day7At !== null && now >= day7At) return \"closed: day 7\";",
+  "to": "\tif (day7At !== null && now > day7At) return \"closed: day 7\";"
  },
  {
   "id": "Wn3",
   "file": "scoring/src/program.ts",
-  "from": "\tif (window !== null && now - start > window) return \"past retention\";",
-  "to": "\tif (false) return \"past retention\";"
+  "from": "\tif (window !== null && now - start > window) return \"closed: past its window\";",
+  "to": "\tif (false) return \"closed: past its window\";"
  },
  {
   "id": "Wn4",
   "file": "scoring/src/program.ts",
-  "from": "\tif (window !== null && now - start > window) return \"past retention\";",
-  "to": "\tif (window !== null && now - start >= window) return \"past retention\";"
+  "from": "\tif (window !== null && now - start > window) return \"closed: past its window\";",
+  "to": "\tif (window !== null && now - start >= window) return \"closed: past its window\";"
  },
  {
   "id": "Qk1",

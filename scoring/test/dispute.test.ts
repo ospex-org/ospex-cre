@@ -2,8 +2,8 @@
 //
 //   The first record   Any two finals that differ, from any seat, post it at once, inside n or after
 //                      (decide). From start + n, finals beside answers without one post it too.
-//   Votes              A seat's vote is its most recent answer while the program still asks it, and
-//                      its last answer once it stops. Silence leaves a vote where it was; an answer
+//   Votes              A seat's vote is its most recent answer while it is open (the program still
+//                      asks it), and its last answer once it is closed. Silence leaves a vote where it was; an answer
 //                      without a final after a final is a vote of no final (votesOf, lastRecorded).
 //   After it           The game scores the moment the votes agree, by the same rule a game without a
 //                      record scores by. Until then a run posts an update whenever a seat's vote
@@ -322,6 +322,19 @@ describe("end to end, on the saved answers", () => {
 		expect(scored.report!.readings.map((r) => [r.seat, r.kind, r.homeScore, r.awayScore])).toEqual(SEATS4.map((s) => [s, 2, 114, 106]));
 	});
 
+	test("a disputed game never asks the seat silent for the game, inside that seat's own window too", () => {
+		// Cleveland at Philadelphia with the start report showing seat 3 silent for the game, disputed at
+		// 03:32 on seat 2's 115, read again the same night: seat 3's window is open, and it is still not asked.
+		const down = { ...g, startReadings: g.startReadings!.map((r) => (r.seat === 3 ? { ...r, kind: 0 as const } : r)) };
+		const record = SEATS4.map((s) => (s === 3 ? { seat: 3, kind: 0 as const, homeScore: 0, awayScore: 0 } : { seat: s, kind: 2 as const, homeScore: s === 2 ? 115 : 114, awayScore: 106 }));
+		const disputed = { ...down, status: "disputed" as const, dispute: { at: LATE - 60, records: [record] } };
+		const t = saved(seat2Off, LATE);
+		const o = scoreGameSync(disputed, KEYS, PAYOUT, LATE, t.send);
+		expect(t.misses).toEqual([]);
+		expect(t.asked.filter((q) => q.url.includes("/results/"))).toEqual([]);
+		expect([o.decision.action, o.decision.readings[2].detail]).toEqual(["wait", "silent for the game"]);
+	});
+
 	test("a seat that doesn't list the game is silent on the first record, so the next run scores on the two finals beside it", () => {
 		// After n, seat 2's answer lists every NBA game of the night but this one: it answered, without a
 		// final, so beside two finals the run disputes. On the record, a seat that gave no answer about the
@@ -351,7 +364,7 @@ describe("end to end, on the saved answers", () => {
 		const game = { ...off, dispute: { at: firstAt, records } };
 		const deadline = firstAt + g.day7;
 		expect(later + g.day7).toBeGreaterThan(deadline);
-		// A second before the first record's day 7: nothing changed, nothing written; seats 1 and 2 are still asked.
+		// A second before the first record's day 7: nothing changed, nothing written; seats 1 and 2 are still open.
 		const early = run(game, seat2Off, deadline - 1);
 		expect([early.got[0], early.asked > 0]).toEqual(["wait", true]);
 		// At it: day 7's rule, on every vote on record, without asking any seat. Three agree: it settles,

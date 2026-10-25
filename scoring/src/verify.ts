@@ -23,8 +23,9 @@
 //     seat is read again as scoring's first run will read it: in [start, start + n), with the hints
 //     and without the date, seat 3 by its result when it counts. Each counting seat must be read
 //     there, and each counting seat read by team must read the record verification found, inside
-//     that window. The spare, counting or not, may read no other record inside it; and a spare with
-//     a hint must read that record, or its hint, unchecked, would choose at scoring. A hinted spare
+//     that window. The spare, counting or not, may read no other record inside it, and, when it
+//     doesn't count, none more than START_SPREAD from the start; and a spare with a hint must read
+//     that record, or its hint, unchecked, would choose at scoring. A hinted spare
 //     that doesn't count and whose record is within START_SPREAD of the start, a little before the
 //     window included, is the game: it reads no other record there, and can give no final to count.
 //   * No start is written for a game already over. While any reading verification takes shows the

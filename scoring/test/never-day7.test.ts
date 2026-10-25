@@ -1,8 +1,8 @@
 // Never: "A disputed game settles on fewer than three agreeing recorded sources."
 //
-// A disputed game is decided on every seat's vote: its most recent answer while the program still
-// asks it, its last answer once it stops (rule.ts). Day 7 is the deadline; by then the program asks
-// no seat, so day 7 reads the votes on record. It settles only when all four sources have a vote,
+// A disputed game is decided on every seat's vote: its most recent answer while it is open (the
+// program still asks it), its last answer once it is closed (rule.ts). Day 7 is the deadline; by then
+// every seat is closed, so day 7 reads the votes on record. It settles only when all four sources have a vote,
 // none silent, and at least three give the same final. Anything else is a void: 2-2, a silent
 // fourth, or a league with fewer than four feeds. Before day 7, and on day 7 alike, a 2-2 on the
 // record stays a 2-2 until a seat changes its vote: it never scores on two.
@@ -203,7 +203,7 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 		const game = disputed([[reportReading(1, "silent"), reportReading(2, "silent"), final(3), final(4)]]);
 		// At day 7 no seat is asked, and seats 1 and 2 have no vote: a void.
 		const bare = go(game, DAY7_RUN);
-		expect([bare.action, bare.why, bare.asked, bare.votes]).toEqual(["void", "day 7: a source is silent", [], ["1:past day 7", "2:past day 7", "3:23-17", "4:23-17"]]);
+		expect([bare.action, bare.why, bare.asked, bare.votes]).toEqual(["void", "day 7: a source is silent", [], ["1:closed: day 7", "2:closed: day 7", "3:23-17", "4:23-17"]]);
 		// A second before the day-7 clock seats 1 and 2 are asked; their votes change, so an update is posted.
 		const early = go(game, DEADLINE - 1);
 		expect([early.action, early.why, early.kind, [...new Set(early.asked)]]).toEqual(["dispute", "an update: a vote changed, at seat 1 and 2", 4, [1, 2]]);
@@ -271,7 +271,7 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 		expect(counting.action === "score" ? [counting.home, counting.away] : counting.action).toEqual([27, 20]);
 	});
 
-	test("end to end: seat 3 silent for the game, the spare past its window: an update before day 7, never a score on the dissent; a void at day 7", () => {
+	test("end to end: seat 3 silent for the game, the spare closed: an update before day 7, never a score on the dissent; a void at day 7", () => {
 		const base = chainOf("nfl final");
 		const game: ChainGame = { ...base, status: "disputed", dispute: { at: DISPUTED_AT, records: [[reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), final(4)]] } };
 		// The spare keeps a game 66 hours: by then it is not asked, and its vote on record stands.

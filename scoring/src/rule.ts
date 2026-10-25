@@ -24,18 +24,19 @@
 //              after; and from start + n, finals beside answers without one, with at least two
 //              counting seats answering: neither a score nor a void. The first run that sees either
 //              posts the dispute record, with every seat's answer.
-//   After a record   The record is not a lock (decideDisputed). Each seat has a vote: its most
-//              recent answer while the program still asks it, and its last answer once it stops
-//              (votesOf, ASKED_FOR). Silence leaves a vote where it was; an answer without a final
-//              after a final is a vote of no final. The game scores the moment the votes agree, by
+//   After a record   The record is not a lock (decideDisputed). Each seat is open while the program
+//              still asks it and closed once it stops (OPEN_FOR), and each has a vote: its most
+//              recent answer while it is open, its last answer once it is closed (votesOf). Silence
+//              leaves a vote where it was; an answer without a final after a final is a vote of no
+//              final. The game scores the moment the votes agree, by
 //              the same rule a game without a record scores by. Until then a run posts an update,
 //              the same report with every seat's answer, whenever a seat's vote changes, and never
 //              otherwise.
 //   Day 7      The deadline for a dispute that never resolves, counted from the first record; an
-//              update never moves it. Every seat has stopped being asked by then, so day 7 reads the
-//              votes on record (decideDay7).
+//              update never moves it. Every seat is closed by then, so day 7 reads the votes on
+//              record (decideDay7).
 //
-// The spare is asked on every run until its window closes. Its final counts toward a disagreement
+// The spare is asked on every run while it is open. Its final counts toward a disagreement
 // like any other seat's. Its answer without a final never blocks a score, since it does not count.
 // For a game whose counting seat is silent for the whole game, it stands in for that seat
 // (countingFor).
@@ -60,17 +61,18 @@ export const AGREE = deepFreeze({
 } as const);
 
 /**
- * How long after a game's start the program asks each seat about it, in seconds: to the end of the
- * window the seat's own docs give for a game it keeps, or null where its docs keep a game longer than
- * any game here runs. Part of the fingerprint. Past it the seat is not asked again: its vote stands,
- * and nothing it says later is read.
- *   Seats 1 and 2   keep a game's record for seasons: asked until the game ends, at day 7 at the
+ * How long after a game's start each seat stays open, in seconds: the program asks it to the end of
+ * the window the seat's own docs give for a game it keeps, or until the game ends where its docs
+ * keep a game longer than any game here runs (null). Part of the fingerprint. A seat also closes at a
+ * disputed game's day-7 clock and when the game is scored. A closed seat is not asked again: its vote
+ * stands, and nothing it says later is read.
+ *   Seats 1 and 2   keep a game's record for seasons: open until the game ends, at day 7 at the
  *                   latest for a disputed game.
  *   Seat 3          keeps a result five days from the game's start.
- *   Seat 4          keeps completed games three days; asked to 66 hours, the margin its reader keeps
+ *   Seat 4          keeps completed games three days; open for 66 hours, the margin its reader keeps
  *                   for not knowing how the feed counts the three (src/readers/seat4.ts).
  */
-export const ASKED_FOR: Readonly<Record<Seat, number | null>> = deepFreeze({ 1: null, 2: null, 3: 5 * 86_400, 4: 66 * 3_600 });
+export const OPEN_FOR: Readonly<Record<Seat, number | null>> = deepFreeze({ 1: null, 2: null, 3: 5 * 86_400, 4: 66 * 3_600 });
 
 /**
  * The seat that is silent for the whole game, if one is: seat 3, unless the game was created with a
@@ -167,10 +169,9 @@ export function lastRecorded(records: readonly (readonly ReportReading[])[], sea
 }
 
 /**
- * Every seat's vote, one per seat of `seats` in seat order: its answer this run where the program
- * still asks it and it gives one, otherwise its vote on record (`recorded`, from lastRecorded), and
- * silent when it has neither. A seat the program has stopped asking reads silent this run, so its
- * vote on record stands. The seat silent for the whole game (`down`) has no vote: this program never
+ * Every seat's vote, one per seat of `seats` in seat order: its answer this run where it is open and
+ * gives one, otherwise its vote on record (`recorded`, from lastRecorded), and silent when it has
+ * neither. A closed seat reads silent this run, so its vote on record stands. The seat silent for the whole game (`down`) has no vote: this program never
  * asks it, so an answer on record for it could only have come from somewhere else.
  */
 export function votesOf(fresh: readonly Reading[], recorded: readonly ReportReading[], seats: readonly Seat[], down: Seat | null, w: Window): Reading[] {
@@ -232,7 +233,7 @@ export function decideDisputed(
 
 /**
  * Day 7, for a game with a dispute record, once its day-7 clock has run and the votes still don't
- * agree. By then the program asks no seat (program.ts), so each seat's vote is the one on record. The
+ * agree. By then every seat is closed (program.ts), so each seat's vote is the one on record. The
  * game settles only when four sources have a vote, none silent, and at least three of them give the
  * same final. Anything else is a void: 2-2, a silent fourth, or a league with fewer than four feeds.
  *

@@ -99,19 +99,21 @@ a game once the game is final, so the hint is the only thing that ties a result 
   request (a 401 from a league the seat's plan does not cover reads `http 401`, so the reason
   travels with the reading), an answer that doesn't parse, a record with no game time, a final
   without points or short of a whole game, more than one record that could be the game, two
-  different hints, a date whose answer came back empty when the game was not found, a seat past
-  its window (below), a clock that isn't a number, and, at seat 3, no usable hint, no result for it,
+  different hints, a date whose answer came back empty when the game was not found, a closed seat
+  (below), a clock that isn't a number, and, at seat 3, no usable hint, no result for it,
   or a hint naming a row for part of the game. Silent is never turned into "no
   final". A final without points, or one short of a whole game, is silent and marked as the feed
   saying the game is over: scoring never counts it, and verification writes no start on it.
 
-## How long each seat is asked
+## Open and closed: how long each seat is asked
 
-Each seat is asked about a game to the end of the window its own docs give for a game it keeps,
-and no further (`ASKED_FOR` in [`src/rule.ts`](src/rule.ts), inside the fingerprint). Past it,
-the seat isn't asked again, its key isn't needed, and nothing it says later is read.
+A seat is open while the program still asks it about a game, and closed once it stops. It closes
+at the end of the window its own docs give for a game it keeps (`OPEN_FOR` in
+[`src/rule.ts`](src/rule.ts), inside the fingerprint), at a disputed game's day 7, and when the
+game is scored. A closed seat isn't asked again, its key isn't needed, and nothing it says later is
+read.
 
-| Seat | What its docs say | Asked until |
+| Seat | What its docs say | Open until |
 |---|---|---|
 | 1 | past seasons' games kept | the game ends (day 7 at the latest for a disputed game) |
 | 2 | seasons since 2018 served through the API | the game ends (day 7 at the latest for a disputed game) |
@@ -119,7 +121,8 @@ the seat isn't asked again, its key isn't needed, and nothing it says later is r
 | 4 | completed games kept three days | 66 hours after the start: three days less a margin, since the docs don't say how the three are counted |
 
 The saved answers agree: seats 1 and 2 answered dates 217 days old in full, seat 3 answered
-nothing for ids 78 to 156 days old. On a disputed game's day-7 run no seat is asked at all.
+nothing for ids 78 to 156 days old. On a disputed game's day-7 run every seat is closed, and none
+is asked.
 
 ## Requests per game
 
@@ -148,8 +151,7 @@ inside the fingerprint. For a game whose start is written:
   n, finals beside answers without one. The first run that sees it posts the dispute record, with
   every seat's answer, inside n or after.
 * **After the record** the game is not locked, and it is decided on every seat's vote. A seat's
-  vote is its most recent answer while the program still asks it, and its last answer once it
-  stops (above). An answer is a final, or the game's own record shown without one; silence, a
+  vote is its most recent answer while it is open, and its last answer once it is closed (above). An answer is a final, or the game's own record shown without one; silence, a
   listing without the game, or the game outside the window leaves a vote where it was, and a
   game shown without a final after a final is a vote of no final.
   * The game scores the moment the votes agree, by the same rule as above, and the score carries
@@ -158,12 +160,12 @@ inside the fingerprint. For a game whose start is written:
     vote changes, and writes nothing otherwise: never per run, and one report however many votes
     change on it. An update credits nothing.
 * **Day 7**, counted from the first record, is the deadline for a dispute that never resolves; an
-  update never moves it. By then every seat has stopped being asked, so day 7 reads every seat's
-  vote on record and asks nothing. A seat silent for the whole game is silent here too, whatever
+  update never moves it. By then every seat is closed, so day 7 reads every seat's vote on record
+  and asks nothing. A seat silent for the whole game is silent here too, whatever
   the record carries for it. The game settles only when four sources have a vote, none silent, and
   at least three give the same final. Anything else voids.
 * **A game without a record** is decided on the run's own readings: nothing earlier is on chain.
-* **The spare** (seat 4) is asked on every run until its window closes.
+* **The spare** (seat 4) is asked on every run while it is open.
   * Its final counts toward a disagreement like any other seat's.
   * Its answer without a final never blocks a score.
   * It **stands in for seat 3 for a game whose seat 3 is silent for the whole game**: a game
@@ -239,7 +241,7 @@ transport, each seat's key and the payout address.
   `-_.!~*'()`), decides nothing, before any request is sent, and so does a seat whose feed refuses
   the key (400, 401, 402, 403 or 429). It is never read as a silent seat, which would let a key
   choose between a score, a dispute and a void. A seat the run never asks needs no key: seat 3 when
-  it is silent for the game, a seat past its window, and every seat on a disputed game's day-7 run. The payout lands in the report's payout field and nowhere else, and is refused
+  it is silent for the game, a closed seat, and every seat on a disputed game's day-7 run. The payout lands in the report's payout field and nowhere else, and is refused
   where the games set would refuse it: address 0, the reserved range up to 0xffff, the games set's
   own address, its coin's, and any address ever approved as a reporter (read from the chain).
 * **The start report.** A verified game decides nothing unless its start report holds one reading
@@ -288,6 +290,14 @@ To see one game read, seat by seat, from the saved answers:
 bun run replay --list                                  # the saved cases and their clocks
 bun run replay --case "mlb doubleheader, game 1"       # one case, at its own clock
 bun run replay --game game.json --at 2026-10-23T03:32:00Z
+```
+
+Verification on the saved answers of college basketball's opening night, 2 to 4 Nov (every
+Division I game seat 2 lists, each created at its own time with no hints):
+
+```bash
+bun opening-night.ts            # the counts
+bun opening-night.ts --ledger   # and every game, with what verification decides
 ```
 
 A game file holds what the chain holds for a game: `league`, `home`, `away`, `start` (an ISO time

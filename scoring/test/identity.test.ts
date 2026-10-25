@@ -108,6 +108,15 @@ describe("the date says which game", () => {
 		// The spare silent: its hint can't be checked, so nothing is written, whichever game it names.
 		expect(go(wrong, true)).toEqual(["wait", "seat 4 can't read the game as scoring will: http 503"]);
 		expect(go(right, true)).toEqual(["wait", "seat 4 can't read the game as scoring will: http 503"]);
+		// Silent only when read again, its record nearest the date the hint's own and at the start: the
+		// window read is still unchecked, and nothing is written.
+		const t = saved(dh, NOW);
+		let spare = 0;
+		const reread = scoreGameSync(unverified("nfl not final", { date: at("2026-10-23T00:15:00Z"), hints: right }), KEYS, PAYOUT, NOW, (q) =>
+			q.url.includes("americanfootball_nfl") && ++spare === 2 ? { status: 503, body: "" } : t.send(q),
+		);
+		expect(t.misses).toEqual([]);
+		expect([reread.decision.action, reread.decision.why, spare]).toEqual(["wait", "seat 4 can't read the game as scoring will: http 503", 2]);
 		// The spare answering: held to its hint near the date, as seats 1 and 2 are.
 		expect(go(wrong, false)).toEqual(["wait", "seat 4's hint names another record than the one nearest the date"]);
 		expect(go(right, false)).toEqual(["start", "seats 1, 2 and 3 list the game within an hour"]);

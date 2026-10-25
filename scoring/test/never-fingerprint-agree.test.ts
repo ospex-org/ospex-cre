@@ -25,7 +25,7 @@ import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../src/chain";
 import { readerFor, type Keys } from "../src/index";
 import { scoreGameSync } from "../src/program";
-import { AGREE, ASKED_FOR } from "../src/rule";
+import { AGREE, OPEN_FOR } from "../src/rule";
 import { runSync } from "../src/run";
 import { START_SPREAD } from "../src/verify";
 import { LATE, NOW } from "./cases";
@@ -68,30 +68,30 @@ describe("never: how many must agree, or which seats count, from outside the fin
 	test("the counts are the spec's, fixed in the source, and nothing at runtime writes to them", () => {
 		expect({ ...AGREE }).toEqual({ insideN: 3, afterN: 2, day7Sources: 4, day7Agree: 3 });
 		expect(START_SPREAD).toBe(3600);
-		// How long each seat is asked: seats 1 and 2 until the game ends, seat 3 five days, seat 4 66 hours.
+		// How long each seat stays open: seats 1 and 2 until the game ends, seat 3 five days, seat 4 66 hours.
 		const WINDOWS = { 1: null, 2: null, 3: 5 * 86_400, 4: 66 * 3_600 };
-		expect({ ...ASKED_FOR }).toEqual(WINDOWS);
+		expect({ ...OPEN_FOR }).toEqual(WINDOWS);
 		const attempts: [string, () => void][] = [
 			["lower the count inside n", () => ((AGREE as unknown as { insideN: number }).insideN = 2)],
 			["lower the count after n", () => ((AGREE as unknown as { afterN: number }).afterN = 1)],
 			["lower day 7's count", () => ((AGREE as unknown as { day7Agree: number }).day7Agree = 2)],
 			["add a count", () => ((AGREE as unknown as Record<string, number>).spare = 0)],
-			["keep asking seat 3", () => ((ASKED_FOR as unknown as Record<number, number | null>)[3] = null)],
-			["stop asking seat 1", () => ((ASKED_FOR as unknown as Record<number, number | null>)[1] = 0)],
+			["keep seat 3 open", () => ((OPEN_FOR as unknown as Record<number, number | null>)[3] = null)],
+			["close seat 1", () => ((OPEN_FOR as unknown as Record<number, number | null>)[1] = 0)],
 		];
 		for (const [what, attempt] of attempts) expect({ what, threw: throws(attempt) }).toEqual({ what, threw: true });
 		expect({ ...AGREE }).toEqual({ insideN: 3, afterN: 2, day7Sources: 4, day7Agree: 3 });
-		expect({ ...ASKED_FOR }).toEqual(WINDOWS);
+		expect({ ...OPEN_FOR }).toEqual(WINDOWS);
 	});
 
-	test("seat 4's window is its reader's: at 66 hours from the start it is asked, a second later neither the program nor the reader asks it", () => {
+	test("seat 4's window is its reader's: at 66 hours from the start it is open, a second later closed, and its reader stops at the same second", () => {
 		const g = chainOf("nba final, read after the game");
 		const seats4 = (now: number) => {
 			const t = saved(undefined, LATE);
 			scoreGameSync(g, ALL, PAYOUT, now, t.send);
 			return t.asked.filter((q) => locate(q)?.seat === 4).length;
 		};
-		const edge = g.start! + ASKED_FOR[4]!;
+		const edge = g.start! + OPEN_FOR[4]!;
 		expect([seats4(edge), seats4(edge + 1)]).toEqual([1, 0]);
 		// The reader on its own stops at the same second.
 		const reader = (now: number) => runSync(4, readerFor(4)({ game: { league: g.league, home: g.home, away: g.away, start: g.start!, n: g.n, hints: g.hints }, now, key: KEY }), saved(undefined, LATE).send);

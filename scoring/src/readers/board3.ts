@@ -78,7 +78,7 @@ function wholeGame(r: Record<string, unknown>): boolean {
 
 /**
  * Checks the hint against the board. `ask.near` is the time the board must reach for a missing hint
- * to fail: the game's own time at seats 1 and 2, or the creator's date. Short of it, a missing hint
+ * to fail: the later of the game's own times at seats 1 and 2, or the creator's date. Short of it, a missing hint
  * waits rather than fails.
  */
 export function* checkBoard(ask: Ask): BoardRun {

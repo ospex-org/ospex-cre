@@ -75,7 +75,7 @@ describe("one run", () => {
 		expect([hinted.decision.why, t2.asked.length]).toEqual(["seat 3 has no key", 0]);
 	});
 
-	test("a seat past its window is not asked, and needs no key: the spare after 66 hours, seat 3 after five days", () => {
+	test("a closed seat is not asked, and needs no key: the spare after 66 hours, seat 3 after five days", () => {
 		// Cleveland at Philadelphia, created with a seat 3 hint that passed: every seat counts or is asked.
 		const g = chainOf("nba final, read after the game");
 		const go = (keys: Record<number, string>, now: number) => {
@@ -90,7 +90,7 @@ describe("one run", () => {
 		// Inside its window the spare is asked, so it needs its key.
 		expect(go(without(4), spareGone - 1)).toMatchObject({ action: "wait", why: "seat 4 has no key", seats: [] });
 		// Past it, the run neither asks it nor needs its key.
-		expect(go(without(4), spareGone)).toMatchObject({ action: "score", seats: [1, 2, 3], spare: "past retention" });
+		expect(go(without(4), spareGone)).toMatchObject({ action: "score", seats: [1, 2, 3], spare: "closed: past its window" });
 		expect(go(without(4), spareGone)).toEqual(go(KEYS, spareGone));
 		// Seat 3 the same, five days from the start.
 		expect(go(without(3), seat3Gone - 1)).toMatchObject({ action: "wait", why: "seat 3 has no key" });
