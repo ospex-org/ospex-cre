@@ -187,7 +187,8 @@ for (const m of chosen) {
 			if (sha(new Uint8Array(readFileSync(path))) !== sha(original)) fail(`could not put ${m.file} back`, 2);
 		}
 		const got = read(r.out);
-		Object.assign(row, { exit: r.code, ran: got.ran, pass: got.pass, fail: got.fail, red: got.red.slice(0, 12), secs: r.secs });
+		// Every failing test by name, never a cut list: its length is the count a report quotes, beside `fail`.
+		Object.assign(row, { exit: r.code, ran: got.ran, pass: got.pass, fail: got.fail, red: got.red, secs: r.secs });
 		const base = baseline.get(suiteOf(m).name);
 		if (r.hung) verdict = "HUNG";
 		else if (r.code !== 0 || got.fail > 0) verdict = "KILLED";
