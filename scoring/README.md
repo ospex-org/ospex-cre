@@ -154,8 +154,11 @@ inside the fingerprint. For a game whose start is written:
   vote is its most recent answer while it is open, and its last answer once it is closed (above). An answer is a final, or the game's own record shown without one; silence, a
   listing without the game, or the game outside the window leaves a vote where it was, and a
   game shown without a final after a final is a vote of no final.
-  * The game scores the moment the votes agree, by the same rule as above, and the score carries
-    the votes it rests on. A 2-2 on the record stays a 2-2 until a seat changes its vote.
+  * The game scores the moment the votes agree, by the same rule as above, and only on three or
+    more votes with that final: a disputed game never settles on fewer than three agreeing
+    recorded sources. Two counting seats with the final and the third silent wait for a third,
+    the spare's vote included, or for day 7. The score carries the votes it rests on. A 2-2 on the
+    record stays a 2-2 until a seat changes its vote.
   * Until then a run posts an update, the same report with every seat's answer, whenever a seat's
     vote changes, and writes nothing otherwise: never per run, and one report however many votes
     change on it. An update credits nothing.

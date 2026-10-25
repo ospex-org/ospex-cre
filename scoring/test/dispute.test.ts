@@ -6,9 +6,9 @@
 //                      asks it), and its last answer once it is closed. Silence leaves a vote where it was; an answer
 //                      without a final after a final is a vote of no final (votesOf, lastRecorded).
 //   After it           The game scores the moment the votes agree, by the same rule a game without a
-//                      record scores by. Until then a run posts an update whenever a seat's vote
-//                      changes, and writes nothing otherwise (decideDisputed). Day 7, counted from
-//                      the first record, is the deadline.
+//                      record scores by, with three or more of them that final. Until then a run posts
+//                      an update whenever a seat's vote changes, and writes nothing otherwise
+//                      (decideDisputed). Day 7, counted from the first record, is the deadline.
 //
 // Counted by hand, each over the 256 ways the four seats can read (silent, answered without a final,
 // or one of two different finals) and, after a record, each of the 256 ways the record can hold
@@ -22,21 +22,27 @@
 //   one, else the recorded vote: A, B and no final are each the vote in 5 pairs (fresh, or fresh
 //   silent beside it on record), silent in 1. Its vote changes when it answers and the record holds
 //   something else: 3 of 4 pairs for each fresh answer, 9 in all, 7 unchanged (2 for each answer, 1
-//   silent beside silent). A score is decide's on the votes; a run with no score posts an update when
-//   any seat's vote changes (16^4 - 7^4 = 63,135 runs have a change) and waits otherwise.
+//   silent beside silent). A score is decide's on the votes, with three or more votes its final; a run
+//   with no score posts an update when any seat's vote changes (16^4 - 7^4 = 63,135 runs have a
+//   change) and waits otherwise. Of the 7 unchanged pairs, A, B and no final are each the vote in 2.
 //     inside n   scores: the three counting votes one final, the fourth silent, no final or the same
 //                final: (125 + 625 + 625) x 2 = 2,750, of which (8 + 16 + 16) x 2 = 80 change nothing.
 //                updates 63,135 - (2,750 - 80) = 60,465; waits 2,401 - 80 = 2,321
-//     after n    scores: two or three counting votes one final, the rest silent (125 + 3 x 25 = 200
-//                ways), the fourth silent, no final or the same (1 + 5 + 5): 200 x 11 x 2 = 4,400, of
-//                which 20 x 5 x 2 = 200 change nothing.
-//                updates 63,135 - (4,400 - 200) = 58,935; waits 2,401 - 200 = 2,201
+//     after n    scores: the three counting votes one final (125 ways), the fourth silent, no final or
+//                the same (1 + 5 + 5); or two counting votes one final and the third silent (3 x 25 =
+//                75 ways), the fourth the same final (5), the third vote that makes three:
+//                (125 x 11 + 75 x 5) x 2 = 3,500, of which (8 x 5 + 12 x 2) x 2 = 128 change nothing.
+//                Two counting votes and the rest silent or not final are fewer than three agreeing
+//                recorded sources, and wait.
+//                updates 63,135 - (3,500 - 128) = 59,763; waits 2,401 - 128 = 2,273
 //
 // The breaks that turn this red (rule.ts):
 //   decide, the record at once inside n:  return { action: "dispute", readings, why: "two finals differ" };
 //                                     ->  return { action: inside ? "wait" : "dispute", readings, why: "two finals differ" };
-//   decideDisputed, the score:            if (agreed.action === "score") return
-//                                     ->  if (false) return
+//   decideDisputed, the score:            if (agreed.action === "score" && votesFor(
+//                                     ->  if (false && votesFor(
+//   decideDisputed, three agreeing:       votesFor(votes, agreed.home, agreed.away) >= AGREE.day7Agree) {
+//                                     ->  votesFor(votes, agreed.home, agreed.away) >= AGREE.afterN) {
 //   decideDisputed, never per tick:       if (changed.length > 0) {   ->   if (true) {
 //   votesOf, the vote on record:          if (then !== undefined && then.kind !== READING_KIND.silent) return fromReportReading(
 //                                     ->  if (false) return fromReportReading(
@@ -114,9 +120,11 @@ describe("after the record: a score the moment the votes agree, an update when a
 						const d = decideDisputed(fresh, record(r), counting, inside, false, SEATS4, null, W);
 						const key = `${counting.join("")} ${inside ? "inside" : "after"} ${d.action}`;
 						count[key] = (count[key] ?? 0) + 1;
-						// A score exactly when decide scores on every seat's vote, on the same points.
-						const plain = decide(readings(SEATS4.map((_, i) => voteOf(f[i], r[i]))), counting, inside);
-						const scored = plain.action === "score";
+						// A score exactly when decide scores on every seat's vote, on the same points, and three or
+						// more of the votes are that final.
+						const votes = SEATS4.map((_, i) => voteOf(f[i], r[i]));
+						const plain = decide(readings(votes), counting, inside);
+						const scored = plain.action === "score" && votes.filter((v) => v === (plain.home === 27 ? "A" : "B")).length >= 3;
 						if (scored !== (d.action === "score")) wrong.push({ counting, inside, f, r, d: d.action, plain: plain.action });
 						if (scored && d.action === "score" && (d.home !== plain.home || d.away !== plain.away)) wrong.push({ f, r, points: true });
 						// Otherwise an update exactly when a seat's vote changes.
@@ -135,19 +143,19 @@ describe("after the record: a score the moment the votes agree, an update when a
 			"123 inside score": 2_750,
 			"123 inside dispute": 60_465,
 			"123 inside wait": 2_321,
-			"123 after score": 4_400,
-			"123 after dispute": 58_935,
-			"123 after wait": 2_201,
+			"123 after score": 3_500,
+			"123 after dispute": 59_763,
+			"123 after wait": 2_273,
 			"124 inside score": 2_750,
 			"124 inside dispute": 60_465,
 			"124 inside wait": 2_321,
-			"124 after score": 4_400,
-			"124 after dispute": 58_935,
-			"124 after wait": 2_201,
+			"124 after score": 3_500,
+			"124 after dispute": 59_763,
+			"124 after wait": 2_273,
 		});
 	});
 
-	test("from the day-7 clock: a score when the votes agree, and otherwise day 7's own rule, on the same votes", () => {
+	test("from the day-7 clock: a score when the votes agree with three or more that final, and otherwise day 7's own rule, on the same votes", () => {
 		const wrong: unknown[] = [];
 		for (const counting of SETS) {
 			for (const f of everyFour()) {
@@ -156,7 +164,8 @@ describe("after the record: a score the moment the votes agree, an update when a
 					const d = decideDisputed(fresh, record(r), counting, false, true, SEATS4, null, W);
 					const votes = readings(SEATS4.map((_, i) => voteOf(f[i], r[i])));
 					const plain = decide(votes, counting, false);
-					const want = plain.action === "score" ? plain : decideDay7(votes, SEATS4, null);
+					const three = plain.action === "score" && votes.filter((v) => v.kind === "final" && v.home === plain.home && v.away === plain.away).length >= 3;
+					const want = three ? plain : decideDay7(votes, SEATS4, null);
 					if (d.action !== want.action || (d.action === "score" && want.action === "score" && (d.home !== want.home || d.away !== want.away))) {
 						wrong.push({ counting, f, r, got: d.action, want: want.action });
 					}
@@ -335,10 +344,11 @@ describe("end to end, on the saved answers", () => {
 		expect([o.decision.action, o.decision.readings[2].detail]).toEqual(["wait", "silent for the game"]);
 	});
 
-	test("a seat that doesn't list the game is silent on the first record, so the next run scores on the two finals beside it", () => {
+	test("a seat that doesn't list the game is silent on the first record; the next run scores on the three finals beside it, the spare's the third", () => {
 		// After n, seat 2's answer lists every NBA game of the night but this one: it answered, without a
 		// final, so beside two finals the run disputes. On the record, a seat that gave no answer about the
-		// game is silent, so it has no vote, and the next run reads two agreeing finals and the rest silent.
+		// game is silent, so it has no vote, and the next run reads two counting finals, the third silent,
+		// and the spare's final the same: three agreeing recorded sources.
 		const unlisted: Derive = (s, p, b) => {
 			if (s !== 2 || !p.startsWith("/games?league=NBA")) return b;
 			const c = copy(b) as { results: Record<string, any>[] };
@@ -349,7 +359,23 @@ describe("end to end, on the saved answers", () => {
 		expect(first.got).toEqual(["dispute", "after n: finals beside answers without a final", 4]);
 		expect(first.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 0], [3, 2], [4, 2]]);
 		const disputed = { ...g, status: "disputed" as const, dispute: { at: after, records: [first.report!.readings] } };
-		expect(run(disputed, unlisted, after + 60).got).toEqual(["score", "after the dispute record, every seat's vote: after n: two counting seats or more, the same final, the rest silent", 2]);
+		const scored = run(disputed, unlisted, after + 60);
+		expect(scored.got).toEqual(["score", "after the dispute record, every seat's vote: after n: two counting seats or more, the same final, the rest silent", 2]);
+		expect(scored.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 0], [3, 2], [4, 2]]);
+		// The control: the spare still shows the game without a final. Two counting finals beside a silent
+		// vote are fewer than three agreeing recorded sources, so nothing is written, and day 7, asking no
+		// seat, voids on the silent vote.
+		const spareOn: Derive = (s, p, b) => {
+			if (s === 4 && p.includes("basketball_nba")) return (copy(b) as Record<string, any>[]).map((x) => (x.id === "110e33c79c5ec8c0377702aff685f83b" ? { ...x, completed: false } : x));
+			return unlisted(s, p, b);
+		};
+		const firstOn = run(g, spareOn, after);
+		expect(firstOn.got).toEqual(["dispute", "after n: finals beside answers without a final", 4]);
+		expect(firstOn.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 0], [3, 2], [4, 1]]);
+		const disputedOn = { ...g, status: "disputed" as const, dispute: { at: after, records: [firstOn.report!.readings] } };
+		expect(run(disputedOn, spareOn, after + 60).got).toEqual(["wait", "disputed: no seat's vote has changed since the record", null]);
+		const day7 = run(disputedOn, spareOn, after + g.day7);
+		expect([...day7.got, day7.asked]).toEqual(["void", "day 7: a source is silent", 3, 0]);
 	});
 
 	test("the day-7 clock runs from the first record, an update never moves it, and the day-7 run asks no seat", () => {

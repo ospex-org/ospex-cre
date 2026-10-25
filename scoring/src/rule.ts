@@ -28,10 +28,11 @@
 //              still asks it and closed once it stops (OPEN_FOR), and each has a vote: its most
 //              recent answer while it is open, its last answer once it is closed (votesOf). Silence
 //              leaves a vote where it was; an answer without a final after a final is a vote of no
-//              final. The game scores the moment the votes agree, by
-//              the same rule a game without a record scores by. Until then a run posts an update,
-//              the same report with every seat's answer, whenever a seat's vote changes, and never
-//              otherwise.
+//              final. The game scores the moment the votes agree, by the same rule a game without
+//              a record scores by, and only on three or more votes with that final: a disputed game
+//              never settles on fewer than three agreeing recorded sources, before day 7 or on it.
+//              Until then a run posts an update, the same report with every seat's answer, whenever
+//              a seat's vote changes, and never otherwise.
 //   Day 7      The deadline for a dispute that never resolves, counted from the first record; an
 //              update never moves it. Every seat is closed by then, so day 7 reads the votes on
 //              record (decideDay7).
@@ -56,7 +57,7 @@ export const AGREE = deepFreeze({
 	afterN: 2,
 	/** Day 7: this many sources on record, none silent ... */
 	day7Sources: 4,
-	/** ... and at least this many of them with the same final. */
+	/** ... and at least this many of them with the same final. Every score of a disputed game, before day 7 too, rests on this many votes with its final. */
 	day7Agree: 3,
 } as const);
 
@@ -131,6 +132,17 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 }
 
 /**
+ * A run for a game whose start is written and that has no dispute record: decide's decision on this
+ * run's readings. A score or a void carries the readings as read. The first record carries each
+ * seat's answer (answersOf), since it is each seat's first vote: a seat that gave no answer about
+ * the game is silent on it.
+ */
+export function decideVerified(readings: readonly Reading[], counting: readonly Seat[], inside: boolean, seats: readonly Seat[], w: Window): Decision {
+	const d = decide(readings, counting, inside);
+	return d.action === "dispute" ? { ...d, readings: answersOf(readings, seats, w) } : d;
+}
+
+/**
  * Whether a reading is an answer about the game, the only kind that sets a seat's vote: a final, or
  * the game's own record shown without a final (seat 3's result, which has no time, or a record inside
  * the window at seats 1, 2 and 4). Silence is not an answer, and neither is a listing that doesn't
@@ -201,14 +213,19 @@ function voteChanges(now: Reading | undefined, then: ReportReading | undefined, 
 /**
  * A run for a game whose dispute record is written: a record, not a lock, decided on every seat's vote
  * (votesOf), before day 7 and on day 7 alike.
- *   * The votes agree, by the same rule a game without a record scores by (decide): a score, whose
- *     readings are the votes it rests on.
+ *   * The votes agree, by the same rule a game without a record scores by (decide), and three or more
+ *     of them are that final: a score, whose readings are the votes it rests on. A disputed game never
+ *     settles on fewer than three agreeing recorded sources, so two counting seats with the final and
+ *     the third silent are not enough here unless the spare's vote is the third; until a third agrees,
+ *     the game waits, or day 7 decides.
  *   * Otherwise, from the day-7 clock (`day7`, counted from the first record): day 7 (decideDay7).
  *   * Otherwise, before it: an update, the same dispute report with every seat's answer this run
  *     (answersOf), when a seat's vote changes; and a wait, writing nothing, when none does. Never an
  *     update per run: only a vote that changes posts one, and however many change on a run, that run
  *     posts one report.
  * A void never comes from here before day 7: the hour-24 void is for a game no feed called final.
+ * And no score from here carries a final that differs before day 7: decide disputes any two finals
+ * that differ, the spare's included.
  */
 export function decideDisputed(
 	fresh: readonly Reading[],
@@ -222,13 +239,20 @@ export function decideDisputed(
 ): Decision {
 	const votes = votesOf(fresh, recorded, seats, down, w);
 	const agreed = decide(votes, counting, inside);
-	if (agreed.action === "score") return { ...agreed, why: `after the dispute record, every seat's vote: ${agreed.why}` };
+	if (agreed.action === "score" && votesFor(votes, agreed.home, agreed.away) >= AGREE.day7Agree) {
+		return { ...agreed, why: `after the dispute record, every seat's vote: ${agreed.why}` };
+	}
 	if (day7) return decideDay7(votes, seats, down);
 	const changed = seats.filter((seat) => seat !== down && voteChanges(fresh.find((r) => r.seat === seat), recorded.find((r) => r.seat === seat), w));
 	if (changed.length > 0) {
 		return { action: "dispute", readings: answersOf(fresh, seats, w), why: `an update: a vote changed, at seat ${changed.join(" and ")}` };
 	}
 	return { action: "wait", readings: votes, why: "disputed: no seat's vote has changed since the record" };
+}
+
+/** How many votes are a final with these points. */
+function votesFor(votes: readonly Reading[], home: number, away: number): number {
+	return votes.filter((v) => v.kind === "final" && v.home === home && v.away === away).length;
 }
 
 /**

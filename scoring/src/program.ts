@@ -20,8 +20,8 @@
 //                the agreement rule (rule.ts) at the run's hour, inside n or after.
 //   disputed     a record, not a lock: every open seat read on every run, and the
 //                game decided on every seat's vote (rule.ts, decideDisputed): a score the moment the
-//                votes agree, an update when a vote changes, and from the first record's day-7 clock,
-//                day 7, which asks no seat.
+//                votes agree, three or more of them that final, an update when a vote changes, and
+//                from the first record's day-7 clock, day 7, which asks no seat.
 //   an end       nothing: a scored, voided or released game takes no report.
 //
 // The run is written once, as a plan that yields one seat's reading at a time, and driven by a
@@ -34,7 +34,7 @@ import { keyFor, type Keys } from "./keys";
 import { checkBoard, type BoardCheck, type BoardRun } from "./readers/board3";
 import { hintOf } from "./readers/seat3";
 import { toReport } from "./report";
-import { OPEN_FOR, answersOf, countingFor, decide, decideDisputed, lastRecorded, silentForGame } from "./rule";
+import { OPEN_FOR, countingFor, decideDisputed, decideVerified, lastRecorded, silentForGame } from "./rule";
 import { MAX_REQUESTS, runAsync, runSync, silent } from "./run";
 import { leagueRow } from "./table";
 import type { Game, HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
@@ -158,9 +158,7 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
 	if (game.status === "verified") {
 		if (now < start) return nothing("before the start");
 		const readings = yield* readAll(game, start, k, now, (s) => notAsked(s, start, now, down, null));
-		const d = decide(readings, countingFor(down), now < start + game.n);
-		// The first record is each seat's first vote: a seat that gave no answer about the game is silent on it.
-		return d.action === "dispute" ? { ...d, readings: answersOf(readings, seats, w) } : d;
+		return decideVerified(readings, countingFor(down), now < start + game.n, seats, w);
 	}
 
 	// Disputed: a record, not a lock. Every open seat is read on every run until the votes agree, or

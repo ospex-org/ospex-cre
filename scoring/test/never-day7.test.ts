@@ -17,6 +17,25 @@
 // The break that turns this red (rule.ts, decideDay7):
 //   if (best !== null && best.count >= AGREE.day7Agree) {
 //   ->  if (best !== null && best.count >= AGREE.afterN) {
+//
+// Before day 7 the game scores the moment the votes agree (decideDisputed), and that score is held to
+// the same line: three or more votes with its final, and before day 7 none with another. The second
+// sweep below is every decision a disputed game can make, inside n, after n and on day 7, for both
+// games the table makes (393,216). Counted by hand, a score's votes, by the vote counts above:
+//   seat 3 counting   inside n: the three counting votes one final, the spare silent, not final or the
+//                     same: 125 x 11 x 2 = 2,750. After n: that, or two counting votes one final, the
+//                     third silent and the spare the same: (125 x 11 + 75 x 5) x 2 = 3,500. Day 7: the
+//                     same 3,500, and day 7's own settles that decide doesn't score: three of a final
+//                     beside a counting seat not final (3 places) or beside the other final (4), 7 x 625
+//                     x 2 = 8,750, so 12,250.
+//   seat 3 silent     the spare counts and seat 3 has no vote, so a score needs all three counting
+//                     votes one final, at every clock: 125 x 16 x 2 = 4,000 each; day 7's own rule
+//                     voids on the silent seat.
+// The breaks that turn it red (rule.ts, decideDisputed):
+//   votesFor(votes, agreed.home, agreed.away) >= AGREE.day7Agree) {
+//   ->  votesFor(votes, agreed.home, agreed.away) >= AGREE.afterN) {
+//   const agreed = decide(votes, counting, inside);
+//   ->  const agreed = decide(votes.filter((v) => counting.includes(v.seat)), counting, inside);
 
 import { describe, expect, test } from "bun:test";
 import type { ChainGame, ReportReading } from "../src/chain";
@@ -59,6 +78,53 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 		}
 		expect(wrong).toEqual([]);
 		expect({ total, settles }).toEqual({ total: 65_536, settles: 11_250 });
+	});
+
+	test("every score of a disputed game, inside n, after n and on day 7, rests on three or more votes with its final, and before day 7 on none with another", () => {
+		const pairs: [State, State][] = [];
+		for (const f of STATES) for (const r of STATES) pairs.push([f, r]);
+		const games: { name: string; counting: readonly Seat[]; down: Seat | null }[] = [
+			{ name: "seat 3 counting", counting: [1, 2, 3], down: null },
+			{ name: "seat 3 silent", counting: [1, 2, 4], down: 3 },
+		];
+		const clocks = [
+			{ name: "inside n", inside: true, day7: false },
+			{ name: "after n", inside: false, day7: false },
+			{ name: "day 7", inside: false, day7: true },
+		];
+		const scores: Record<string, number> = {};
+		const wrong: unknown[] = [];
+		let decisions = 0;
+		for (const g of games) for (const c of clocks) {
+			for (const p1 of pairs) for (const p2 of pairs) for (const p3 of pairs) for (const p4 of pairs) {
+				const ps = [p1, p2, p3, p4];
+				const fresh = SEATS4.map((s, i) => reading(s, ps[i][0]));
+				const recorded = SEATS4.map((s, i) => reportReading(s, ps[i][1]));
+				const d = decideDisputed(fresh, recorded, g.counting, c.inside, c.day7, SEATS4, g.down, W);
+				decisions++;
+				if (d.action === "void") {
+					// A void is day 7's alone, and never over three finals that agree.
+					const most = Math.max(0, ...d.readings.filter((r) => r.kind === "final").map((r) => d.readings.filter((x) => x.kind === "final" && x.home === r.home && x.away === r.away).length));
+					if (!c.day7 || most >= 3) wrong.push({ game: g.name, clock: c.name, ps, void: most });
+				}
+				if (d.action !== "score") continue;
+				const key = `${g.name}, ${c.name}`;
+				scores[key] = (scores[key] ?? 0) + 1;
+				const finals = d.readings.filter((r) => r.kind === "final");
+				const agree = finals.filter((r) => r.home === d.home && r.away === d.away).length;
+				if (agree < 3 || (!c.day7 && agree !== finals.length)) wrong.push({ game: g.name, clock: c.name, ps, agree, finals: finals.length });
+			}
+		}
+		expect(wrong.slice(0, 3)).toEqual([]);
+		expect(decisions).toBe(393_216);
+		expect(scores).toEqual({
+			"seat 3 counting, inside n": 2_750,
+			"seat 3 counting, after n": 3_500,
+			"seat 3 counting, day 7": 12_250,
+			"seat 3 silent, inside n": 4_000,
+			"seat 3 silent, after n": 4_000,
+			"seat 3 silent, day 7": 4_000,
+		});
 	});
 
 	test("the edges, by name", () => {

@@ -141,8 +141,8 @@
  {
   "id": "P1",
   "file": "scoring/src/program.ts",
-  "from": "\t\tconst d = decide(readings, countingFor(down), now < start + game.n);",
-  "to": "\t\tconst d = decide(readings, countingFor(down), now <= start + game.n);"
+  "from": "\t\treturn decideVerified(readings, countingFor(down), now < start + game.n, seats, w);",
+  "to": "\t\treturn decideVerified(readings, countingFor(down), now <= start + game.n, seats, w);"
  },
  {
   "id": "P2",
@@ -1049,8 +1049,8 @@
  {
   "id": "Dr1",
   "file": "scoring/src/rule.ts",
-  "from": "\tif (agreed.action === \"score\") return",
-  "to": "\tif (false) return"
+  "from": "\tif (agreed.action === \"score\" && votesFor(",
+  "to": "\tif (false && votesFor("
  },
  {
   "id": "Dr2",
@@ -1105,6 +1105,30 @@
   "file": "scoring/src/rule.ts",
   "from": "then.kind !== READING_KIND.final || ",
   "to": ""
+ },
+ {
+  "id": "Th1",
+  "file": "scoring/src/rule.ts",
+  "from": "votesFor(votes, agreed.home, agreed.away) >= AGREE.day7Agree) {",
+  "to": "votesFor(votes, agreed.home, agreed.away) >= AGREE.afterN) {"
+ },
+ {
+  "id": "Th2",
+  "file": "scoring/src/rule.ts",
+  "from": "votesFor(votes, agreed.home, agreed.away) >= AGREE.day7Agree) {",
+  "to": "votesFor(votes, agreed.home, agreed.away) > AGREE.day7Agree) {"
+ },
+ {
+  "id": "Th3",
+  "file": "scoring/src/rule.ts",
+  "from": "\treturn votes.filter((v) => v.kind === \"final\" && v.home === home && v.away === away).length;",
+  "to": "\treturn votes.filter((v) => v.kind === \"final\" && v.seat !== SPARE && v.home === home && v.away === away).length;"
+ },
+ {
+  "id": "Th4",
+  "file": "scoring/src/rule.ts",
+  "from": "\tconst agreed = decide(votes, counting, inside);",
+  "to": "\tconst agreed = decide(votes.filter((v) => counting.includes(v.seat)), counting, inside);"
  },
  {
   "id": "Y1",
@@ -1192,9 +1216,9 @@
  },
  {
   "id": "Vo7",
-  "file": "scoring/src/program.ts",
-  "from": "\t\treturn d.action === \"dispute\" ? { ...d, readings: answersOf(readings, seats, w) } : d;",
-  "to": "\t\treturn d;"
+  "file": "scoring/src/rule.ts",
+  "from": "\treturn d.action === \"dispute\" ? { ...d, readings: answersOf(readings, seats, w) } : d;",
+  "to": "\treturn d;"
  },
  {
   "id": "Vo8",
