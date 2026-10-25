@@ -5,9 +5,9 @@
 // its hint names the game the other way round), or the same total.
 
 import { describe, expect, test } from "bun:test";
-import { decide, decideDay7 } from "../src/rule";
+import { decide, decideDay7, votesOf } from "../src/rule";
 import type { Reading, Seat } from "../src/types";
-import { SEATS4 } from "./rule-helpers";
+import { SEATS4, W } from "./rule-helpers";
 
 const final = (seat: Seat, home: number, away: number): Reading => ({ seat, kind: "final", home, away, recorded: null, detail: "final", record: null });
 const live = (seat: Seat, home: number, away: number): Reading => ({ seat, kind: "no_final", home, away, recorded: null, detail: "in progress", record: null });
@@ -38,9 +38,9 @@ describe("two finals are the same only when both teams' points match, by team", 
 			const [h, a] = BASE;
 			// Two of each: no three agree, so the game voids.
 			const twoTwo = [final(1, h, a), final(2, h, a), final(3, other[0], other[1]), final(4, other[0], other[1])];
-			expect(decideDay7(twoTwo, [], SEATS4, null).action).toBe("void");
+			expect(decideDay7(twoTwo, SEATS4, null).action).toBe("void");
 			// Three and one: it settles on the three, at their points.
-			const d = decideDay7([final(1, h, a), final(2, h, a), final(3, h, a), final(4, other[0], other[1])], [], SEATS4, null);
+			const d = decideDay7([final(1, h, a), final(2, h, a), final(3, h, a), final(4, other[0], other[1])], SEATS4, null);
 			expect(d.action === "score" ? [d.home, d.away] : d.action).toEqual([h, a]);
 		});
 	}
@@ -56,7 +56,7 @@ describe("two finals are the same only when both teams' points match, by team", 
 			{ seat: 3, kind: 1 as const, homeScore: h, awayScore: a },
 			{ seat: 4, kind: 2 as const, homeScore: 27, awayScore: 21 },
 		];
-		expect(decideDay7(fresh, recorded, SEATS4, null).action).toBe("void");
+		expect(decideDay7(votesOf(fresh, recorded, SEATS4, null, W), SEATS4, null).action).toBe("void");
 		// Inside n, two finals and an answer without one at the same points: still waiting.
 		expect(decide([final(1, h, a), final(2, h, a), live(3, h, a), quiet(4)], [1, 2, 3], true).action).toBe("wait");
 		// After n the same is a disagreement, not a score: the third seat answered, and not with a final.
@@ -66,6 +66,6 @@ describe("two finals are the same only when both teams' points match, by team", 
 	test("the control: the same final at every seat scores, inside n and after, and on day 7", () => {
 		const [h, a] = BASE;
 		const readings = SEATS4.map((s) => final(s, h, a));
-		expect([decide(readings, [1, 2, 3], true).action, decide(readings, [1, 2, 3], false).action, decideDay7(readings, [], SEATS4, null).action]).toEqual(["score", "score", "score"]);
+		expect([decide(readings, [1, 2, 3], true).action, decide(readings, [1, 2, 3], false).action, decideDay7(readings, SEATS4, null).action]).toEqual(["score", "score", "score"]);
 	});
 });

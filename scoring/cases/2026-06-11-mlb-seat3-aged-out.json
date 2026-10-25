@@ -1,6 +1,6 @@
 {
   "case": "2026-06-11-mlb-seat3-aged-out",
-  "what": "Houston at the Los Angeles Angels, 11 Jun 2026 (01:38 UTC). The Angels won 3-2. Read on 22 Oct, seat 3's result for the game's id has aged out.",
+  "what": "Houston at the Los Angeles Angels, 11 Jun 2026 (01:38 UTC). The Angels won 3-2. Read on 22 Oct, past the five days seat 3 keeps a result: seat 3 is not asked.",
   "game": {
     "league": "mlb",
     "home": "Los Angeles Angels",
@@ -20,12 +20,11 @@
     { "seat": 1, "path": "/mlb/v1/games?dates[]=2026-06-12&per_page=100", "sha256": "2f4adc82ed98ebd67cb00784654898978eef47d832b75c94313228dba6c53efd" },
     { "seat": 2, "path": "/games?league=MLB&date=2026-06-10", "sha256": "30afd3b8a29b176470f2e90de6de0883c818d4f535d1643687e2b9ced410bbc6" },
     { "seat": 2, "path": "/games?league=MLB&date=2026-06-11", "sha256": "9d95d9665f08578b7f4945a0914af92898bb659d01f76bc4f2717c0299e77006" },
-    { "seat": 2, "path": "/games?league=MLB&date=2026-06-12", "sha256": "ced21b2f60fcc56ee4007ff42df4614cbaa3ddd07fb05d60d81c7204a62aa45c" },
-    { "seat": 3, "path": "/results/acc4e59b-999e-469b-9137-a2ed1b45aab2", "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" }
+    { "seat": 2, "path": "/games?league=MLB&date=2026-06-12", "sha256": "ced21b2f60fcc56ee4007ff42df4614cbaa3ddd07fb05d60d81c7204a62aa45c" }
   ],
   "outcome": {
     "action": "score",
     "report": { "kind": 2, "start": 0, "home": 3, "away": 2, "readings": [[1, 2, 3, 2], [2, 2, 3, 2], [3, 0, 0, 0], [4, 0, 0, 0]] }
   },
-  "logic": "As if created with seat 3's id and verified with seat 3 passing, so seats 1 to 3 count. Seat 3 answers nothing for an id this old and is silent on this run; it is not silent for the game, so the spare does not stand in. After n, seats 1 and 2 give the same final with the third silent: the score."
+  "logic": "As if created with seat 3's id and verified with seat 3 passing, so seats 1 to 3 count. The run is more than five days after the start, the window seat 3's docs give for a result (an id this old answers nothing), so seat 3 is not asked and reads silent on this run; it is not silent for the game, so the spare does not stand in, and the spare is past its own 66 hours. After n, seats 1 and 2 give the same final with the third silent: the score."
 }

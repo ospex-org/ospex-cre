@@ -75,6 +75,31 @@ describe("one run", () => {
 		expect([hinted.decision.why, t2.asked.length]).toEqual(["seat 3 has no key", 0]);
 	});
 
+	test("a seat past its window is not asked, and needs no key: the spare after 66 hours, seat 3 after five days", () => {
+		// Cleveland at Philadelphia, created with a seat 3 hint that passed: every seat counts or is asked.
+		const g = chainOf("nba final, read after the game");
+		const go = (keys: Record<number, string>, now: number) => {
+			const t = saved(undefined, LATE);
+			const o = scoreGameSync(g, keys, PAYOUT, now, t.send);
+			expect(t.misses).toEqual([]);
+			return { action: o.decision.action, why: o.decision.why, seats: [...new Set(t.asked.map((q) => locate(q)!.seat))], spare: o.decision.readings[3]?.detail };
+		};
+		const without = (seat: number) => Object.fromEntries(Object.entries(KEYS).filter(([s]) => Number(s) !== seat));
+		const spareGone = g.start! + 66 * 3600 + 1;
+		const seat3Gone = g.start! + 5 * 86_400 + 1;
+		// Inside its window the spare is asked, so it needs its key.
+		expect(go(without(4), spareGone - 1)).toMatchObject({ action: "wait", why: "seat 4 has no key", seats: [] });
+		// Past it, the run neither asks it nor needs its key.
+		expect(go(without(4), spareGone)).toMatchObject({ action: "score", seats: [1, 2, 3], spare: "past retention" });
+		expect(go(without(4), spareGone)).toEqual(go(KEYS, spareGone));
+		// Seat 3 the same, five days from the start.
+		expect(go(without(3), seat3Gone - 1)).toMatchObject({ action: "wait", why: "seat 3 has no key" });
+		expect(go(without(3), seat3Gone)).toMatchObject({ action: "score", seats: [1, 2] });
+		expect(go(without(3), seat3Gone)).toEqual(go(KEYS, seat3Gone));
+		// Seats 1 and 2 have no window of their own: asked, and their keys needed, a month after the start.
+		expect(go(without(1), g.start! + 30 * 86_400)).toMatchObject({ action: "wait", why: "seat 1 has no key" });
+	});
+
 	test("a start report this program could not have written decides nothing: one reading per seat, in seat order, seats 1 and 2 answering", () => {
 		// Cleveland at Philadelphia, read after the game, with seat 3's result derived to 99-106: a start
 		// report that let the run stand seat 3 down would score 114-106 on the spare instead of disputing.
@@ -152,6 +177,16 @@ describe("one run", () => {
 		const t2 = saved(undefined, NOW);
 		scoreGameSync({ ...g, hints: [] }, KEYS, PAYOUT, NOW, t2.send);
 		expect(t2.asked.filter((q) => locate(q)!.seat === 3)).toEqual([]);
+		// A hint the board no longer lists: seat 3's result for it is read before seat 3 stands down, and
+		// seat 3 isn't read again.
+		const gone: Derive = (s, p, b) => (s === 3 && p === "/odds/NFL?oddType=Game" ? (copy(b) as Record<string, unknown>[]).filter((r) => r.ID !== "edcfd41f-1773-4bc9-a349-aa50931a0278") : b);
+		const t3 = saved(gone, NOW);
+		const o3 = scoreGameSync(g, KEYS, PAYOUT, NOW, t3.send);
+		expect(t3.misses).toEqual([]);
+		expect(o3.decision.action).toBe("start");
+		const asked3 = t3.asked.map((q) => locate(q)!);
+		expect(asked3.filter((p) => p.seat === 3).map((p) => p.path)).toEqual(["/odds/NFL?oddType=Game", "/results/edcfd41f-1773-4bc9-a349-aa50931a0278"]);
+		expect(asked3.map((p) => p.seat).filter((s, i, all) => i === 0 || all[i - 1] !== s)).toEqual([1, 2, 3, 4, 1, 2, 4]);
 	});
 
 	test("the synchronous and asynchronous runs decide the same, on every real game, verified, unverified and disputed", async () => {

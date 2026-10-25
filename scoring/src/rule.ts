@@ -1,12 +1,13 @@
 // The agreement rule: what one run's readings add up to for a game whose start is written.
 //
 // From the spec (docs/spec-v3.md in ospex-contracts-v2 at commit fe1f465, "The scoring program" and
-// "How a game ends"), as this file reads it, with one change that text does not carry yet: the
-// dispute record is a record, not a lock (Disagree and After a record, below). Every count below is
-// a constant here, inside the fingerprint, and nothing handed in at runtime changes one. The run's
-// clock does pick which count applies, three inside n or two after, and the games set stores no
-// reading to check it against: so the clock must be the chain's time, taken by the workflow from its
-// runtime and never from a setting, and program.ts decides nothing on a clock it can't read.
+// "How a game ends"), as this file reads it, with changes that text does not carry yet: the dispute
+// record is a record, not a lock, and a disputed game is decided on every seat's vote (After a
+// record, below). Every count below is a constant here, inside the fingerprint, and nothing handed in
+// at runtime changes one. The run's clock does pick which count applies, three inside n or two after,
+// and the games set stores no reading to check it against: so the clock must be the chain's time,
+// taken by the workflow from its runtime and never from a setting, and program.ts decides nothing on
+// a clock it can't read.
 //
 //   Inside n   Every counting seat answers with a final, and the finals are the same: the same
 //              points for both teams. A silent counting seat blocks, and so does one that has not
@@ -22,23 +23,29 @@
 //   Disagree   Any two finals that differ, from any seat asked, the spare's included, inside n or
 //              after; and from start + n, finals beside answers without one, with at least two
 //              counting seats answering: neither a score nor a void. The first run that sees either
-//              posts the dispute record, with every reading.
-//   After a record   The record is not a lock (decideDisputed). From then on the game scores the
-//              moment the counting seats agree, by the same rule a game without a record scores
-//              by. Until then, a run posts an update, the same report with every reading, whenever
-//              a seat's final appears or changes against the record, and never otherwise.
+//              posts the dispute record, with every seat's answer.
+//   After a record   The record is not a lock (decideDisputed). Each seat has a vote: its most
+//              recent answer while the program still asks it, and its last answer once it stops
+//              (votesOf, ASKED_FOR). Silence leaves a vote where it was; an answer without a final
+//              after a final is a vote of no final. The game scores the moment the votes agree, by
+//              the same rule a game without a record scores by. Until then a run posts an update,
+//              the same report with every seat's answer, whenever a seat's vote changes, and never
+//              otherwise.
 //   Day 7      The deadline for a dispute that never resolves, counted from the first record; an
-//              update never moves it. See decideDay7.
+//              update never moves it. Every seat has stopped being asked by then, so day 7 reads the
+//              votes on record (decideDay7).
 //
-// The spare is asked on every run. Its final counts toward a disagreement like any other seat's.
-// Its answer without a final never blocks a score, since it does not count. For a game whose
-// counting seat is silent for the whole game, it stands in for that seat (countingFor).
+// The spare is asked on every run until its window closes. Its final counts toward a disagreement
+// like any other seat's. Its answer without a final never blocks a score, since it does not count.
+// For a game whose counting seat is silent for the whole game, it stands in for that seat
+// (countingFor).
 
 import { silent } from "./run";
 import { COUNTING, SPARE } from "./table";
 import { READING_KIND, fromReportReading, type ChainGame, type Decision, type ReportReading } from "./chain";
 import { hintOf } from "./readers/seat3";
 import type { Reading, Seat } from "./types";
+import { inWindow, type Window } from "./window";
 
 /** How many must agree. Part of the fingerprint: nothing at runtime reaches these. */
 export const AGREE = deepFreeze({
@@ -51,6 +58,19 @@ export const AGREE = deepFreeze({
 	/** ... and at least this many of them with the same final. */
 	day7Agree: 3,
 } as const);
+
+/**
+ * How long after a game's start the program asks each seat about it, in seconds: to the end of the
+ * window the seat's own docs give for a game it keeps, or null where its docs keep a game longer than
+ * any game here runs. Part of the fingerprint. Past it the seat is not asked again: its vote stands,
+ * and nothing it says later is read.
+ *   Seats 1 and 2   keep a game's record for seasons: asked until the game ends, at day 7 at the
+ *                   latest for a disputed game.
+ *   Seat 3          keeps a result five days from the game's start.
+ *   Seat 4          keeps completed games three days; asked to 66 hours, the margin its reader keeps
+ *                   for not knowing how the feed counts the three (src/readers/seat4.ts).
+ */
+export const ASKED_FOR: Readonly<Record<Seat, number | null>> = deepFreeze({ 1: null, 2: null, 3: 5 * 86_400, 4: 66 * 3_600 });
 
 /**
  * The seat that is silent for the whole game, if one is: seat 3, unless the game was created with a
@@ -109,27 +129,84 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 }
 
 /**
- * Each seat's reading on record, from every dispute report a game has (the first record, then each
- * update, in the order they landed), one per seat of `seats` in seat order: the last final it gave
- * on record; without one, its last answer on record; without that, silent. This is what day 7 falls
- * back to for a seat it can no longer ask, and what an update is measured against.
+ * Whether a reading is an answer about the game, the only kind that sets a seat's vote: a final, or
+ * the game's own record shown without a final (seat 3's result, which has no time, or a record inside
+ * the window at seats 1, 2 and 4). Silence is not an answer, and neither is a listing that doesn't
+ * give the game: the game absent from it, or its record outside the window.
  */
-export function lastRecorded(records: readonly (readonly ReportReading[])[], seats: readonly Seat[]): ReportReading[] {
+export function answers(r: Reading, w: Window): boolean {
+	if (r.kind === "final") return true;
+	if (r.kind !== "no_final" || r.record === null) return false;
+	return r.record.time === null || inWindow(r.record.time, w);
+}
+
+/**
+ * Each seat's answer on a run, one per seat of `seats` in seat order, as a dispute report carries
+ * them: a seat that gave no answer about the game is silent, with its reason.
+ */
+export function answersOf(readings: readonly Reading[], seats: readonly Seat[], w: Window): Reading[] {
 	return seats.map((seat) => {
-		const mine = records.map((rec) => rec.find((r) => r.seat === seat)).filter((r): r is ReportReading => r !== undefined);
-		const final = mine.filter((r) => r.kind === READING_KIND.final).at(-1);
-		const answer = mine.filter((r) => r.kind === READING_KIND.noFinal).at(-1);
-		return final ?? answer ?? { seat, kind: READING_KIND.silent, homeScore: 0, awayScore: 0 };
+		const r = readings.find((x) => x.seat === seat);
+		if (r === undefined) return silent(seat, "not read");
+		return answers(r, w) ? r : silent(seat, r.detail);
 	});
 }
 
 /**
- * A run for a game whose dispute record is written: a record, not a lock.
- *   * The counting seats agree, by the same rule a game without a record scores by (decide): a score.
+ * Each seat's vote on record, one per seat of `seats` in seat order: its last answer across every
+ * dispute report the game has (the first record, then each update, in the order they landed), or
+ * silent when none of them holds one. Each report carries every seat's answer on its run, a seat that
+ * gave none written silent (answersOf), so a later answer replaces an earlier one, a final taken back
+ * included, and silence never does.
+ */
+export function lastRecorded(records: readonly (readonly ReportReading[])[], seats: readonly Seat[]): ReportReading[] {
+	return seats.map((seat) => {
+		const mine = records.map((rec) => rec.find((r) => r.seat === seat)).filter((r): r is ReportReading => r !== undefined);
+		return mine.filter((r) => r.kind !== READING_KIND.silent).at(-1) ?? { seat, kind: READING_KIND.silent, homeScore: 0, awayScore: 0 };
+	});
+}
+
+/**
+ * Every seat's vote, one per seat of `seats` in seat order: its answer this run where the program
+ * still asks it and it gives one, otherwise its vote on record (`recorded`, from lastRecorded), and
+ * silent when it has neither. A seat the program has stopped asking reads silent this run, so its
+ * vote on record stands. The seat silent for the whole game (`down`) has no vote: this program never
+ * asks it, so an answer on record for it could only have come from somewhere else.
+ */
+export function votesOf(fresh: readonly Reading[], recorded: readonly ReportReading[], seats: readonly Seat[], down: Seat | null, w: Window): Reading[] {
+	return seats.map((seat) => {
+		if (seat === down) return silent(seat, "silent for the game");
+		const now = fresh.find((r) => r.seat === seat);
+		if (now !== undefined && answers(now, w)) return now;
+		const then = recorded.find((r) => r.seat === seat);
+		if (then !== undefined && then.kind !== READING_KIND.silent) return fromReportReading(then, "its vote on record");
+		return silent(seat, now?.detail ?? "not read");
+	});
+}
+
+/**
+ * Whether a seat's vote changes on this run: it gives an answer, and its vote on record is none, a
+ * final it now differs from or no longer shows, or no final where it now shows one. An answer without
+ * a final beside a vote of no final is no change, whatever points it carries: a game still on moves
+ * its points on every run.
+ */
+function voteChanges(now: Reading | undefined, then: ReportReading | undefined, w: Window): boolean {
+	if (now === undefined || !answers(now, w)) return false;
+	if (then === undefined || then.kind === READING_KIND.silent) return true;
+	if (now.kind === "final") return then.kind !== READING_KIND.final || then.homeScore !== now.home || then.awayScore !== now.away;
+	return then.kind === READING_KIND.final;
+}
+
+/**
+ * A run for a game whose dispute record is written: a record, not a lock, decided on every seat's vote
+ * (votesOf), before day 7 and on day 7 alike.
+ *   * The votes agree, by the same rule a game without a record scores by (decide): a score, whose
+ *     readings are the votes it rests on.
  *   * Otherwise, from the day-7 clock (`day7`, counted from the first record): day 7 (decideDay7).
- *   * Otherwise, before it: an update, the same dispute report with every reading, when a seat's final
- *     appears or changes against `recorded` (lastRecorded); and a wait, writing nothing, when none
- *     has. Never an update per run: only a final the record doesn't hold yet posts one.
+ *   * Otherwise, before it: an update, the same dispute report with every seat's answer this run
+ *     (answersOf), when a seat's vote changes; and a wait, writing nothing, when none does. Never an
+ *     update per run: only a vote that changes posts one, and however many change on a run, that run
+ *     posts one report.
  * A void never comes from here before day 7: the hour-24 void is for a game no feed called final.
  */
 export function decideDisputed(
@@ -140,48 +217,32 @@ export function decideDisputed(
 	day7: boolean,
 	seats: readonly Seat[],
 	down: Seat | null,
+	w: Window,
 ): Decision {
-	const agreed = decide(fresh, counting, inside);
-	if (agreed.action === "score") return { ...agreed, why: `after the dispute record, ${agreed.why}` };
-	if (day7) return decideDay7(fresh, recorded, seats, down);
-	const moved = fresh.filter((r) => {
-		if (r.kind !== "final") return false;
-		const then = recorded.find((x) => x.seat === r.seat);
-		return then === undefined || then.kind !== READING_KIND.final || then.homeScore !== r.home || then.awayScore !== r.away;
-	});
-	if (moved.length > 0) {
-		return { action: "dispute", readings: fresh, why: `an update: a final the record doesn't hold, at seat ${moved.map((r) => r.seat).join(" and ")}` };
+	const votes = votesOf(fresh, recorded, seats, down, w);
+	const agreed = decide(votes, counting, inside);
+	if (agreed.action === "score") return { ...agreed, why: `after the dispute record, every seat's vote: ${agreed.why}` };
+	if (day7) return decideDay7(votes, seats, down);
+	const changed = seats.filter((seat) => seat !== down && voteChanges(fresh.find((r) => r.seat === seat), recorded.find((r) => r.seat === seat), w));
+	if (changed.length > 0) {
+		return { action: "dispute", readings: answersOf(fresh, seats, w), why: `an update: a vote changed, at seat ${changed.join(" and ")}` };
 	}
-	return { action: "wait", readings: fresh, why: "disputed: no seat's final has appeared or changed since the record" };
+	return { action: "wait", readings: votes, why: "disputed: no seat's vote has changed since the record" };
 }
 
 /**
- * Day 7, for a game with a dispute record, once its day-7 clock has run and the counting seats still
- * don't agree. Each seat's latest reading counts: fresh if the feed answers now, otherwise the one
- * on record (`recorded`, from lastRecorded: its last recorded final, else its last recorded answer);
- * a seat with neither is silent. The game settles only when four sources are on record, none silent,
- * and at least three of them give the same final. Anything else is a void: 2-2, a silent fourth,
- * or a league with fewer than four feeds.
+ * Day 7, for a game with a dispute record, once its day-7 clock has run and the votes still don't
+ * agree. By then the program asks no seat (program.ts), so each seat's vote is the one on record. The
+ * game settles only when four sources have a vote, none silent, and at least three of them give the
+ * same final. Anything else is a void: 2-2, a silent fourth, or a league with fewer than four feeds.
  *
  * `down` is the seat silent for the whole game, if one is. It is silent here too, whatever the
  * dispute record carries for it: this program never asks that seat, so a final on record for it
  * could only have come from somewhere else. A game with such a seat has three sources at most, so
  * a dispute on it voids.
  */
-export function decideDay7(
-	fresh: readonly Reading[],
-	recorded: readonly ReportReading[],
-	seats: readonly Seat[],
-	down: Seat | null,
-): Decision {
-	const sources: Reading[] = seats.map((seat) => {
-		if (seat === down) return silent(seat, "silent for the game");
-		const now = fresh.find((r) => r.seat === seat);
-		if (now !== undefined && now.kind !== "silent") return now;
-		const then = recorded.find((r) => r.seat === seat);
-		if (then !== undefined && then.kind !== READING_KIND.silent) return fromReportReading(then, "recorded at the dispute");
-		return now ?? silent(seat, "not read");
-	});
+export function decideDay7(votes: readonly Reading[], seats: readonly Seat[], down: Seat | null): Decision {
+	const sources: Reading[] = seats.map((seat) => (seat === down ? silent(seat, "silent for the game") : (votes.find((r) => r.seat === seat) ?? silent(seat, "not read"))));
 
 	if (seats.length < AGREE.day7Sources) return { action: "void", readings: sources, why: "day 7: fewer than four feeds" };
 	if (sources.some((r) => r.kind === "silent")) return { action: "void", readings: sources, why: "day 7: a source is silent" };

@@ -208,9 +208,11 @@ function readingOf(seat: Seat, league: string, r: FeedRecord, homeKey: string): 
 	const firstIsHome = resolveFeedTeam(league, r.teams[0]) === homeKey;
 	const homeTeam = firstIsHome ? r.teams[0] : r.teams[1];
 	const awayTeam = firstIsHome ? r.teams[1] : r.teams[0];
-	if (r.state === "short") return silent(seat, r.status);
+	// The feed says final, but its count or its points can't make one: silent, and marked as the feed
+	// saying the game is over, which verification reads (types.ts, saysFinal).
+	if (r.state === "short") return { ...silent(seat, r.status), saysFinal: true };
 	if (r.state === "final") {
-		if (homeTeam.points === null || awayTeam.points === null) return silent(seat, "final without points");
+		if (homeTeam.points === null || awayTeam.points === null) return { ...silent(seat, "final without points"), saysFinal: true };
 		return { seat, kind: "final", home: homeTeam.points, away: awayTeam.points, recorded: null, detail: "final", record };
 	}
 	const recorded = r.state === "postponed" || r.state === "canceled" ? r.state : null;

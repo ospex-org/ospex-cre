@@ -54,6 +54,12 @@ export interface Reading {
 	 * for seat 3, whose results carry no time).
 	 */
 	readonly record: { readonly id: string; readonly time: number | null } | null;
+	/**
+	 * Set on a silent reading whose feed says the game is over all the same: a final without points,
+	 * or one the feed's own count shows short of a whole game. Silent, it decides nothing at scoring;
+	 * verification, which writes no start for a game already over, reads it.
+	 */
+	readonly saysFinal?: true;
 }
 
 /** One HTTP request a reader asks for. The key sits where the feed table says. */

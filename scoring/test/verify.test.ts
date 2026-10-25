@@ -252,6 +252,104 @@ describe("seat 3's hint, checked against its board", () => {
 		expect(verify(wrongHint, short).why).toBe("seat 3's board is silent: the board doesn't reach the game yet");
 	});
 
+	test("the horizon is the later of seats 1 and 2's times: a board that reaches only the earlier one waits", () => {
+		// Seat 1 lists the game at 00:10, seat 2 at 00:15. Seat 3's board, derived, holds one other game at
+		// 00:10 and not the hint's row: it may not yet have posted the 00:15 games, where seat 3 lists the game.
+		const s1At0010: Derive = (s, p, b) => {
+			if (s !== 1 || !p.startsWith("/nfl/v1/games?")) return b;
+			const c = copy(b) as { data: Record<string, any>[] };
+			for (const g of c.data) if (g.id === 1392309) g.date = "2026-10-23T00:10:00.000Z";
+			return c;
+		};
+		const boardTo = (times: string[]): Derive => (s, p, b) => {
+			if (s === 1) return s1At0010(s, p, b);
+			if (s !== 3 || p !== "/odds/NFL?oddType=Game") return b;
+			const other = (copy(b) as Record<string, unknown>[]).find((r) => r.ID !== BEARS)!;
+			return times.map((t, i) => ({ ...other, ID: `1111111${i}-1111-4111-8111-111111111111`, MatchTime: t }));
+		};
+		const short = verify(unverified("nfl not final"), boardTo(["2026-10-23T00:10:00"]));
+		expect([short.action, short.why]).toEqual(["wait", "seat 3's board is silent: the board doesn't reach the game yet"]);
+		// The control: the board reaches 00:15, the later time, and the hint not on it fails; the spare stands in.
+		const reached = verify(unverified("nfl not final"), boardTo(["2026-10-23T00:10:00", "2026-10-23T00:15:00"]));
+		expect([reached.action, reached.start, reached.seats[2]]).toEqual(["start", "2026-10-23T00:10:00Z", "3:silent for the game: hint not on the board"]);
+	});
+
+	test("a hinted row for a part of the game fails the check, in its own field or its odds'; the board's own rows bind", () => {
+		const rows: [string, (r: Record<string, unknown>) => Record<string, unknown>][] = [
+			["the row's own OddType a half", (r) => ({ ...r, OddType: "1st Half" })],
+			["an odds entry for a half", (r) => ({ ...r, Odds: (r.Odds as Record<string, unknown>[]).map((o) => ({ ...o, OddType: "FirstHalf" })) })],
+			["one odds entry of two for a period", (r) => ({ ...r, Odds: [...(r.Odds as Record<string, unknown>[]), { ...(r.Odds as Record<string, unknown>[])[0], OddType: "FirstPeriod" }] })],
+		];
+		for (const [what, change] of rows) {
+			const v = verify(unverified("nfl not final"), board("NFL", BEARS, change));
+			expect({ what, got: [v.action, v.seats[2], v.report?.readings[2]] }).toEqual({ what, got: ["start", "3:silent for the game: hint names a part of the game", [3, 0]] });
+		}
+		// The control: the row as saved (no OddType of its own, "Game" on its odds), and one that says "Game" itself.
+		for (const change of [(r: Record<string, unknown>) => r, (r: Record<string, unknown>) => ({ ...r, OddType: "Game" })]) {
+			const v = verify(unverified("nfl not final"), board("NFL", BEARS, change));
+			expect([v.action, v.report?.readings[2]]).toEqual(["start", [3, 1]]);
+		}
+	});
+
+	test("a hinted row whose teams the board hasn't named yet waits; one whose named side makes it another game fails", () => {
+		const rows: [string, string, string, string][] = [
+			["both placeholders, the time too", "TBD", "TBD", "wait"],
+			["the home side not named yet", "TBD", "New England Patriots", "wait"],
+			["the away side not named yet", "Chicago Bears", "To Be Determined", "wait"],
+			["the away side in other words", "Chicago Bears", "tba", "wait"],
+			["the game's away team named as home", "New England Patriots", "TBD", "home and away the other way round"],
+			["another team named", "Detroit Lions", "TBD", "other teams"],
+			["a name the lists don't know beside a placeholder", "Chicago Bearz", "TBD", "a team name the lists don't know"],
+		];
+		for (const [what, home, away, want] of rows) {
+			const v = verify(unverified("nfl not final"), board("NFL", BEARS, (r) => ({ ...r, HomeTeam: home, AwayTeam: away, MatchTime: "TBD" })));
+			const got = v.action === "wait" ? v.why : v.seats[2];
+			expect({ what, got }).toEqual({ what, got: want === "wait" ? "seat 3's board is silent: the hint's row names no team yet" : `3:silent for the game: ${want}` });
+		}
+		// End to end: the row named later binds, and seat 3 counts. Before, the placeholder stood it down for good.
+		const named = verify(unverified("nfl not final"));
+		expect([named.action, named.report?.readings[2]]).toEqual(["start", [3, 1]]);
+	});
+
+	test("with seat 3 counting, the spare listing the game more than an hour from the counting seats writes nothing: scoring would read it by that record", () => {
+		// New England at Chicago at 00:15 at seats 1 to 3. The spare lists, in turn: only a second game at
+		// 04:15, the next evening's game at 23:15, and the game itself at an hour and a second off.
+		const spareAt = (time: string, id = "ffebea881c1d7b2dfb85b3e590c35985"): Derive => (s, p, b) =>
+			s === 4 && p.includes("americanfootball_nfl") ? (copy(b) as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, id, commence_time: time, completed: false, scores: null } : g)) : b;
+		const WAIT = "the spare lists the game more than an hour from the counting seats";
+		for (const [what, derive] of [
+			["only the second game, at 04:15", spareAt("2026-10-23T04:15:00Z", "dh-second")],
+			["the next evening's game", spareAt("2026-10-23T23:15:00Z", "next-day")],
+			["an hour and a second after the counting seats", spareAt("2026-10-23T01:15:01Z")],
+		] as const) {
+			const v = verify(unverified("nfl not final"), derive);
+			expect({ what, got: [v.action, v.why] }).toEqual({ what, got: ["wait", WAIT] });
+		}
+		// The control: an hour exactly, and the spare's real time.
+		for (const derive of [spareAt("2026-10-23T01:15:00Z"), undefined]) {
+			const v = verify(unverified("nfl not final"), derive);
+			expect([v.action, v.start]).toEqual(["start", "2026-10-23T00:15:00Z"]);
+		}
+	});
+
+	test("with seat 3 counting, its result read again must read: silent, a part of the game, or no result, and nothing is written", () => {
+		const result = (change: (rows: Record<string, unknown>[]) => unknown): Derive => (s, p, b) => (s === 3 && p === `/results/${BEARS}` ? change(copy(b) as Record<string, unknown>[]) : b);
+		const rows: [string, Derive, string][] = [
+			["a half's row", result((rs) => rs.map((r) => ({ ...r, OddType: "FirstHalf" }))), "hint names a part of the game"],
+			["no row for the hint", result(() => []), "no result for the hint"],
+			["the row twice", result((rs) => [...rs, ...rs]), "duplicate result"],
+		];
+		for (const [what, derive, detail] of rows) {
+			const v = verify(unverified("nfl not final"), derive);
+			expect({ what, got: [v.action, v.why] }).toEqual({ what, got: ["wait", `seat 3 can't be read as scoring will: ${detail}`] });
+		}
+		const t = saved(undefined, NOW);
+		const o = scoreGameSync(unverified("nfl not final"), KEYS, PAYOUT, NOW, (q) => (q.url.includes("/results/") ? { status: 503, body: "" } : t.send(q)));
+		expect([o.decision.action, o.decision.why]).toEqual(["wait", "seat 3 can't be read as scoring will: http 503"]);
+		// The control: the result as saved, the game not yet final.
+		expect(verify(unverified("nfl not final")).action).toBe("start");
+	});
+
 	test("the two-stage case end to end: a malformed board row writes no start, and the normal start then disputes a dissenting seat 3", () => {
 		// Stage 1, at 17:30 on 22 Oct: the hinted row's id null makes the run wait, with no start report.
 		const malformed = verify(unverified("nfl not final"), board("NFL", BEARS, (r) => ({ ...r, ID: null })));
@@ -352,7 +450,7 @@ describe("seat 3's hint, checked against its board", () => {
 		};
 		// The saved board lists games to 3 Nov: a game on 20 Nov is past it; one on 1 Nov is not.
 		expect(check(at("2026-11-20T00:15:00Z"))).toEqual({ kind: "silent", why: "the board doesn't reach the game yet" });
-		expect(check(at("2026-11-01T17:00:00Z"))).toEqual({ kind: "fails", why: "hint not on the board" });
+		expect(check(at("2026-11-01T17:00:00Z"))).toEqual({ kind: "fails", why: "hint not on the board", missing: true });
 		// Without a date the board can't be held to one, so nothing is learned.
 		expect(check(undefined)).toEqual({ kind: "silent", why: "the board doesn't reach the game yet" });
 		// An empty board reaches no date.

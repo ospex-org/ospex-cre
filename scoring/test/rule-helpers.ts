@@ -9,9 +9,14 @@
 // unordered pair reads them as one final. An answer without a final carries A's points, as a game
 // still on, or a record kept from a run before, can, so a rule that counts points without checking
 // "final" reads it as agreeing with A. (rule-pairs.test.ts holds the other ways two finals differ.)
+//
+// An answer without a final shows the game's own record, as seat 3's result does (a record with no
+// time): it is an answer about the game, so it sets a seat's vote (rule.ts, answers). A feed that
+// doesn't give the game reads silent here; pick.ts's "absent" is built where a test needs it.
 
 import type { ChainGame, ReportReading } from "../src/chain";
 import type { Reading, Seat } from "../src/types";
+import type { Window } from "../src/window";
 import { CASES } from "./cases";
 
 export type State = "silent" | "none" | "A" | "B";
@@ -25,7 +30,7 @@ export const LIVE: readonly [number, number] = POINTS.A;
 
 export function reading(seat: Seat, s: State): Reading {
 	if (s === "silent") return { seat, kind: "silent", home: null, away: null, recorded: null, detail: "silent", record: null };
-	if (s === "none") return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: null };
+	if (s === "none") return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: { id: `r${seat}`, time: null } };
 	const [home, away] = POINTS[s];
 	return { seat, kind: "final", home, away, recorded: null, detail: "final", record: null };
 }
@@ -43,6 +48,9 @@ export function* everyFour(): Generator<readonly [State, State, State, State]> {
 }
 
 export const SEATS4: readonly Seat[] = [1, 2, 3, 4];
+
+/** A window for the rule's sweeps: their readings carry no time, so any window holds them. */
+export const W: Window = { from: 1, to: 2 };
 
 /** A real game from the readers' cases (test/cases.ts), as the chain would hold it once verified. */
 export function chainOf(caseName: string, over: Partial<ChainGame> = {}): ChainGame {
