@@ -208,6 +208,22 @@ describe("the spare, read again whether it counts or not", () => {
 		expect([ok.action, ok.start]).toEqual(["start", "2026-10-23T00:15:00Z"]);
 	});
 
+	test("seat 3 stood down by its board check is not read again: a final under a hint that failed is not this game's", () => {
+		// The hint's board row names other teams, so the hint fails and the spare stands in; seat 3's result
+		// for that hint is derived final. Read again, it would hold the start on another game's final.
+		const otherTeams: Derive = (s, p, b) => {
+			if (s === 3 && p === "/odds/NFL?oddType=Game") return (copy(b) as Record<string, unknown>[]).map((r) => (r.ID === BEARS ? { ...r, HomeTeam: "Detroit Lions", AwayTeam: "Green Bay Packers" } : r));
+			if (s === 3 && p === `/results/${BEARS}`) return (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, Final: true, FinalType: "Finished", HomeScore: "17", AwayScore: "10" }));
+			return b;
+		};
+		const t = saved(otherTeams, NOW);
+		const o = scoreGameSync(unverified("nfl not final"), KEYS, PAYOUT, NOW, t.send);
+		expect(t.misses).toEqual([]);
+		expect([o.decision.action, o.decision.why]).toEqual(["start", "seats 1 and 2 list the game within an hour, and the spare stands in for seat 3"]);
+		// Seat 3 is asked for its board, and not for its result.
+		expect(t.asked.map((q) => q.url).filter((u) => u.includes("/results/"))).toEqual([]);
+	});
+
 	test("seat 3 counting, the spare unhinted and with no record in the window: it can give no final there, and the start stands", () => {
 		// One game, no second: the spare's record a second early reads "outside window", which no final can come from.
 		const early: Derive = (s, p, b) =>
@@ -295,9 +311,31 @@ describe("never a finished game", () => {
 		expect([before.action, before.start]).toEqual(["start", "2026-10-23T00:15:00Z"]);
 	});
 
-	test("with seat 3 counting, the spare's final alone writes nothing, though the spare is never read again", () => {
+	test("with seat 3 counting, the spare's final alone writes nothing, even when only the read near the date can see it", () => {
+		// The spare's record final a second before the start: in the window from the start its record is
+		// out, so the read again says "outside window", and only the read near the date shows the final.
+		const lagging: Derive = (s, p, b) => {
+			if (s === 1 && p.startsWith("/nfl/v1/games?")) {
+				const c = copy(b) as { data: Record<string, any>[] };
+				for (const g of c.data) if (g.id === 1392309) Object.assign(g, { status: "4th Qtr", status_state: "in_progress" });
+				return c;
+			}
+			if (s === 2 && p.startsWith("/games?league=NFL")) {
+				const c = copy(b) as { results: Record<string, any>[] };
+				for (const g of c.results) if (g.gameId === 340175) g.status = "in progress";
+				return c;
+			}
+			if (s === 3 && p === `/results/${BEARS}`) return (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, Final: false, FinalType: "" }));
+			if (s === 4 && p.includes("americanfootball_nfl")) return (copy(b) as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, commence_time: "2026-10-23T00:14:59Z" } : g));
+			return b;
+		};
+		const early = run(unverified("nfl final, read after the game", { hints: [SEAT3] }), LATE, lagging);
+		expect([early.action, early.why, early.report]).toEqual(["wait", "seat 4 shows the game final", null]);
+	});
+
+	test("with seat 3 counting, the spare's final alone writes nothing", () => {
 		// New England at Chicago at 17:30 on 22 Oct, before it was played; the spare's record derived final.
-		// Seat 3's hint passes, so only seats 1 and 2 are read again: the spare's final is seen once.
+		// Seat 3's hint passes; the spare's final is seen near the date and again in the window.
 		const spareFinal: Derive = (s, p, b) =>
 			s === 4 && p.includes("americanfootball_nfl")
 				? (copy(b) as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, completed: true, scores: [{ name: "Chicago Bears", score: "30" }, { name: "New England Patriots", score: "24" }] } : g))

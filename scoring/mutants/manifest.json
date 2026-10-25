@@ -645,12 +645,6 @@
   "to": "if (near !== undefined && chosen.length > 2 && rivals.length === chosen.length) {"
  },
  {
-  "id": "N9",
-  "file": "scoring/src/pick.ts",
-  "from": "if (near !== undefined && chosen.length > 1 && rivals.length === chosen.length) {",
-  "to": "if (near !== undefined && chosen.length > 1 && rivals.filter((r) => !unplaced(r)).length === chosen.length) {"
- },
- {
   "id": "Rd1",
   "file": "scoring/src/readers/seat1.ts",
   "from": "return pick(SEAT, ask.game, listings, ask.near);",
@@ -1053,61 +1047,61 @@
   "to": "(isGame(r) || mayBe(r))"
  },
  {
-  "id": "D1",
+  "id": "Dr1",
   "file": "scoring/src/rule.ts",
   "from": "\tif (agreed.action === \"score\") return",
   "to": "\tif (false) return"
  },
  {
-  "id": "D2",
+  "id": "Dr2",
   "file": "scoring/src/rule.ts",
   "from": "\tif (moved.length > 0) {",
   "to": "\tif (true) {"
  },
  {
-  "id": "D3",
+  "id": "Dr3",
   "file": "scoring/src/rule.ts",
   "from": " || then.awayScore !== r.away;",
   "to": ";"
  },
  {
-  "id": "D4",
+  "id": "Dr4",
   "file": "scoring/src/rule.ts",
   "from": " || then.homeScore !== r.home || ",
   "to": " || "
  },
  {
-  "id": "D5",
+  "id": "Dr5",
   "file": "scoring/src/rule.ts",
   "from": "\tif (day7) return decideDay7(",
   "to": "\tif (false) return decideDay7("
  },
  {
-  "id": "D6",
+  "id": "Dr6",
   "file": "scoring/src/rule.ts",
   "from": "return final ?? answer ?? {",
   "to": "return answer ?? final ?? {"
  },
  {
-  "id": "D7",
+  "id": "Dr7",
   "file": "scoring/src/rule.ts",
   "from": "const final = mine.filter((r) => r.kind === READING_KIND.final).at(-1);",
   "to": "const final = mine.filter((r) => r.kind === READING_KIND.final).at(0);"
  },
  {
-  "id": "D8",
+  "id": "Dr8",
   "file": "scoring/src/rule.ts",
   "from": "return { action: \"dispute\", readings, why: \"two finals differ\" };",
   "to": "return { action: inside ? \"wait\" : \"dispute\", readings, why: \"two finals differ\" };"
  },
  {
-  "id": "D9",
+  "id": "Dr9",
   "file": "scoring/src/program.ts",
   "from": "if (record.records.length === 0 || !record.records.every((r) => inSeatOrder(r, seats))) return",
   "to": "if (false) return"
  },
  {
-  "id": "D10",
+  "id": "Dr10",
   "file": "scoring/src/rule.ts",
   "from": "then.kind !== READING_KIND.final || ",
   "to": ""

@@ -616,6 +616,33 @@ describe("finding the game near the creator's date", () => {
 		}
 	});
 
+	test("a record pairing one of the game's teams with a side the feed marks outside the league, the evening before, stops nothing near the date", () => {
+		// Seat 2's real 2 Nov answer for Memphis at Iowa State (00:00 on 3 Nov), and a copy of it at 23:30
+		// the evening before whose home side the feed gives no conference, which marks it outside the
+		// league. A marked side never resolves, so the copy is a record the lists can't place: one of the
+		// game's teams beside a team marked outside. It is inside the range verification reads, earlier
+		// than the game, and before the window from the game's start, so scoring would never weigh it:
+		// near the date it stops nothing either.
+		const iowa = { home: "Iowa State", away: "Memphis", date: at("2026-11-03T00:00:00Z") };
+		const marked: Derive = (s, p, b) => {
+			if (s !== 2 || !p.startsWith("/games?league=NCAAB&date=2026-11-02")) return b;
+			const c = copy(b) as { results: Record<string, any>[] };
+			// The game is filed under 2 Nov at seat 2; the copy goes on the page that holds it.
+			const g = c.results.find((x) => x.gameId === 341752);
+			if (g) c.results.push({ ...copy(g), gameId: 9_999_201, schedule: { ...g.schedule, date: "2026-11-02T23:30:00.000Z" }, teams: { ...g.teams, home: { ...g.teams.home, conference: undefined } } });
+			return c;
+		};
+		const t = saved(marked, MID);
+		const probe: Game = { league: "ncaab", home: iowa.home, away: iowa.away, start: iowa.date - START_BOUND, n: 2 * START_BOUND + 1, hints: [] };
+		const r = runSync(2, readerFor(2)({ game: probe, now: MID, key: KEY, near: iowa.date }), (q) => t.send(q.url.includes("2026-11-01") ? { ...q, url: q.url.replace("2026-11-01", "2026-11-04") } : q));
+		expect(t.misses).toEqual([]);
+		// The setup: the copy is in the answer, marked, inside the range and earlier than the game.
+		const asked = t.asked.map((q) => (JSON.parse(t.send(q).body) as { results: Record<string, any>[] }).results ?? []).flat();
+		const copyOf = asked.find((g) => g.gameId === 9_999_201);
+		expect([copyOf?.schedule?.date, copyOf?.teams?.home?.conference]).toEqual(["2026-11-02T23:30:00.000Z", undefined]);
+		expect([r.kind, r.record?.id ?? null]).toEqual(["no_final", "341752"]);
+	});
+
 	test("a record the lists can't place stops verification only where it would stop scoring: in the window from the start chosen", () => {
 		// The readers' only-one rule, a record whose two names the lists don't know, inside the window
 		// and earlier than a record of the two teams, is weighed at verification where scoring weighs it:
