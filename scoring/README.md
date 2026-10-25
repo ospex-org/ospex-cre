@@ -309,6 +309,31 @@ A request the saved answers don't hold is listed, and that seat reads silent.
 
 Rebuilding the workflow id from source is in [`../BUILD.md`](../BUILD.md).
 
+## Every report it can send
+
+[`shapes/emitted.json`](shapes/emitted.json) lists every report shape the program can send, each
+once, for the games set's own tests to run through its report door. Each entry is the report's kind
+and points and its four readings, each as `[seat, kind, home, away]`, with the clock it was decided
+at (verification, inside the window, after the window, hour 24 or day 7), the status of the game it
+meets, the decision and the program's own reason.
+
+[`shapes.ts`](shapes.ts) builds it from the program's own decisions:
+* verification, on what the readers can return near the creator's date;
+* a game with no record, inside the window and after it;
+* and, from every first record those runs post, every run after it, through day 7, each update
+  written to the record the next run reads.
+
+So every record a run reads there is one the program wrote. The values are the sweep's: two
+finals, 27-20 and 20-27, and an answer without a final at 27-20. A report with three or four
+different finals, which only a dispute record, an update or a day-7 void can carry, is not listed.
+
+```bash
+bun shapes.ts           # rebuild it after any change to what the program decides
+bun shapes.ts --check   # exit 1 if it is stale; the suite fails too (test/shapes.test.ts)
+bun shapes.ts --sweep   # and the sweep of a disputed game, every fresh state beside every record a
+                        # seat could hold: 393,216 decisions, some on records no run writes
+```
+
 ## Fixtures
 
 `fixtures/` holds the feeds' answers exactly as they came back, one file per request, and
