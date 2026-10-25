@@ -197,6 +197,16 @@ describe("after the record: a score the moment the counting seats agree, an upda
 		expect(why(["none", "B", "none", "none"])).toBe(NOTHING);
 		// Measured against the last final each seat gave on record, across every update.
 		expect(why(["A", "A", "none", "none"], [["A", "B", "none", "none"], ["A", "A", "none", "none"]])).toBe("wait: disputed: no seat's final has appeared or changed since the record");
+		// One team's points alone moving is a change: seat 2 on record at 27-20, now 27-21 or 28-20.
+		const recorded = lastRecorded([record(["A", "A", "none", "none"])], SEATS4);
+		const seat2 = (home: number, away: number) => {
+			const fresh = [reading(1, "A"), { ...reading(2, "A"), home, away }, reading(3, "none"), reading(4, "none")];
+			const d = decideDisputed(fresh, recorded, [1, 2, 3], true, false, SEATS4, null);
+			return `${d.action}: ${d.why}`;
+		};
+		expect(seat2(27, 21)).toBe("dispute: an update: a final the record doesn't hold, at seat 2");
+		expect(seat2(28, 20)).toBe("dispute: an update: a final the record doesn't hold, at seat 2");
+		expect(seat2(27, 20)).toBe("wait: disputed: no seat's final has appeared or changed since the record");
 	});
 
 	test("what the record holds for each seat: its last final on record, else its last answer, else silent", () => {
