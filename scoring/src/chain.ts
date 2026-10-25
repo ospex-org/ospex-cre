@@ -60,20 +60,25 @@ export interface ChainGame {
 	readonly hints: ReadonlyArray<{ readonly seat: number; readonly id: string }>;
 	/** The game's n, seconds. */
 	readonly n: number;
-	/** The game's day-7 clock, seconds, counted from its dispute record. */
+	/** The game's day-7 clock, seconds, counted from its first dispute record. */
 	readonly day7: number;
 	readonly status: GameStatus;
 	/** The written start, unix seconds; null until verification writes it. */
 	readonly start: number | null;
 	/** The readings the start report carried; null until the start is written. */
 	readonly startReadings: readonly ReportReading[] | null;
-	/** The dispute record: when its block landed, and the readings it carried. Null if there is none. */
-	readonly dispute: { readonly at: number; readonly readings: readonly ReportReading[] } | null;
+	/**
+	 * The dispute record, or null if there is none: when its first report's block landed, and the
+	 * readings of every dispute report the game has, the first one first, then each update in the
+	 * order they landed. The day-7 clock runs from `at`, the first; an update never moves it.
+	 */
+	readonly dispute: { readonly at: number; readonly records: readonly (readonly ReportReading[])[] } | null;
 }
 
 /**
  * What a run decides. "wait" writes nothing. Every other action is one report, resting on
- * `readings`: one per seat asked, in seat order.
+ * `readings`: one per seat asked, in seat order. A "dispute" on a game already disputed is an
+ * update: the same report kind, crediting nothing.
  */
 export type Decision =
 	| { readonly action: "start"; readonly start: number; readonly readings: readonly Reading[]; readonly why: string }
@@ -88,7 +93,7 @@ export type Decision =
 	| { readonly action: "dispute"; readonly readings: readonly Reading[]; readonly why: string }
 	| { readonly action: "wait"; readonly readings: readonly Reading[]; readonly why: string };
 
-/** A reading as the program builds it, from one the chain gave back (a dispute record's). */
+/** A reading as the program builds it, from one the chain gave back (a dispute report's). */
 export function fromReportReading(r: ReportReading, detail: string): Reading {
 	const seat = r.seat as Seat;
 	if (r.kind === READING_KIND.final) {

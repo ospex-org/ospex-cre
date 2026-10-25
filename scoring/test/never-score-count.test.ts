@@ -1,7 +1,8 @@
 // Never: "A score is written on fewer than two agreeing finals, or fewer than three inside the
 // window, or while any reported final disagrees, except as day 7 provides."
 //
-// Day 7 has its own line and file (never-day7.test.ts). Here: every run before a dispute record.
+// Day 7 has its own line and file (never-day7.test.ts). Here: every run before a dispute record. A
+// game with a record scores by this same rule, on the run's own readings (dispute.test.ts).
 //
 // The sweep decides all 256 ways the four seats can read (silent, answered without a final, or one
 // of two different finals), inside n and after, with seats 1 to 3 counting and with the spare
@@ -88,7 +89,7 @@ describe("never: a score on fewer than two agreeing finals, fewer than three ins
 			[[1, 2, 3], true, ["A", "A", "silent", "A"], "wait"], // a silent counting seat blocks; the spare does not stand in for it
 			[[1, 2, 3], true, ["A", "A", "none", "A"], "wait"], // a seat still without a final, inside n: wait
 			[[1, 2, 3], true, ["A", "A", "A", "B"], "dispute"], // the spare's final disagrees
-			[[1, 2, 3], true, ["A", "B", "silent", "silent"], "wait"], // two finals differ, but not every seat has one yet (dispute.test.ts)
+			[[1, 2, 3], true, ["A", "B", "silent", "silent"], "dispute"], // two finals differ: the record at once, inside n too (dispute.test.ts)
 			// After n: two, the third silent.
 			[[1, 2, 3], false, ["A", "A", "silent", "silent"], A],
 			[[1, 2, 3], false, ["silent", "A", "A", "none"], A], // the spare's answer without a final blocks nothing

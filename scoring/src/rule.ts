@@ -1,13 +1,12 @@
 // The agreement rule: what one run's readings add up to for a game whose start is written.
 //
 // From the spec (docs/spec-v3.md in ospex-contracts-v2 at commit fe1f465, "The scoring program" and
-// "How a game ends"), as this file reads it, with one change that text does not carry yet: inside
-// n, a disagreement posts the dispute record only once every seat read shows a final (Disagree,
-// below). Every count below is a constant here, inside the fingerprint, and nothing handed in at
-// runtime changes one. The run's clock does pick which count applies, three inside n or two after,
-// and the games set stores no reading to check it against: so the clock must be the chain's time,
-// taken by the workflow from its runtime and never from a setting, and program.ts decides nothing
-// on a clock it can't read.
+// "How a game ends"), as this file reads it, with one change that text does not carry yet: the
+// dispute record is a record, not a lock (Disagree and After a record, below). Every count below is
+// a constant here, inside the fingerprint, and nothing handed in at runtime changes one. The run's
+// clock does pick which count applies, three inside n or two after, and the games set stores no
+// reading to check it against: so the clock must be the chain's time, taken by the workflow from its
+// runtime and never from a setting, and program.ts decides nothing on a clock it can't read.
 //
 //   Inside n   Every counting seat answers with a final, and the finals are the same: the same
 //              points for both teams. A silent counting seat blocks, and so does one that has not
@@ -20,15 +19,16 @@
 //              answer as a score's would: "the same proof as a score: three feeds inside the
 //              window and two after". A void is never taken inside the window, so its count is
 //              always the after-n count: at least two counting seats answer, each without a final.
-//   Disagree   Any two finals that differ, from any seat asked, the spare's included. Inside n the
-//              run waits until every seat it reads (each seat but one silent for the whole game)
-//              shows a final: the dispute record is what day 7 reads for a seat it can no longer
-//              ask, so a record posted while a feed is still catching up would freeze that feed's
-//              "no final" for the week. From start + n, two finals that differ post the record at
-//              once, and so do finals beside answers without one, with at least two counting seats
-//              answering: neither a score nor a void. The run that sees either posts the dispute
-//              record, with every reading.
-//   Day 7      See decideDay7.
+//   Disagree   Any two finals that differ, from any seat asked, the spare's included, inside n or
+//              after; and from start + n, finals beside answers without one, with at least two
+//              counting seats answering: neither a score nor a void. The first run that sees either
+//              posts the dispute record, with every reading.
+//   After a record   The record is not a lock (decideDisputed). From then on the game scores the
+//              moment the counting seats agree, by the same rule a game without a record scores
+//              by. Until then, a run posts an update, the same report with every reading, whenever
+//              a seat's final appears or changes against the record, and never otherwise.
+//   Day 7      The deadline for a dispute that never resolves, counted from the first record; an
+//              update never moves it. See decideDay7.
 //
 // The spare is asked on every run. Its final counts toward a disagreement like any other seat's.
 // Its answer without a final never blocks a score, since it does not count. For a game whose
@@ -84,14 +84,8 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 	const finals = readings.filter((r) => r.kind === "final");
 	const first = finals[0];
 
-	if (finals.some((f) => f.home !== first.home || f.away !== first.away)) {
-		// Inside n, every seat read must show a final first: the counting seats and the spare.
-		const read = [...new Set([...counting, SPARE])];
-		if (inside && read.some((s) => of(s).kind !== "final")) {
-			return { action: "wait", readings, why: "inside n: two finals differ, and a seat has no final yet" };
-		}
-		return { action: "dispute", readings, why: "two finals differ" };
-	}
+	// Two finals that differ, from any seat: the first run that sees it posts the record, inside n or after.
+	if (finals.some((f) => f.home !== first.home || f.away !== first.away)) return { action: "dispute", readings, why: "two finals differ" };
 
 	const counted = counting.map(of);
 	const finalsCounted = counted.filter((r) => r.kind === "final").length;
@@ -115,9 +109,57 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 }
 
 /**
- * Day 7, for a game with a dispute record, once its day-7 clock has run. Each seat's latest
- * reading counts: fresh if the feed answers now, otherwise the one the dispute record carried; a
- * seat with neither is silent. The game settles only when four sources are on record, none silent,
+ * Each seat's reading on record, from every dispute report a game has (the first record, then each
+ * update, in the order they landed), one per seat of `seats` in seat order: the last final it gave
+ * on record; without one, its last answer on record; without that, silent. This is what day 7 falls
+ * back to for a seat it can no longer ask, and what an update is measured against.
+ */
+export function lastRecorded(records: readonly (readonly ReportReading[])[], seats: readonly Seat[]): ReportReading[] {
+	return seats.map((seat) => {
+		const mine = records.map((rec) => rec.find((r) => r.seat === seat)).filter((r): r is ReportReading => r !== undefined);
+		const final = mine.filter((r) => r.kind === READING_KIND.final).at(-1);
+		const answer = mine.filter((r) => r.kind === READING_KIND.noFinal).at(-1);
+		return final ?? answer ?? { seat, kind: READING_KIND.silent, homeScore: 0, awayScore: 0 };
+	});
+}
+
+/**
+ * A run for a game whose dispute record is written: a record, not a lock.
+ *   * The counting seats agree, by the same rule a game without a record scores by (decide): a score.
+ *   * Otherwise, from the day-7 clock (`day7`, counted from the first record): day 7 (decideDay7).
+ *   * Otherwise, before it: an update, the same dispute report with every reading, when a seat's final
+ *     appears or changes against `recorded` (lastRecorded); and a wait, writing nothing, when none
+ *     has. Never an update per run: only a final the record doesn't hold yet posts one.
+ * A void never comes from here before day 7: the hour-24 void is for a game no feed called final.
+ */
+export function decideDisputed(
+	fresh: readonly Reading[],
+	recorded: readonly ReportReading[],
+	counting: readonly Seat[],
+	inside: boolean,
+	day7: boolean,
+	seats: readonly Seat[],
+	down: Seat | null,
+): Decision {
+	const agreed = decide(fresh, counting, inside);
+	if (agreed.action === "score") return { ...agreed, why: `after the dispute record, ${agreed.why}` };
+	if (day7) return decideDay7(fresh, recorded, seats, down);
+	const moved = fresh.filter((r) => {
+		if (r.kind !== "final") return false;
+		const then = recorded.find((x) => x.seat === r.seat);
+		return then === undefined || then.kind !== READING_KIND.final || then.homeScore !== r.home || then.awayScore !== r.away;
+	});
+	if (moved.length > 0) {
+		return { action: "dispute", readings: fresh, why: `an update: a final the record doesn't hold, at seat ${moved.map((r) => r.seat).join(" and ")}` };
+	}
+	return { action: "wait", readings: fresh, why: "disputed: no seat's final has appeared or changed since the record" };
+}
+
+/**
+ * Day 7, for a game with a dispute record, once its day-7 clock has run and the counting seats still
+ * don't agree. Each seat's latest reading counts: fresh if the feed answers now, otherwise the one
+ * on record (`recorded`, from lastRecorded: its last recorded final, else its last recorded answer);
+ * a seat with neither is silent. The game settles only when four sources are on record, none silent,
  * and at least three of them give the same final. Anything else is a void: 2-2, a silent fourth,
  * or a league with fewer than four feeds.
  *

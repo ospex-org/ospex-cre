@@ -22,7 +22,7 @@ function asked(game: ChainGame, now = NOW) {
 describe("one run", () => {
 	test("an ended game, an unoffered league, unreadable clocks, a missing start or record: nothing is asked or written", () => {
 		const g = chainOf("nba final");
-		const record = { at: g.start! + 3600, readings: [] };
+		const record = { at: g.start! + 3600, records: [g.startReadings!] };
 		const rows: [string, ChainGame, number, string][] = [
 			["scored", { ...g, status: "scored" }, NOW, "the game has ended"],
 			["voided", { ...g, status: "voided" }, NOW, "the game has ended"],
@@ -36,6 +36,9 @@ describe("one run", () => {
 			["no start report", { ...g, startReadings: null }, NOW, "no start report on chain"],
 			["disputed, no record", { ...g, status: "disputed", dispute: null }, NOW, "no dispute record on chain"],
 			["disputed, a record at zero", { ...g, status: "disputed", dispute: { ...record, at: 0 } }, NOW, "no dispute record on chain"],
+			["disputed, no reports in the record", { ...g, status: "disputed", dispute: { ...record, records: [] } }, NOW, "no dispute record on chain"],
+			["disputed, a report short a seat", { ...g, status: "disputed", dispute: { ...record, records: [g.startReadings!.slice(0, 3)] } }, NOW, "no dispute record on chain"],
+			["disputed, an update out of seat order", { ...g, status: "disputed", dispute: { ...record, records: [g.startReadings!, [...g.startReadings!].reverse()] } }, NOW, "no dispute record on chain"],
 		];
 		// The run's clock picks the count, three inside n or two after, so a clock that can't be read
 		// decides nothing: read as a number it would put a game inside its window after n.
@@ -167,7 +170,7 @@ describe("one run", () => {
 				(c) => ({
 					...c,
 					status: "disputed",
-					dispute: { at: NOW - 7 * 86_400, readings: [1, 2, 3, 4].map((seat) => ({ seat, kind: 2 as const, homeScore: 3, awayScore: 2 })) },
+					dispute: { at: NOW - 7 * 86_400, records: [[1, 2, 3, 4].map((seat) => ({ seat, kind: 2 as const, homeScore: 3, awayScore: 2 }))] },
 				}),
 				undefined,
 			],

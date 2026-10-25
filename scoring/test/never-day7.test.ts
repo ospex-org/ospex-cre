@@ -1,7 +1,7 @@
 // Never: "A disputed game settles on fewer than three agreeing recorded sources."
 //
-// Day 7 takes each seat's latest reading: fresh if the feed answers now, otherwise the one the
-// dispute record carried; a seat with neither is silent. It settles only when all four sources are
+// Day 7 takes each seat's latest reading: fresh if the feed answers now, otherwise the one on
+// record (its last recorded final, else its last recorded answer); a seat with neither is silent. It settles only when all four sources are
 // on record, none silent, and at least three give the same final. Anything else is a void: 2-2, a
 // silent fourth, or a league with fewer than four feeds.
 //
@@ -88,9 +88,17 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 	const DISPUTED_AT = at("2026-10-20T06:00:00Z");
 	const DAY7_RUN = at("2026-10-27T07:00:00Z");
 	const spareFinal = { seat: 4, kind: 2 as const, homeScore: 23, awayScore: 17 };
+	// The record is not a lock: a disputed game whose counting seats agree scores on any run, day 7's
+	// included. So in each run below seat 2 dissents fresh, at 17-23, and day 7's own rule decides.
+	const seat2Off: Derive = (s, p, b) => {
+		if (s !== 2 || !p.startsWith("/games?league=NFL")) return b;
+		const c = copy(b) as { results: Record<string, any>[] };
+		for (const g of c.results) if (g.teams?.home?.team === "San Francisco 49ers" && g.status === "final") g.scoreboard.score = { home: 17, away: 23 };
+		return c;
+	};
 
-	function day7Run(game: ReturnType<typeof chainOf>) {
-		const t = saved(undefined, DAY7_RUN);
+	function day7Run(game: ReturnType<typeof chainOf>, derive: Derive = seat2Off) {
+		const t = saved(derive, DAY7_RUN);
 		const o = scoreGameSync(game, KEYS, PAYOUT, DAY7_RUN, t.send);
 		expect(t.misses).toEqual([]);
 		return {
@@ -111,7 +119,7 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 			hints: [{ seat: 3, id: "00000000-0000-4000-8000-000000000000" }],
 			startReadings: base.startReadings!.map((r) => (r.seat === 3 ? { ...r, kind: READING_KIND.noFinal } : r)),
 			status: "disputed" as const,
-			dispute: { at: DISPUTED_AT, readings: [reportReading(1, "silent"), reportReading(2, "silent"), { seat: 3, kind: 2 as const, homeScore: 23, awayScore: 17 }, spareFinal] },
+			dispute: { at: DISPUTED_AT, records: [[reportReading(1, "silent"), reportReading(2, "silent"), { seat: 3, kind: 2 as const, homeScore: 23, awayScore: 17 }, spareFinal]] },
 		};
 		expect(day7Run(hinted)).toEqual({
 			action: "score",
@@ -120,13 +128,17 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 			scores: [23, 17],
 			sources: ["1:final/final", "2:final/final", "3:final/recorded at the dispute", "4:final/recorded at the dispute"],
 		});
-		// Before the day-7 clock has run, nothing is read and nothing is written; at its instant, day 7 runs.
-		const t = saved(undefined, DAY7_RUN);
+		// A second before the day-7 clock the game is read too: seats 1 and 2's finals aren't on record,
+		// so an update is posted. With that update on record, the same run writes nothing. At the
+		// clock's instant, counted from the first record, day 7 runs.
+		const t = saved(seat2Off, DAY7_RUN);
 		const early = scoreGameSync(hinted, KEYS, PAYOUT, DISPUTED_AT + 7 * 86_400 - 1, t.send);
-		expect({ action: early.decision.action, why: early.decision.why, asked: t.asked.length }).toEqual({ action: "wait", why: "before day 7", asked: 0 });
-		const t2 = saved(undefined, DAY7_RUN);
-		const onTime = scoreGameSync(hinted, KEYS, PAYOUT, DISPUTED_AT + 7 * 86_400, t2.send);
-		expect([onTime.decision.action, onTime.report?.kind]).toEqual(["score", 2]);
+		expect([early.decision.action, early.decision.why, early.report?.kind, t.asked.length > 0]).toEqual(["dispute", "an update: a final the record doesn't hold, at seat 1 and 2", 4, true]);
+		const updated = { ...hinted, dispute: { at: DISPUTED_AT, records: [...hinted.dispute.records, early.report!.readings] } };
+		const again = scoreGameSync(updated, KEYS, PAYOUT, DISPUTED_AT + 7 * 86_400 - 1, saved(seat2Off, DAY7_RUN).send);
+		expect([again.decision.action, again.report]).toEqual(["wait", null]);
+		const onTime = scoreGameSync(updated, KEYS, PAYOUT, DISPUTED_AT + 7 * 86_400, saved(seat2Off, DAY7_RUN).send);
+		expect([onTime.decision.action, onTime.decision.why, onTime.report?.kind]).toEqual(["score", "day 7: three sources or more, the same final", 2]);
 	});
 
 	test("end to end: a seat silent for the game is not asked on day 7, so a final it might give never counts", () => {
@@ -140,11 +152,11 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 			hints: [{ seat: 3, id }],
 			startReadings: base.startReadings!.map((r) => (r.seat === 3 ? { ...r, kind: READING_KIND.silent } : r)),
 			status: "disputed" as const,
-			dispute: { at: DISPUTED_AT, readings: [reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), spareFinal] },
+			dispute: { at: DISPUTED_AT, records: [[reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), spareFinal]] },
 		};
 		const seat3Final: Derive = (s, p, b) =>
 			s === 3 && p === `/results/${id}` ? [{ ID: id, OddType: "Game", Final: true, FinalType: "Finished", HomeScore: "23", AwayScore: "17" }] : b;
-		const t = saved(seat3Final, DAY7_RUN);
+		const t = saved((s, p, b) => seat2Off(s, p, seat3Final(s, p, b)), DAY7_RUN);
 		const o = scoreGameSync(failed, KEYS, PAYOUT, DAY7_RUN, t.send);
 		expect(t.asked.filter((q) => locate(q)?.seat === 3)).toEqual([]);
 		expect([o.decision.action, o.decision.why, o.report?.readings.map((r) => [r.seat, r.kind])]).toEqual([
@@ -174,7 +186,7 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 
 	test("end to end: the same game created without a seat 3 hint voids on day 7, as a league with three feeds does", () => {
 		const base = chainOf("nfl final");
-		const game = { ...base, status: "disputed" as const, dispute: { at: DISPUTED_AT, readings: [reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), spareFinal] } };
+		const game = { ...base, status: "disputed" as const, dispute: { at: DISPUTED_AT, records: [[reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), spareFinal]] } };
 		expect(day7Run(game)).toEqual({
 			action: "void",
 			why: "day 7: a source is silent",
@@ -222,7 +234,7 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 			hints: [{ seat: 3, id }],
 			startReadings: base.startReadings!.map((r) => (r.seat === 3 ? { ...r, kind: seat3 } : r)),
 			status: "disputed" as const,
-			dispute: { at: DISPUTED_AT, readings: record },
+			dispute: { at: DISPUTED_AT, records: [record] },
 		});
 		const go = (g: ReturnType<typeof game>) => {
 			const t = saved(seat2Dissents, DAY7_RUN);
@@ -235,19 +247,20 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 		expect(go(game(1))).toEqual(["score", "day 7: three sources or more, the same final", ["1:23-17", "2:17-23", "3:23-17", "4:23-17"]]);
 	});
 
-	test("end to end: with seat 3 silent for the game and the spare past its retention, day 7 neither writes early nor settles on three", () => {
+	test("end to end: with seat 3 silent for the game and the spare past its retention: an update before day 7, never a score on the dissent; a void at day 7, never a settle on three", () => {
 		const base = chainOf("nfl final");
-		const game = { ...base, status: "disputed" as const, dispute: { at: DISPUTED_AT, readings: [reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), spareFinal] } };
+		const game = { ...base, status: "disputed" as const, dispute: { at: DISPUTED_AT, records: [[reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), spareFinal]] } };
 		const deadline = DISPUTED_AT + game.day7;
 		const at = (now: number) => {
-			const t = saved(undefined, DAY7_RUN);
+			const t = saved(seat2Off, DAY7_RUN);
 			const o = scoreGameSync(game, KEYS, PAYOUT, now, t.send);
 			expect(t.misses).toEqual([]);
 			return { action: o.decision.action, why: o.decision.why, asked: t.asked.length, spare: o.decision.readings[3]?.detail ?? null };
 		};
 		// The spare keeps a game 66 hours: by day 7 its fresh read is past retention, and its recorded final stands in.
 		expect(deadline - base.start!).toBeGreaterThan(66 * 3600);
-		expect(at(deadline - 1)).toEqual({ action: "wait", why: "before day 7", asked: 0, spare: null });
+		const early = at(deadline - 1);
+		expect([early.action, early.why, early.asked > 0, early.spare]).toEqual(["dispute", "an update: a final the record doesn't hold, at seat 1 and 2", true, "past retention"]);
 		for (const now of [deadline, deadline + 1]) {
 			expect({ now: now - deadline, got: at(now) }).toEqual({ now: now - deadline, got: { action: "void", why: "day 7: a source is silent", asked: at(now).asked, spare: "recorded at the dispute" } });
 			expect(at(now).asked).toBeGreaterThan(0);

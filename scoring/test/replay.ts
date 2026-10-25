@@ -35,7 +35,7 @@ export interface CaseFile {
 		readonly status: ChainGame["status"];
 		readonly start: string | null;
 		readonly startReadings: readonly Pair[] | null;
-		readonly dispute?: { readonly at: string; readonly readings: readonly Quad[] } | null;
+		readonly dispute?: { readonly at: string; readonly records: readonly (readonly Quad[])[] } | null;
 	};
 	readonly run: string;
 	readonly payloads: ReadonlyArray<{ readonly seat: Seat; readonly path: string; readonly sha256: string }>;
@@ -72,7 +72,7 @@ export function chainGameOf(c: CaseFile): ChainGame {
 		status: g.status,
 		start: g.start === null ? null : at(g.start),
 		startReadings: g.startReadings === null ? null : g.startReadings.map((p) => ({ seat: p[0], kind: p[1], homeScore: 0, awayScore: 0 })),
-		dispute: g.dispute ? { at: at(g.dispute.at), readings: g.dispute.readings.map(quad) } : null,
+		dispute: g.dispute ? { at: at(g.dispute.at), records: g.dispute.records.map((r) => r.map(quad)) } : null,
 	};
 }
 

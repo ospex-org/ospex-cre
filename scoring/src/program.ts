@@ -17,7 +17,9 @@
 //                scoring's first run will read it.
 //   verified     from the start: every seat read in the game's window, and the agreement rule
 //                (rule.ts) at the run's hour, inside n or after.
-//   disputed     from the dispute record's day-7 clock: every seat read fresh, and the day-7 rule.
+//   disputed     a record, not a lock: every seat read on every run, and the game scores the
+//                moment the counting seats agree (rule.ts, decideDisputed); an update when a
+//                seat's final appears or changes; and from the first record's day-7 clock, day 7.
 //   an end       nothing: a scored, voided or released game takes no report.
 //
 // The run is written once, as a plan that yields one seat's reading at a time, and driven by a
@@ -30,7 +32,7 @@ import { keyFor, type Keys } from "./keys";
 import { checkBoard, type BoardCheck, type BoardRun } from "./readers/board3";
 import { hintOf } from "./readers/seat3";
 import { toReport } from "./report";
-import { countingFor, decide, decideDay7, silentForGame } from "./rule";
+import { countingFor, decide, decideDisputed, lastRecorded, silentForGame } from "./rule";
 import { MAX_REQUESTS, runAsync, runSync, silent } from "./run";
 import { leagueRow } from "./table";
 import type { Game, HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
@@ -84,13 +86,19 @@ function held(keys: Keys, seats: readonly Seat[]): Held | Seat {
  * count rests on it.
  */
 function startReportReadable(readings: readonly ReportReading[] | null, seats: readonly Seat[]): boolean {
-	if (readings === null || readings.length !== seats.length) return false;
+	if (readings === null || !inSeatOrder(readings, seats)) return false;
+	const answers = (seat: Seat) => readings.find((r) => r.seat === seat)?.kind !== READING_KIND.silent;
+	return answers(1) && answers(2);
+}
+
+/** One reading per seat of the table, in seat order, each of the three kinds: a report this program could have written. */
+function inSeatOrder(readings: readonly ReportReading[], seats: readonly Seat[]): boolean {
+	if (!Array.isArray(readings) || readings.length !== seats.length) return false;
 	const kinds: readonly number[] = Object.values(READING_KIND);
 	for (let i = 0; i < seats.length; i++) {
 		if (readings[i].seat !== seats[i] || !kinds.includes(readings[i].kind)) return false;
 	}
-	const answers = (seat: Seat) => readings.find((r) => r.seat === seat)?.kind !== READING_KIND.silent;
-	return answers(1) && answers(2);
+	return true;
 }
 
 function* plan(game: ChainGame, keys: Keys, now: number): Plan {
@@ -119,12 +127,13 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
 		return decide(readings, countingFor(down), now < start + game.n);
 	}
 
-	// Disputed.
+	// Disputed: a record, not a lock. Read on every run until the counting seats agree, or day 7.
 	const record = game.dispute;
 	if (record === null || !wholeSeconds(record.at)) return nothing("no dispute record on chain");
-	if (now < record.at + game.day7) return nothing("before day 7");
+	if (record.records.length === 0 || !record.records.every((r) => inSeatOrder(r, seats))) return nothing("no dispute record on chain");
 	const fresh = yield* readAll(game, start, k, now, down);
-	return decideDay7(fresh, record.readings, seats, down);
+	const recorded = lastRecorded(record.records, seats);
+	return decideDisputed(fresh, recorded, countingFor(down), now < start + game.n, now >= record.at + game.day7, seats, down);
 }
 
 /**

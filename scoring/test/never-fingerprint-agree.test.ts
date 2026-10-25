@@ -80,7 +80,7 @@ describe("never: how many must agree, or which seats count, from outside the fin
 		const disputed: ChainGame = {
 			...lakers3,
 			status: "disputed",
-			dispute: { at: NOW - 7 * 86_400, readings: [1, 2, 3, 4].map((seat) => ({ seat, kind: 2 as const, homeScore: 127, awayScore: 105 })) },
+			dispute: { at: NOW - 7 * 86_400, records: [[1, 2, 3, 4].map((seat) => ({ seat, kind: 2 as const, homeScore: 127, awayScore: 105 }))] },
 		};
 		const states: [string, ChainGame, number, string][] = [
 			["verification", verifying, NOW, "start"],
