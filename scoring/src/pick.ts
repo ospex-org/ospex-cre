@@ -103,7 +103,11 @@ export function resolveFeedTeam(league: string, team: FeedTeam): string | null {
  * window, the game is the one nearest that time (the date the creator gave), and two at the same
  * distance leave the feed silent. It takes the place of one test of "only one" above (no other
  * record of the two teams inside the window); a hint, and any other record that could be the game,
- * decide as they do without it.
+ * decide as they do without it, except a record with a team the lists don't know: one of the game's
+ * teams beside a name they don't know, and a record they can't place. Those are weighed only in the
+ * scoring window, where verification reads every seat again from the start it chose, without
+ * `near`, exactly as scoring will: the window `near` reads is a day either side of the date, and a
+ * record a day before the game says nothing about it at scoring.
  */
 export function pick(seat: Seat, game: Game, listings: readonly Listing[], near?: number): Reading {
 	const home = resolveTeam(game.league, game.home);
@@ -169,7 +173,7 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[], near?
 	const earlier = (r: FeedRecord): boolean => inside(r) && chosen.some((c) => (r.time as number) < (c.time as number));
 	// Anything that could be the game: in the window, or with no time to place it outside; and a
 	// record the lists can't place, inside the window and earlier than a record of the game.
-	const rivals = records.filter((r) => ((isGame(r) || mayBe(r)) && (r.time === null || inside(r))) || (unplaced(r) && earlier(r)));
+	const rivals = records.filter((r) => ((isGame(r) || (near === undefined && mayBe(r))) && (r.time === null || inside(r))) || (near === undefined && unplaced(r) && earlier(r)));
 
 	const hinted = [...new Set(game.hints.filter((h) => h.seat === seat).map((h) => h.id))];
 	if (hinted.length > 1) return silent(seat, "two hints");

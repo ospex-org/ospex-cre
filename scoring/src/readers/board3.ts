@@ -10,19 +10,24 @@
 // Three outcomes, kept apart because they lead to different places:
 //   listed   the hint's row names the game's teams in the game's order, with a time;
 //   fails    the board answered, every row of it readable, and the hint can't be bound to the game:
-//            not on a board that reaches the game's date, listed twice, other teams, the teams the
-//            other way round, or a team name the team lists don't know. Seat 3 is silent for the
-//            whole game, and the spare stands in;
+//            not on a board that reaches the game, listed twice, other teams, the teams the other
+//            way round, or a team name the team lists don't know. Seat 3 is silent for the whole
+//            game, and the spare stands in;
 //   silent   nothing is learned about the hint this time, and verification waits: no key, a refused
-//            or failed request, a body that is not JSON of the board's shape, a row without a
-//            readable id, a hinted row whose teams or time can't be read, or a board that doesn't
-//            reach the game's date yet.
+//            or failed request, a body that is not JSON of the board's shape, a row whose id isn't
+//            a seat 3 id, the hinted row's teams unreadable, the hinted row's time unreadable when
+//            its teams are the game's, or a board that doesn't reach the game yet.
 //
-// A row the program can't read says nothing about the hint, so it never stands seat 3 down: a
-// missing or unreadable id could be the hint's own row. A hint missing from the board fails only
-// once the board lists some game at or after the game's date: before that, the board has not
-// reached the date, and a game created early would otherwise lose seat 3. A finished game the board
-// has dropped still fails, since the board lists the games after it.
+// A row the program can't read says nothing about the hint, so it never stands seat 3 down: an id
+// that isn't in the form a hint must take (the seat 3 id pattern hintOf checks, in any case) could
+// be the hint's own row, padded or cut short. The teams are checked before the time: a row of other
+// teams fails whatever its time says, and only the game's own row waits for a time it can read.
+//
+// A hint missing from the board fails only once the board lists some game at or after `ask.near`:
+// the game's own time at seats 1 and 2 when both list it, otherwise the creator's date (program.ts).
+// Before that, the board has not reached the game, and a game created early would otherwise lose
+// seat 3. A finished game the board has dropped still fails, since the board lists the games after
+// it; and so does the league's last listed game when the creator's date falls after its time.
 //
 // An unknown team name fails the check here, where the readers would read the seat silent for the
 // run. The difference is deliberate: verification is the one moment the binding can be checked, and
@@ -53,8 +58,9 @@ function boardTime(v: unknown): number | null {
 }
 
 /**
- * Checks the hint against the board. `ask.near` is the game's date, the creator's: a hint missing
- * from a board that doesn't yet reach it waits rather than fails.
+ * Checks the hint against the board. `ask.near` is the time the board must reach for a missing hint
+ * to fail: the game's own time at seats 1 and 2, or the creator's date. Short of it, a missing hint
+ * waits rather than fails.
  */
 export function* checkBoard(ask: Ask): BoardRun {
 	const row = leagueRow(ask.game.league);
@@ -70,15 +76,16 @@ export function* checkBoard(ask: Ask): BoardRun {
 	let last: number | null = null;
 	for (const item of res.value) {
 		const r = obj(item);
-		const id = r === null ? null : str(r.ID);
-		if (r === null || id === null) return { kind: "silent", why: "unreadable record" };
-		if (id.toLowerCase() === hint.id) rows.push(r);
+		// Readable only in the form the hint takes: a seat 3 id, compared without regard to case.
+		const id = r === null || typeof r.ID !== "string" ? null : hintOf([{ seat: 3, id: r.ID }]);
+		if (r === null || id === null || "none" in id) return { kind: "silent", why: "unreadable record" };
+		if (id.id === hint.id) rows.push(r);
 		const t = boardTime(r.MatchTime);
 		if (t !== null && (last === null || t > last)) last = t;
 	}
 	if (rows.length === 0) {
 		const date = ask.near;
-		if (date === undefined || last === null || last < date) return { kind: "silent", why: "the board doesn't reach the game's date yet" };
+		if (date === undefined || last === null || last < date) return { kind: "silent", why: "the board doesn't reach the game yet" };
 		return { kind: "fails", why: "hint not on the board" };
 	}
 	if (rows.length > 1) return { kind: "fails", why: "hint listed twice on the board" };
@@ -90,12 +97,14 @@ export function* checkBoard(ask: Ask): BoardRun {
 	const hinted = rows[0];
 	const homeName = str(hinted.HomeTeam);
 	const awayName = str(hinted.AwayTeam);
-	const time = boardTime(hinted.MatchTime);
-	if (homeName === null || awayName === null || time === null) return { kind: "silent", why: "unreadable record" };
+	if (homeName === null || awayName === null) return { kind: "silent", why: "unreadable record" };
 	const boardHome = resolveTeam(league, homeName);
 	const boardAway = resolveTeam(league, awayName);
 	if (boardHome === null || boardAway === null) return { kind: "fails", why: "a team name the lists don't know" };
 	if (boardHome === away && boardAway === home) return { kind: "fails", why: "home and away the other way round" };
 	if (boardHome !== home || boardAway !== away) return { kind: "fails", why: "other teams" };
+	// The game's own row: its time must be readable for the hint to bind.
+	const time = boardTime(hinted.MatchTime);
+	if (time === null) return { kind: "silent", why: "unreadable record" };
 	return { kind: "listed", id: hint.id, time };
 }

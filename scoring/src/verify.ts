@@ -15,11 +15,20 @@
 //     the date is the game, and a hint never chooses another one here: a seat whose hint names a
 //     different record makes the run wait. At scoring, hints still choose among the records in
 //     the window (src/pick.ts).
-//   * The start is written only if scoring will read the same game. Once a start is chosen, each
-//     counting seat read by team is read again as scoring will read it: in [start, start + n), with
-//     the hints and without the date. Each must read the same record inside that window.
-//   * No start is written for a game already over. While any reading verification takes by team
-//     shows the game final, nothing is written. A game still in play gets its start, late.
+//   * A hint the feed no longer lists still names another record than the nearest. A feed that
+//     reissues the game under a new id leaves the run waiting for good, the game ends in the
+//     release, money back, and the creator re-creates it. Such a hint is never dropped here: if
+//     its record came back inside the window, the hint would choose it at scoring.
+//   * The start is written only if scoring will read the same game. Once a start is chosen, every
+//     seat is read again as scoring's first run will read it: in [start, start + n), with the hints
+//     and without the date, seat 3 by its result when it counts. Each counting seat read by team
+//     must read the record verification found, inside that window. The spare, counting or not, may
+//     read no other record inside it; and a spare with a hint must read that record, or its hint,
+//     unchecked, would choose at scoring.
+//   * No start is written for a game already over. While any reading verification takes shows the
+//     game final, by team near the date or at the re-read, seat 3's result and the spare read by
+//     its hint included, nothing is written. A game every seat shows still in play gets its start,
+//     late.
 //
 // As built:
 //
@@ -157,7 +166,7 @@ export function decideStart(g: Verifying, seen: Seen): Decision {
 
 /**
  * The seats a start counts that are read by team: seats 1 and 2, and the spare when it stands in
- * for seat 3. These are the seats confirmStart reads again.
+ * for seat 3. Each must read the game again as scoring will.
  */
 export function countingByTeam(start: Decision): readonly Seat[] {
 	const seat3 = start.readings.find((r) => r.seat === 3);
@@ -165,24 +174,45 @@ export function countingByTeam(start: Decision): readonly Seat[] {
 }
 
 /**
- * The start, once each counting seat read by team has been read again as scoring will read it
- * (`again`, in seat order, for the seats countingByTeam names): in the game's window from the start
- * chosen, with the hints and without the date. Each must read the record verification found,
- * inside that window, and not yet final. Anything else and nothing is written: a start that
- * scoring then can't read the game from would leave the game verified and never scored.
+ * The start, once every seat has been read again as scoring's first run will read it (`again`): in
+ * the game's window from the start chosen, with the hints and without the date, seat 3 by its
+ * result when it counts. Nothing is written when:
+ *   * any reading in `again` is final: the game is over (seat 3's result and the spare by its hint
+ *     included);
+ *   * a seat read by team reads a record inside the window other than the one verification found:
+ *     a counting seat, or the spare, counting or not, which would dispute the game on that
+ *     record's final;
+ *   * a counting seat read by team reads no record inside the window, or isn't in `again` at all;
+ *   * the spare has a hint and reads no record inside the window, silent included: its hint would
+ *     go unchecked and choose at scoring.
+ * A spare that doesn't count, has no hint and reads no record inside the window passes: it can give
+ * no final there. A start that scoring then can't read the game from would leave the game verified
+ * and never scored.
  */
 export function confirmStart(start: Decision, game: Game, again: readonly Reading[]): Decision {
 	if (start.action !== "start") return start;
 	const wait = (why: string): Decision => ({ action: "wait", readings: start.readings, why });
 	const w = windowOf(game);
-	for (const seat of countingByTeam(start)) {
+	for (const r of again) if (r.kind === "final") return wait(`seat ${r.seat} shows the game final`);
+	const counting = countingByTeam(start);
+	for (const seat of READ_BY_TEAM) {
 		const r = again.find((x) => x.seat === seat);
 		const was = start.readings.find((x) => x.seat === seat);
-		if (r === undefined || was === undefined) return wait(`seat ${seat} was not read again`);
-		if (r.kind === "final") return wait(`seat ${seat} shows the game final`);
-		if (r.kind === "silent") return wait(`seat ${seat} can't read the game as scoring will: ${r.detail}`);
-		const inside = r.record !== null && r.record.time !== null && inWindow(r.record.time, w);
-		if (!inside || r.record?.id !== was.record?.id) return wait(`seat ${seat} reads another record, or none, in the game's window: ${r.detail}`);
+		const counts = counting.includes(seat);
+		if (r === undefined || was === undefined) {
+			if (counts) return wait(`seat ${seat} was not read again`);
+			continue;
+		}
+		const inside = r.kind !== "silent" && r.record !== null && r.record.time !== null && inWindow(r.record.time, w);
+		if (inside) {
+			if (r.record?.id !== was.record?.id) return wait(`seat ${seat} reads another record, or none, in the game's window: ${r.detail}`);
+			continue;
+		}
+		// No record of the game inside the window: a counting seat can't be read as scoring will, and a
+		// hinted spare's hint is unchecked.
+		if (counts || game.hints.some((h) => h.seat === seat)) {
+			return wait(r.kind === "silent" ? `seat ${seat} can't read the game as scoring will: ${r.detail}` : `seat ${seat} reads another record, or none, in the game's window: ${r.detail}`);
+		}
 	}
 	return start;
 }

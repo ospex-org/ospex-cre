@@ -105,9 +105,62 @@ describe("never: how many must agree, or which seats count, from outside the fin
 		}
 	});
 
-	test("a key the feed refuses (401, 403, 429) decides nothing, and nothing more is asked; any other failure is a silent seat", () => {
+	test("a key a request can't carry as given is no key: at every state and every seat it decides nothing, before any request", () => {
+		const verifying: ChainGame = { ...chainOf("nfl not final"), status: "unverified", start: null, startReadings: null };
 		const after = lakers3.start! + lakers3.n + 60;
-		for (const status of [401, 403, 429]) {
+		const states: [string, ChainGame, number][] = [
+			["verification", verifying, NOW],
+			["inside n", lakers3, NOW],
+			["after n", lakers3, after],
+		];
+		// A space, a tab, a line break inside or at either end, a carriage return, a NUL, DEL, and characters
+		// above 0x7E: a curly apostrophe pasted from a document, an accented letter.
+		const forms = ["SEAT\nKEY", "SEATKEY\n", "\nSEATKEY", "SEAT\rKEY", " SEATKEY", "SEATKEY ", "SEAT KEY", "   ", "SEAT\tKEY", "SEAT\u0000KEY", "SEAT\u007fKEY", "SEAT’KEY", "SEATéKEY"];
+		for (const [state, game, now] of states) {
+			for (const seat of [1, 2, 3, 4] as const) {
+				for (const bad of forms) {
+					const o = run(game, { ...ALL, [seat]: bad }, now);
+					expect({ state, seat, bad, got: [o.action, o.why, o.asked] }).toEqual({ state, seat, bad, got: ["wait", `seat ${seat} has no key`, 0] });
+				}
+			}
+		}
+		// The control: the ends of the range a key may use, the characters real keys use, and a stand-in
+		// for a transport that fills the key itself.
+		for (const good of ["!", "~", "SEATKEY", "aZ09-_.~+/=", "{{.seat2}}"]) {
+			const o = run(lakers3, { ...ALL, 2: good }, NOW);
+			expect({ good, got: o.action }).toEqual({ good, got: "score" });
+		}
+	});
+
+	test("a key with a line break, through a transport built like fetch: the dispute it would have hidden is never decided on fewer seats", () => {
+		// Cleveland at Philadelphia after n, seat 2 derived to 115-106: with the right key, the run disputes.
+		// A fetch-style transport won't build a header holding a line break (Bun 1.3.14), so before the key
+		// check the seat read silent and the run scored 114-106 on seats 1 and 3.
+		expect(() => new Headers({ "x-key": "SEAT\nKEY" })).toThrow();
+		const sixers = chainOf("nba final, read after the game");
+		const seat2Off: Derive = (s, p, b) => {
+			if (s !== 2 || !p.startsWith("/games?league=NBA")) return b;
+			const c = copy(b) as { results: Record<string, any>[] };
+			for (const g of c.results) if (g.gameId === 340484) g.scoreboard.score.home = 115;
+			return c;
+		};
+		const go = (keys: Keys) => {
+			const t = saved(seat2Off, LATE);
+			const o = scoreGameSync(sixers, keys, PAYOUT, sixers.start! + sixers.n, (q) => {
+				new Headers(q.headers);
+				new URL(q.url);
+				return t.send(q);
+			});
+			expect(t.misses).toEqual([]);
+			return [o.decision.action, o.decision.why, t.asked.length > 0];
+		};
+		expect(go(ALL)).toEqual(["dispute", "two finals differ", true]);
+		expect(go({ ...ALL, 2: "SEAT\nKEY" })).toEqual(["wait", "seat 2 has no key", false]);
+	});
+
+	test("a key the feed refuses (400, 401, 402, 403, 429) decides nothing, and nothing more is asked; any other failure is a silent seat", () => {
+		const after = lakers3.start! + lakers3.n + 60;
+		for (const status of [400, 401, 402, 403, 429]) {
 			for (const seat of [1, 2, 3, 4] as const) {
 				const o = run(lakers3, ALL, after, seat, status);
 				expect({ status, seat, got: [o.action, o.why, o.report] }).toEqual({ status, seat, got: ["wait", `seat ${seat}'s key was refused: http ${status}`, null] });

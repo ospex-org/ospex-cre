@@ -94,15 +94,39 @@ describe("the date says which game", () => {
 		expect(only([FIRST[1], FIRST[1], FIRST[2]]).action).toBe("start");
 	});
 
-	test("a seat that can't be read this run isn't held to its hint: the spare silent, seat 3 counting, the start stands", () => {
-		const game = unverified("nfl not final", { date: at("2026-10-23T00:15:00Z"), hints: [SEAT3, ...FIRST.slice(0, 2), { seat: 4, id: "dh-second" }] });
-		const t = saved(dh, NOW);
-		const o = scoreGameSync(game, KEYS, PAYOUT, NOW, (q) => (q.url.includes("americanfootball_nfl") ? { status: 503, body: "" } : t.send(q)));
-		expect(t.misses).toEqual([]);
-		expect([o.decision.action, o.decision.why]).toEqual(["start", "seats 1, 2 and 3 list the game within an hour"]);
-		// The control: the spare answering, its hint naming the other game, waits.
-		const v = run(game, NOW, dh);
-		expect([v.action, v.why]).toEqual(["wait", "seat 4's hint names another record than the one nearest the date"]);
+	test("a spare with a hint is held to it even with seat 3 counting: silent, it holds the start, since its hint would choose at scoring", () => {
+		// Created at 00:15 with the first game's hints at seats 1, 2 and 3, and the spare's naming the second.
+		const spare503 = (send: (q: HttpRequest) => HttpResponse) => (q: HttpRequest): HttpResponse => (q.url.includes("americanfootball_nfl") ? { status: 503, body: "" } : send(q));
+		const go = (hints: ChainGame["hints"], silentSpare: boolean) => {
+			const t = saved(dh, NOW);
+			const o = scoreGameSync(unverified("nfl not final", { date: at("2026-10-23T00:15:00Z"), hints }), KEYS, PAYOUT, NOW, silentSpare ? spare503(t.send) : t.send);
+			expect(t.misses).toEqual([]);
+			return [o.decision.action, o.decision.why];
+		};
+		const wrong = [SEAT3, ...FIRST.slice(0, 2), { seat: 4, id: "dh-second" }];
+		const right = [SEAT3, ...FIRST];
+		// The spare silent: its hint can't be checked, so nothing is written, whichever game it names.
+		expect(go(wrong, true)).toEqual(["wait", "seat 4 can't read the game as scoring will: http 503"]);
+		expect(go(right, true)).toEqual(["wait", "seat 4 can't read the game as scoring will: http 503"]);
+		// The spare answering: held to its hint near the date, as seats 1 and 2 are.
+		expect(go(wrong, false)).toEqual(["wait", "seat 4's hint names another record than the one nearest the date"]);
+		expect(go(right, false)).toEqual(["start", "seats 1, 2 and 3 list the game within an hour"]);
+		// The control: no spare hint, the spare silent, seat 3 counting: nothing can bind the spare, and the start stands.
+		expect(go([SEAT3, ...FIRST.slice(0, 2)], true)).toEqual(["start", "seats 1, 2 and 3 list the game within an hour"]);
+	});
+
+	test("the start the old rule wrote with the spare silent then disputed the game on the second game's final", () => {
+		// What the wait above prevents, end to end: the spare's hint for the second game, the start
+		// written as if the spare were read, and the spare answering at 03:32 with the second game final.
+		const second31: Derive = (seat, path, body) => {
+			const b = dh(seat, path, body);
+			if (seat !== 4 || !path.includes("americanfootball_nfl")) return b;
+			return (b as Record<string, any>[]).map((x) => (x.id === "dh-second" ? { ...x, completed: true, scores: [{ name: "Chicago Bears", score: "31" }, { name: "New England Patriots", score: "20" }] } : x));
+		};
+		const hints = [SEAT3, ...FIRST.slice(0, 2), { seat: 4, id: "dh-second" }];
+		const started: ChainGame = { ...chainOf("nfl final, read after the game"), date: at("2026-10-23T00:15:00Z"), hints, startReadings: [1, 2, 3, 4].map((seat) => ({ seat, kind: (seat === 4 ? 0 : 1) as 0 | 1, homeScore: 0, awayScore: 0 })) };
+		const s = run(started, LATE, second31);
+		expect([s.action, s.seats]).toEqual(["dispute", ["1:30-24", "2:30-24", "3:30-24", "4:31-20"]]);
 	});
 
 	test("the contest dated 04:00 with hints for the 00:15 game, read at 03:32 once that game is final, writes nothing", () => {
@@ -166,7 +190,103 @@ describe("verify the way you'll score", () => {
 	});
 });
 
+describe("the spare, read again whether it counts or not", () => {
+	// The doubleheader again, the spare's record for the first game a second before the counting seats.
+	const spareEarly: Derive = (seat, path, body) => {
+		const b = dh(seat, path, body);
+		if (seat !== 4 || !path.includes("americanfootball_nfl")) return b;
+		return (b as Record<string, any>[]).map((x) => (x.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...x, commence_time: "2026-10-23T00:14:59Z" } : x));
+	};
+	const created = (hints: ChainGame["hints"]) => unverified("nfl not final", { date: at("2026-10-23T00:15:00Z"), hints });
+
+	test("seat 3 counting, the spare unhinted: if the spare would read the other game in the window, nothing is written", () => {
+		// In [00:15, 24:15) the spare's first-game record is a second early and out; the second game is in.
+		const v = run(created([SEAT3, ...FIRST.slice(0, 2)]), NOW, spareEarly);
+		expect([v.action, v.why, v.report]).toEqual(["wait", "seat 4 reads another record, or none, in the game's window: not completed", null]);
+		// The control: the spare's real time, the first game at 00:15, starts.
+		const ok = run(created([SEAT3, ...FIRST.slice(0, 2)]), NOW, dh);
+		expect([ok.action, ok.start]).toEqual(["start", "2026-10-23T00:15:00Z"]);
+	});
+
+	test("seat 3 counting, the spare unhinted and with no record in the window: it can give no final there, and the start stands", () => {
+		// One game, no second: the spare's record a second early reads "outside window", which no final can come from.
+		const early: Derive = (s, p, b) =>
+			s === 4 && p.includes("americanfootball_nfl") ? (copy(b) as Record<string, any>[]).map((x) => (x.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...x, commence_time: "2026-10-23T00:14:59Z" } : x)) : b;
+		const v = run(unverified("nfl not final"), NOW, early);
+		expect([v.action, v.start, v.seats[3]]).toEqual(["start", "2026-10-23T00:15:00Z", "4:not completed"]);
+		// The same with a spare hint for that record: the hint names a record outside the window, so it's unchecked, and nothing is written.
+		const hinted = run(unverified("nfl not final", { hints: [SEAT3, { seat: 4, id: "ffebea881c1d7b2dfb85b3e590c35985" }] }), NOW, early);
+		expect([hinted.action, hinted.why]).toEqual(["wait", "seat 4 reads another record, or none, in the game's window: outside window"]);
+	});
+});
+
 describe("never a finished game", () => {
+	test("the points final under status words still in play at every seat read by team: seat 3's result says final, and nothing is written", () => {
+		// New England at Chicago read at 03:32, once final, with seat 1 "in progress", seat 2 "in progress"
+		// and the spare "not completed", the points left as the final's. Seat 3's result, as saved then, is final.
+		const lagging = (alsoSeat3: boolean): Derive => (s, p, b) => {
+			if (s === 1 && p.startsWith("/nfl/v1/games?")) {
+				const c = copy(b) as { data: Record<string, any>[] };
+				for (const g of c.data) if (g.id === 1392309) Object.assign(g, { status: "4th Qtr", status_state: "in_progress" });
+				return c;
+			}
+			if (s === 2 && p.startsWith("/games?league=NFL")) {
+				const c = copy(b) as { results: Record<string, any>[] };
+				for (const g of c.results) if (g.gameId === 340175) g.status = "in progress";
+				return c;
+			}
+			if (s === 4 && p.includes("americanfootball_nfl")) return (copy(b) as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, completed: false } : g));
+			if (alsoSeat3 && s === 3 && p === `/results/${BEARS}`) return (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, Final: false, FinalType: "" }));
+			return b;
+		};
+		const game = unverified("nfl final, read after the game", { hints: [SEAT3] });
+		const over = run(game, LATE, lagging(false));
+		expect([over.action, over.why, over.report]).toEqual(["wait", "seat 3 shows the game final", null]);
+		// The control: every seat still in play, seat 3's result too. The start is written, late, as the spec takes it.
+		const inPlay = run(game, LATE, lagging(true));
+		expect([inPlay.action, inPlay.start]).toEqual(["start", "2026-10-23T00:15:00Z"]);
+	});
+
+	test("the spare final by its hint while its by-team read is ambiguous: the re-read reads it by the hint, and nothing is written", () => {
+		// The spare's answer also lists a record of the two teams with no game time, so its by-team read
+		// near the date is ambiguous; by its hint it reads the game, final.
+		const noTimeCopy = (on: boolean): Derive => (s, p, b) => {
+			if (!on || s !== 4 || !p.includes("americanfootball_nfl")) return b;
+			const c = copy(b) as Record<string, any>[];
+			c.push({ ...c.find((g) => g.id === "ffebea881c1d7b2dfb85b3e590c35985"), id: "other-record", commence_time: null, completed: false, scores: null });
+			return c;
+		};
+		const hints = [SEAT3, ...FIRST];
+		// Seats 1 to 3 still in play, so the spare by its hint is the only reading that can show the game over.
+		const lagging123 = (spareFinal: boolean, ambiguous = true): Derive => (s, p, b) => {
+			const c0 = noTimeCopy(ambiguous)(s, p, b);
+			if (s === 1 && p.startsWith("/nfl/v1/games?")) {
+				const c = copy(c0) as { data: Record<string, any>[] };
+				for (const g of c.data) if (g.id === 1392309) Object.assign(g, { status: "4th Qtr", status_state: "in_progress" });
+				return c;
+			}
+			if (s === 2 && p.startsWith("/games?league=NFL")) {
+				const c = copy(c0) as { results: Record<string, any>[] };
+				for (const g of c.results) if (g.gameId === 340175) g.status = "in progress";
+				return c;
+			}
+			if (s === 3 && p === `/results/${BEARS}`) return (copy(c0) as Record<string, unknown>[]).map((r) => ({ ...r, Final: false, FinalType: "" }));
+			if (s === 4 && !spareFinal && p.includes("americanfootball_nfl")) return (c0 as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, completed: false } : g));
+			return c0;
+		};
+		const game = unverified("nfl final, read after the game", { hints });
+		const v = run(game, LATE, lagging123(true));
+		expect([v.action, v.why, v.report, v.seats[3]]).toEqual(["wait", "seat 4 shows the game final", null, "4:ambiguous"]);
+		// Not final, and still ambiguous near the date: the spare's hint was never checked against the
+		// record nearest the date, so nothing is written either.
+		const unchecked = run(game, LATE, lagging123(false));
+		expect([unchecked.action, unchecked.why]).toEqual(["wait", "seat 4 reads another record, or none, in the game's window: not completed"]);
+		// The control: no copy without a time, so the spare's hint is checked near the date, and every reading
+		// is of a game in play. The start is written.
+		const c = run(game, LATE, lagging123(false, false));
+		expect([c.action, c.start]).toEqual(["start", "2026-10-23T00:15:00Z"]);
+	});
+
 	test("New England at Chicago, created with a date of 04:00 and read at 03:32 once final: nothing is written; read before its end, it starts", () => {
 		const created = unverified("nfl final, read after the game", { date: at("2026-10-23T04:00:00Z"), hints: [] });
 		const over = run(created, LATE);

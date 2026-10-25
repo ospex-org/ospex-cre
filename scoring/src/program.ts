@@ -5,14 +5,16 @@
 // rule, inside the fingerprint. The clock picks inside n or after, so it must be the chain's time
 // (see rule.ts); a clock that is not a whole, positive, safe number of seconds decides nothing.
 //
-// A key decides only whether the run can read at all. A seat whose key is missing decides nothing,
-// before any request is sent, and so does a seat whose feed refuses its key (an answer of 401, 403
-// or 429), the moment that answer comes back. A login problem makes the program say nothing; it
-// never makes a feed silent, so it never decides on fewer seats.
+// A key decides only whether the run can read at all. A seat whose key is missing, or isn't text a
+// request can carry as given (keys.ts), decides nothing, before any request is sent, and so does a
+// seat whose feed refuses its key (an answer of 400, 401, 402, 403 or 429), the moment that answer
+// comes back. A login problem makes the program say nothing; it never makes a feed silent, so it
+// never decides on fewer seats. A seat the run never asks needs no key: seat 3 for a game created
+// without a usable seat 3 hint, or once the start report shows it silent for the game.
 //
 //   unverified   the start's rule (verify.ts): seats 1, 2 and 4 read by team near the creator's
-//                date, seat 3's board checked against its hint, then the counting seats read
-//                again as scoring will read them.
+//                date, seat 3's board checked against its hint, then every seat read again as
+//                scoring's first run will read it.
 //   verified     from the start: every seat read in the game's window, and the agreement rule
 //                (rule.ts) at the run's hour, inside n or after.
 //   disputed     from the dispute record's day-7 clock: every seat read fresh, and the day-7 rule.
@@ -32,7 +34,7 @@ import { countingFor, decide, decideDay7, silentForGame } from "./rule";
 import { MAX_REQUESTS, runAsync, runSync, silent } from "./run";
 import { leagueRow } from "./table";
 import type { Game, HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
-import { START_BOUND, confirmStart, countingByTeam, decideStart } from "./verify";
+import { START_BOUND, confirmStart, decideStart } from "./verify";
 
 /** One step of a run: read one seat, or check seat 3's board. */
 type Job = { readonly kind: "read"; readonly seat: Seat; readonly run: ReaderRun } | { readonly kind: "board"; readonly run: BoardRun };
@@ -50,8 +52,11 @@ export interface Outcome {
 
 const ENDED = new Set(["scored", "voided", "released"]);
 
-/** The answers that say a feed refused the key: unauthorised, forbidden, and over the key's quota. */
-const REFUSED: ReadonlySet<number> = new Set([401, 403, 429]);
+/**
+ * The answers that say a feed refused the key: a malformed request (a key the feed won't parse),
+ * unauthorised, payment required (the key's plan), forbidden, and over the key's quota.
+ */
+const REFUSED: ReadonlySet<number> = new Set([400, 401, 402, 403, 429]);
 
 function nothing(why: string): Decision {
 	return { action: "wait", readings: [], why };
@@ -61,7 +66,7 @@ function wholeSeconds(v: unknown): v is number {
 	return typeof v === "number" && Number.isSafeInteger(v) && v > 0;
 }
 
-/** Each seat's key, or the first seat without one. */
+/** Each asked seat's key, or the first seat without one. */
 function held(keys: Keys, seats: readonly Seat[]): Held | Seat {
 	const out: Partial<Record<Seat, string>> = {};
 	for (const seat of seats) {
@@ -95,7 +100,9 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
 		return nothing("the game's clocks are not readable");
 	}
 	const seats = seatsFor(game.league);
-	const k = held(keys, seats);
+	// The seat this run never asks, which needs no key: its key can hide nothing, since it is never read.
+	const unasked: Seat | null = game.status === "unverified" ? ("none" in hintOf(game.hints) ? 3 : null) : silentForGame(game);
+	const k = held(keys, seats.filter((s) => s !== unasked));
 	if (typeof k === "number") return nothing(`seat ${k} has no key`);
 
 	if (game.status === "unverified") return yield* verifying(game, k, now);
@@ -142,9 +149,9 @@ function* readAll(game: ChainGame, start: number, keys: Held, now: number, down:
 /**
  * Verification. Seats 1, 2 and 4 are read by team within a day of the date, nearest it, without
  * their hints: the date names the game, and decideStart holds each seat's hint to that record.
- * Seat 3's board is checked against its hint. If that gives a start, each counting seat read by
- * team is read again as scoring will read it, and confirmStart writes the start only if each reads
- * the same record in the window.
+ * Seat 3's board is checked against its hint, the board's horizon being the game's own time at
+ * seats 1 and 2 when both list it. If that gives a start, every seat is read again as scoring's
+ * first run will read it, and confirmStart writes the start only if that read agrees.
  */
 function* verifying(game: ChainGame, keys: Held, now: number): Plan {
 	// The range the games set accepts a start in: [date - START_BOUND, date + START_BOUND], both ends in.
@@ -155,20 +162,24 @@ function* verifying(game: ChainGame, keys: Held, now: number): Plan {
 	};
 	const r1 = yield* byTeam(1);
 	const r2 = yield* byTeam(2);
+	// The time the board must reach before a hint missing from it fails: the game's own time at seats 1
+	// and 2, the earlier of the two, when both list it; otherwise the creator's date.
+	const t1 = r1.kind === "silent" ? null : (r1.record?.time ?? null);
+	const t2 = r2.kind === "silent" ? null : (r2.record?.time ?? null);
+	const horizon = t1 !== null && t2 !== null ? Math.min(t1, t2) : game.date;
 	let board: BoardCheck;
 	const hint = hintOf(game.hints);
 	if ("none" in hint) board = { kind: "fails", why: hint.none };
-	else board = (yield { kind: "board", run: checkBoard({ game: { ...range, hints: game.hints }, now, key: keys[3], near: game.date }) }) as BoardCheck;
+	else board = (yield { kind: "board", run: checkBoard({ game: { ...range, hints: game.hints }, now, key: keys[3], near: horizon }) }) as BoardCheck;
 	const r4 = yield* byTeam(4);
 	const chosen = decideStart({ date: game.date, hints: game.hints }, { 1: r1, 2: r2, 3: board, 4: r4 });
 	if (chosen.action !== "start") return chosen;
 
-	// Read as scoring will: the window from the start chosen, with the hints, without the date.
+	// Read as scoring's first run will: every seat, in the window from the start chosen, with the hints
+	// and without the date; seat 3 by its result when it counts, and not at all when it doesn't.
 	const g: Game = { league: game.league, home: game.home, away: game.away, start: chosen.start, n: game.n, hints: game.hints };
-	const again: Reading[] = [];
-	for (const seat of countingByTeam(chosen)) {
-		again.push((yield { kind: "read", seat, run: readerFor(seat)({ game: g, now, key: keys[seat] }) }) as Reading);
-	}
+	const down: Seat | null = chosen.readings.find((r) => r.seat === 3)?.kind === "silent" ? 3 : null;
+	const again = yield* readAll(game, chosen.start, keys, now, down);
 	return confirmStart(chosen, g, again);
 }
 

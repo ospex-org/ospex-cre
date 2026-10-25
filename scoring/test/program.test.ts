@@ -47,15 +47,29 @@ describe("one run", () => {
 		}
 	});
 
-	test("a seat with no key decides nothing and asks nothing, even a seat silent for the game; with every key, the run scores", () => {
+	test("a seat the run never asks needs no key; a seat it asks decides nothing without one, and asks nothing", () => {
 		const g = chainOf("nba final");
 		const after = g.start! + g.n + 60;
-		const t = saved(undefined, after);
-		// Seat 3 is silent for this game (created without its hint) and would not be asked, but its key is still required.
-		const o = scoreGameSync(g, { 1: KEY, 2: KEY, 4: KEY }, PAYOUT, after, t.send);
-		expect([o.decision.action, o.decision.why, o.report, t.asked.length]).toEqual(["wait", "seat 3 has no key", null, 0]);
+		const no3 = { 1: KEY, 2: KEY, 4: KEY };
+		// Seat 3 is silent for this game (created without its hint) and is never asked: the run scores
+		// without its key, exactly as with it.
 		const all = scoreGameSync(g, KEYS, PAYOUT, after, saved(undefined, after).send);
 		expect([all.report?.kind, all.report?.readings.map((r) => [r.seat, r.kind])]).toEqual([2, [[1, 2], [2, 2], [3, 0], [4, 2]]]);
+		const without = scoreGameSync(g, no3, PAYOUT, after, saved(undefined, after).send);
+		expect(without.report).toEqual(all.report);
+		// The same game with seat 3 counting (its hint passed): seat 3 is asked, so it needs its key.
+		const counting: ChainGame = { ...g, hints: [{ seat: 3, id: "cc394a49-c3d1-4b8c-bba2-8ebbb8326c09" }], startReadings: g.startReadings!.map((r) => (r.seat === 3 ? { ...r, kind: 1 as const } : r)) };
+		const t = saved(undefined, after);
+		const o = scoreGameSync(counting, no3, PAYOUT, after, t.send);
+		expect([o.decision.action, o.decision.why, o.report, t.asked.length]).toEqual(["wait", "seat 3 has no key", null, 0]);
+		// At verification: a game created without a usable seat 3 hint never asks seat 3; one with a hint does.
+		const unverified = (hints: ChainGame["hints"]): ChainGame => ({ ...chainOf("nfl not final"), status: "unverified", start: null, startReadings: null, hints });
+		const noHint = scoreGameSync(unverified([]), no3, PAYOUT, NOW, saved(undefined, NOW).send);
+		expect([noHint.decision.action, noHint.decision.why]).toEqual(["start", "seats 1 and 2 list the game within an hour, and the spare stands in for seat 3"]);
+		expect(noHint).toEqual(scoreGameSync(unverified([]), KEYS, PAYOUT, NOW, saved(undefined, NOW).send));
+		const t2 = saved(undefined, NOW);
+		const hinted = scoreGameSync(unverified([{ seat: 3, id: "edcfd41f-1773-4bc9-a349-aa50931a0278" }]), no3, PAYOUT, NOW, t2.send);
+		expect([hinted.decision.why, t2.asked.length]).toEqual(["seat 3 has no key", 0]);
 	});
 
 	test("a start report this program could not have written decides nothing: one reading per seat, in seat order, seats 1 and 2 answering", () => {
@@ -119,12 +133,22 @@ describe("one run", () => {
 		expect([...new Set(down.seats)]).toEqual([1, 2, 4]);
 	});
 
-	test("verification asks seats 1 and 2 by team, seat 3's board once, and the spare", () => {
+	test("verification asks seats 1 and 2 by team, seat 3's board, and the spare; then every seat again, seat 3 by its result", () => {
 		const g: ChainGame = { ...chainOf("nfl not final"), status: "unverified", start: null, startReadings: null };
-		const v = asked(g);
-		expect(v.seats.filter((s) => s === 3).length).toBe(1);
-		expect([...new Set(v.seats)]).toEqual([1, 2, 3, 4]);
-		expect(v.misses).toEqual([]);
+		const t = saved(undefined, NOW);
+		const o = scoreGameSync(g, KEYS, PAYOUT, NOW, t.send);
+		expect(o.decision.action).toBe("start");
+		expect(t.misses).toEqual([]);
+		const paths = t.asked.map((q) => locate(q)!);
+		// Seat 3 is asked twice: its board near the date, then its result for the hint as scoring reads it.
+		expect(paths.filter((p) => p.seat === 3).map((p) => p.path)).toEqual(["/odds/NFL?oddType=Game", "/results/edcfd41f-1773-4bc9-a349-aa50931a0278"]);
+		// The order of the seats asked: the read near the date, then the re-read in seat order.
+		const runs = paths.map((p) => p.seat).filter((s, i, all) => i === 0 || all[i - 1] !== s);
+		expect(runs).toEqual([1, 2, 3, 4, 1, 2, 3, 4]);
+		// Created without a seat 3 hint: seat 3 is asked for nothing at all.
+		const t2 = saved(undefined, NOW);
+		scoreGameSync({ ...g, hints: [] }, KEYS, PAYOUT, NOW, t2.send);
+		expect(t2.asked.filter((q) => locate(q)!.seat === 3)).toEqual([]);
 	});
 
 	test("the synchronous and asynchronous runs decide the same, on every real game, verified, unverified and disputed", async () => {
