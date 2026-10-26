@@ -1,11 +1,11 @@
 # scoring
 
-The v3 scoring program's readers and its feed table. For one game, it reads each of the four
-feeds and says, feed by feed, whether the feed was silent, answered without a final, or
-answered with a final and its two scores. Deciding what those readings add up to (the
-agreement rule, the hour-24 void, the dispute record and day 7) is the next piece, built on this
-one. This folder imports nothing from Chainlink, so the Chainlink workflow and the open path's
-sealed machine run the same files.
+The v3 scoring program. For one game, it reads each of the four feeds and says, feed by feed,
+whether the feed was silent, answered without a final, or answered with a final and its two
+scores. Then it decides by one fixed rule what those readings add up to: a start, a score, the
+hour-24 void, a dispute record, a day-7 result, or nothing yet. It builds the one report shape
+the games set takes. This folder imports nothing from Chainlink, so the Chainlink workflow and
+the open path's sealed machine run the same files. Its entry point is `src/program.ts`.
 
 ## The feed table
 
@@ -76,7 +76,8 @@ a game once the game is final, so the hint is the only thing that ties a result 
   found by its teams. A hinted record of the two teams outside the window leaves the seat silent
   while anything inside the window could be the game, and otherwise is dropped too. Two different
   hints for one seat leave it silent. In a doubleheader or a series, a hint is what lets a seat
-  choose between the games inside the window; verification checks only seat 3's.
+  choose between the games inside the window; verification holds each hint to the record nearest
+  the creator's date (The start, below).
 * **Seat 3, by hint.** One request: the feed's result for the game's seat 3 id. The hint rides in
   the creation event on chain, so anyone can re-run the match while the feed answers for that id:
   in the answers saved on 22 Oct, a result about four days old answered, and ids 78 to 156 days
@@ -98,20 +99,185 @@ a game once the game is final, so the hint is the only thing that ties a result 
   request (a 401 from a league the seat's plan does not cover reads `http 401`, so the reason
   travels with the reading), an answer that doesn't parse, a record with no game time, a final
   without points or short of a whole game, more than one record that could be the game, two
-  different hints, a date whose answer came back empty when the game was not found, a game older
-  than seat 4 keeps, a clock that isn't a number, and, at seat 3, no usable hint, no result for it,
+  different hints, a date whose answer came back empty when the game was not found, a closed seat
+  (below), a clock that isn't a number, and, at seat 3, no usable hint, no result for it,
   or a hint naming a row for part of the game. Silent is never turned into "no
-  final".
+  final". A final without points, or one short of a whole game, is silent and marked as the feed
+  saying the game is over: scoring never counts it, and verification writes no start on it.
+
+## Open and closed: how long each seat is asked
+
+A seat is open while the program still asks it about a game, and closed once it stops. It closes
+at the end of the window its own docs give for a game it keeps (`OPEN_FOR` in
+[`src/rule.ts`](src/rule.ts), inside the fingerprint), at a disputed game's day 7, and when the
+game is scored. A closed seat isn't asked again, its key isn't needed, and nothing it says later is
+read.
+
+| Seat | What its docs say | Open until |
+|---|---|---|
+| 1 | past seasons' games kept | the game ends (day 7 at the latest for a disputed game) |
+| 2 | seasons since 2018 served through the API | the game ends (day 7 at the latest for a disputed game) |
+| 3 | a result kept five days from the game's start | five days after the start |
+| 4 | completed games kept three days | 66 hours after the start: three days less a margin, since the docs don't say how the three are counted |
+
+The saved answers agree: seats 1 and 2 answered dates 217 days old in full, seat 3 answered
+nothing for ids 78 to 156 days old. On a disputed game's day-7 run every seat is closed, and none
+is asked.
 
 ## Requests per game
 
 One read of one game, measured over every saved case: seats 1 and 2 ask once per filing date and
 page, 2 to 4 requests (three dates for most windows; four when one date's answer runs to two
-pages); seat 3 asks once, or not at all without a hint; seat 4 asks once (two credits on its plan),
-or not at all past 66 hours. The cap is 12 requests per seat per game (`MAX_REQUESTS` in
+pages); seat 3 asks once, or not at all without a hint or past five days; seat 4 asks once (two credits on
+its plan), or not at all past 66 hours. A disputed game's day-7 run asks nothing. The cap is 12 requests per seat per game (`MAX_REQUESTS` in
 `src/run.ts`); a window of ten days or less always fits in it at one page a date, and a longer
 one can leave seats 1 and 2 silent for want of requests.
 Each game is read on its own: a slate of games costs the sum.
+
+## What the readings decide
+
+[`src/rule.ts`](src/rule.ts) holds the agreement rule, and every count in it is a constant
+inside the fingerprint. For a game whose start is written:
+
+* **Inside n**, every counting seat answers with a final, and the finals are the same: the same
+  points for both teams. A silent counting seat blocks. So does one that hasn't answered with a
+  final yet: the run waits.
+* **After n**, two counting seats with the same final are enough when the third is silent. A seat
+  that answered without a final isn't silent, so that is a disagreement, not a score.
+* **The hour-24 void** comes only from start + n, and only when no seat that answers shows a final.
+  At least two counting seats must answer, the after-n count, since a void is never taken inside
+  the window.
+* **A disagreement** is either of two things. Any two finals that differ, from any seat. Or, after
+  n, finals beside answers without one. The first run that sees it posts the dispute record, with
+  every seat's answer, inside n or after.
+* **After the record** the game is not locked, and it is decided on every seat's vote. A seat's
+  vote is its most recent answer while it is open, and its last answer once it is closed (above). An answer is a final, or the game's own record shown without one; silence, a
+  listing without the game, or the game outside the window leaves a vote where it was, and a
+  game shown without a final after a final is a vote of no final.
+  * The game scores the moment the votes agree, by the same rule as above, and only on three or
+    more votes with that final: a disputed game never settles on fewer than three agreeing
+    recorded sources. Two counting seats with the final and the third silent wait for a third,
+    the spare's vote included, or for day 7. The score carries the votes it rests on. A 2-2 on the
+    record stays a 2-2 until a seat changes its vote.
+  * Until then a run posts an update, the same report with every seat's answer, whenever a seat's
+    vote changes, and writes nothing otherwise: never per run, and one report however many votes
+    change on it. An update credits nothing.
+* **Day 7**, counted from the first record, is the deadline for a dispute that never resolves; an
+  update never moves it. By then every seat is closed, so day 7 reads every seat's vote on record
+  and asks nothing. A seat silent for the whole game is silent here too, whatever
+  the record carries for it. The game settles only when four sources have a vote, none silent, and
+  at least three give the same final. Anything else voids.
+* **A game without a record** is decided on the run's own readings: nothing earlier is on chain.
+* **The spare** (seat 4) is asked on every run while it is open.
+  * Its final counts toward a disagreement like any other seat's.
+  * Its answer without a final never blocks a score.
+  * It **stands in for seat 3 for a game whose seat 3 is silent for the whole game**: a game
+    created without a usable seat 3 hint, or one whose start report doesn't show seat 3 passed its
+    board check. Then seats 1, 2 and 4 count, inside n and after.
+  * A seat silent on one run is just silent on that run; the spare does not stand in for it.
+
+## The start
+
+[`src/verify.ts`](src/verify.ts) is the start's rule, written once at verification.
+
+* **The date says which game.** Seats 1, 2 and 4 are read by team without their hints, a day
+  either side of the creator's date, and among records of the two teams the one nearest the date is
+  the game. A seat whose hint names a different record makes the run wait. (At scoring, hints still
+  choose among the records in the window.)
+  * A record with a team the lists don't know, one of the game's teams beside a name they don't
+    know or a record they can't place, is weighed only where scoring weighs it: in the window from
+    the start chosen, when every seat is read again (below). A day before the game it stops nothing.
+  * A hint the feed no longer lists, when it reissues the game under a new id, still names another
+    record: the run waits, the game ends in the release, and the creator re-creates it. The hint is
+    never dropped, since if its record came back inside the window, it would choose it at scoring.
+* **Seats 1 and 2** must each list the game by team, within a day of the creator's date either way:
+  the games set's `START_BOUND`, a fixed 24 hours whatever the game's n, and the only range it
+  accepts a start in.
+* **The times.** Their two times must lie within an hour of each other (`START_SPREAD`).
+* **Seat 3's check.** Seat 3's hint is checked against its board
+  ([`src/readers/board3.ts`](src/readers/board3.ts)): the same two teams, the game's home and
+  away, at a time within the hour.
+  * A hint that fails makes seat 3 silent for the game, never wrong, and the spare must then list
+    the game within the hour. A hinted row for a part of the game (a half, a period) fails.
+  * A board that can't be read this time makes the run wait. So does a row of it the program can't
+    read: an id that isn't a seat 3 id as a hint must be one (padded, cut short or a number all
+    wait), the hint's row without readable teams, or the game's own row without a readable time. A
+    row of other teams fails whatever its time says. A side the board names only by a placeholder
+    ("TBD") isn't named yet: the row waits, unless the side it does name makes it another game.
+  * A hint not on the board fails only once the board lists some game at or after the game's own
+    time at seats 1 and 2, the later of the two (the creator's date when they don't both list it).
+    Short of that, the run waits. The board drops a finished game, so before such a hint stands
+    seat 3 down, seat 3's result for it is read: a final there writes nothing, and a read that
+    fails waits.
+  * With seat 3 counting, the spare, when it lists the game, must list it within the hour of the
+    counting seats: scoring reads the spare by that record, and one further off is another game.
+* **The start written** is the earliest of the counting seats' scheduled times. The spare's time
+  never sets it.
+* **Verify the way you'll score.** Before the start is written, every seat is read again as
+  scoring's first run will read it: in [start, start + n), with the hints, without the date, seat 3
+  by its result when it counts. Each counting seat read by team (seats 1 and 2, and the spare when
+  it stands in) must read the record verification found, inside that window, and seat 3, when it
+  counts, must read by its result. The spare, counting or not, may read no other record there, and
+  a spare with a hint must read that record: its hint, unchecked, would choose at scoring. A hinted
+  spare that doesn't count and whose record is within the hour of the start, a second before the
+  window included, is the game. An unhinted spare that doesn't count and is silent at the re-read
+  passes: nothing binds it, and the most it can cost is a dispute.
+* **Never a finished game.** While any reading verification takes shows the game final, near the
+  date or at the re-read, seat 3's result and the spare read by its hint included, nothing is
+  written; and the same for a feed that says the game is finished without points, or with a count
+  short of a whole game. A game every seat shows still in play gets its start, late.
+* **Otherwise** nothing is written, and a later run tries again.
+
+## One run
+
+[`src/program.ts`](src/program.ts) takes the game as the chain holds it, the run's clock, a
+transport, each seat's key and the payout address.
+
+* **By status.** An unverified game goes through verification. A verified game is read in its
+  window and decided by the rule at the run's hour. A disputed game is read the same way on every
+  run, and scores, posts an update, or reaches day 7 (above). A game that has ended takes nothing.
+* **What it returns:** its decision and the report ([`src/report.ts`](src/report.ts), the games
+  set's `Report`, enum numbers included). A wait returns no report.
+* **What a key and the payout can do.** A key decides only whether the run can read at all. A
+  seat whose key is missing, or isn't text a request carries as given (visible ASCII, no space; and
+  for seat 4, whose key goes in the query, one query value as given: letters, digits and
+  `-_.!~*'()`), decides nothing, before any request is sent, and so does a seat whose feed refuses
+  the key (400, 401, 402, 403 or 429). It is never read as a silent seat, which would let a key
+  choose between a score, a dispute and a void. A seat the run never asks needs no key: seat 3 when
+  it is silent for the game, a closed seat, and every seat on a disputed game's day-7 run. The payout lands in the report's payout field and nowhere else, and is refused
+  where the games set would refuse it: address 0, the reserved range up to 0xffff, the games set's
+  own address, its coin's, and any address ever approved as a reporter (read from the chain).
+* **The start report.** A verified game decides nothing unless its start report holds one reading
+  per seat, in seat order, with seats 1 and 2 answering: which seats count rests on it.
+
+## Known shapes
+
+Shapes the program reads in a way that is accepted, kept here so they are not rediscovered:
+
+* **The same two teams twice near the date.** When a feed lists the game at the creator's date in
+  a way the lists can't place, and the same two teams again hours later as the lists spell them,
+  verification reads the later listing as the game and writes its time; the games set takes it,
+  since it is within a day of the date. Hints tell the two apart, and are what a creator gives in
+  the one sport where two teams meet twice in a day.
+
+## The cases record
+
+`cases/` holds odd games, one JSON file each, by seat. Each file has:
+
+* the game as the chain holds it;
+* the run's clock;
+* the exact payloads the run rests on: seat, path and SHA-256 of a saved answer under `fixtures/`;
+* the outcome, and why.
+
+`test/cases-record.test.ts` replays every case with those payloads and nothing else. A case
+fails when:
+
+* a payload's bytes change;
+* the run asks for something the case doesn't list, or stops asking for something it does;
+* the outcome differs.
+
+The public cases record lives in ospex-artifacts. To pin a new odd game, save its payloads under
+`fixtures/` and add a case here.
 
 ## Running
 
@@ -129,9 +295,44 @@ bun run replay --case "mlb doubleheader, game 1"       # one case, at its own cl
 bun run replay --game game.json --at 2026-10-23T03:32:00Z
 ```
 
+Verification on the saved answers of college basketball's opening night, 2 to 4 Nov (every
+Division I game seat 2 lists, each created at its own time with no hints):
+
+```bash
+bun opening-night.ts            # the counts
+bun opening-night.ts --ledger   # and every game, with what verification decides
+```
+
 A game file holds what the chain holds for a game: `league`, `home`, `away`, `start` (an ISO time
 with its zone, or unix seconds), `n` in seconds, and `hints` (`[{ "seat": 3, "id": "..." }]`).
 A request the saved answers don't hold is listed, and that seat reads silent.
+
+Rebuilding the workflow id from source is in [`../BUILD.md`](../BUILD.md).
+
+## Every report it can send
+
+[`shapes/emitted.json`](shapes/emitted.json) lists every report shape the program can send, each
+once, for the games set's own tests to run through its report door. Each entry is the report's kind
+and points and its four readings, each as `[seat, kind, home, away]`, with the clock it was decided
+at (verification, inside the window, after the window, hour 24 or day 7), the status of the game it
+meets, the decision and the program's own reason.
+
+[`shapes.ts`](shapes.ts) builds it from the program's own decisions:
+* verification, on what the readers can return near the creator's date;
+* a game with no record, inside the window and after it;
+* and, from every first record those runs post, every run after it, through day 7, each update
+  written to the record the next run reads.
+
+So every record a run reads there is one the program wrote. The values are the sweep's: two
+finals, 27-20 and 20-27, and an answer without a final at 27-20. A report with three or four
+different finals, which only a dispute record, an update or a day-7 void can carry, is not listed.
+
+```bash
+bun shapes.ts           # rebuild it after any change to what the program decides
+bun shapes.ts --check   # exit 1 if it is stale; the suite fails too (test/shapes.test.ts)
+bun shapes.ts --sweep   # and the sweep of a disputed game, every fresh state beside every record a
+                        # seat could hold: 393,216 decisions, some on records no run writes
+```
 
 ## Fixtures
 

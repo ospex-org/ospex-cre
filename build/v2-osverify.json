@@ -1,0 +1,19 @@
+{
+  "name": "osverify",
+  "what": "v2's live workflow, registered 2026-06-28 under the Ethereum timelock; rebuilt here to show the build reproduces from public source",
+  "workflow": "oracle",
+  "target": "production-settings",
+  "owner": "0x40047BAFcdEd16C938058b7b67186299a2893561",
+  "configTemplate": "oracle/config.production.example.json",
+  "config": {
+    "receiverAddress": "0x06e3470012039797119Ae30e1236169304F9220C",
+    "eventAddress": "0x06e3470012039797119Ae30e1236169304F9220C",
+    "secretOwner": "0x40047BAFcdEd16C938058b7b67186299a2893561"
+  },
+  "tools": { "cre": "v1.22.0", "bun": "1.3.14" },
+  "expect": {
+    "config": "9a7ab7e33948b572aa6dd0c9762f444573cadd564addb804f594536b57d4724b",
+    "binary": "5929b9c675ae03ec67e6a5b4adba8ff2be5164e41e7dcdbe7b670954638da755",
+    "id": "0x0097efdade80ff0a9557d927a1c07075a453bba9cd0fae7e22519c613ec47805"
+  }
+}

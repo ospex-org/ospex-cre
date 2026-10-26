@@ -96,8 +96,20 @@ export function resolveFeedTeam(league: string, team: FeedTeam): string | null {
 	return found;
 }
 
-/** Picks the game out of a feed's answers and reads it. Seats 1, 2 and 4; seat 3 is read by hint. */
-export function pick(seat: Seat, game: Game, listings: readonly Listing[]): Reading {
+/**
+ * Picks the game out of a feed's answers and reads it. Seats 1, 2 and 4; seat 3 is read by hint.
+ *
+ * `near` is for verification, before a start is written: among the records of the two teams in the
+ * window, the game is the one nearest that time (the date the creator gave), and two at the same
+ * distance leave the feed silent. It takes the place of one test of "only one" above (no other
+ * record of the two teams inside the window); a hint, and any other record that could be the game,
+ * decide as they do without it, except a record with a team the lists don't know: one of the game's
+ * teams beside a name they don't know, and a record they can't place. Those are weighed only in the
+ * scoring window, where verification reads every seat again from the start it chose, without
+ * `near`, exactly as scoring will: the window `near` reads is a day either side of the date, and a
+ * record a day before the game says nothing about it at scoring.
+ */
+export function pick(seat: Seat, game: Game, listings: readonly Listing[], near?: number): Reading {
 	const home = resolveTeam(game.league, game.home);
 	const away = resolveTeam(game.league, game.away);
 	if (home === null || away === null || home === away) return silent(seat, "game teams unknown");
@@ -161,7 +173,7 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[]): Read
 	const earlier = (r: FeedRecord): boolean => inside(r) && chosen.some((c) => (r.time as number) < (c.time as number));
 	// Anything that could be the game: in the window, or with no time to place it outside; and a
 	// record the lists can't place, inside the window and earlier than a record of the game.
-	const rivals = records.filter((r) => ((isGame(r) || mayBe(r)) && (r.time === null || inside(r))) || (unplaced(r) && earlier(r)));
+	const rivals = records.filter((r) => ((isGame(r) || (near === undefined && mayBe(r))) && (r.time === null || inside(r))) || (near === undefined && unplaced(r) && earlier(r)));
 
 	const hinted = [...new Set(game.hints.filter((h) => h.seat === seat).map((h) => h.id))];
 	if (hinted.length > 1) return silent(seat, "two hints");
@@ -175,6 +187,13 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[]): Read
 		}
 	}
 
+	// Verification: several records of the two teams inside the window, and nothing else that could
+	// be the game. The one nearest the creator's date is the game; two at the same distance, none is.
+	if (near !== undefined && chosen.length > 1 && rivals.length === chosen.length) {
+		const distance = (r: FeedRecord): number => Math.abs((r.time as number) - near);
+		const [first, second] = [...chosen].sort((x, y) => distance(x) - distance(y));
+		return distance(first) < distance(second) ? readingOf(seat, game.league, first, home) : silent(seat, "ambiguous");
+	}
 	if (chosen.length === 1 && rivals.length === 1) return readingOf(seat, game.league, chosen[0], home);
 	if (chosen.length > 0) return silent(seat, "ambiguous");
 	if (records.some((r) => (isGame(r) || mayBe(r) || respelt(r)) && r.time === null)) return silent(seat, "no game time");
@@ -189,9 +208,11 @@ function readingOf(seat: Seat, league: string, r: FeedRecord, homeKey: string): 
 	const firstIsHome = resolveFeedTeam(league, r.teams[0]) === homeKey;
 	const homeTeam = firstIsHome ? r.teams[0] : r.teams[1];
 	const awayTeam = firstIsHome ? r.teams[1] : r.teams[0];
-	if (r.state === "short") return silent(seat, r.status);
+	// The feed says final, but its count or its points can't make one: silent, and marked as the feed
+	// saying the game is over, which verification reads (types.ts, saysFinal).
+	if (r.state === "short") return { ...silent(seat, r.status), saysFinal: true };
 	if (r.state === "final") {
-		if (homeTeam.points === null || awayTeam.points === null) return silent(seat, "final without points");
+		if (homeTeam.points === null || awayTeam.points === null) return { ...silent(seat, "final without points"), saysFinal: true };
 		return { seat, kind: "final", home: homeTeam.points, away: awayTeam.points, recorded: null, detail: "final", record };
 	}
 	const recorded = r.state === "postponed" || r.state === "canceled" ? r.state : null;

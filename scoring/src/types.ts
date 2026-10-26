@@ -54,6 +54,12 @@ export interface Reading {
 	 * for seat 3, whose results carry no time).
 	 */
 	readonly record: { readonly id: string; readonly time: number | null } | null;
+	/**
+	 * Set on a silent reading whose feed says the game is over all the same: a final without points,
+	 * or one the feed's own count shows short of a whole game. Silent, it decides nothing at scoring;
+	 * verification, which writes no start for a game already over, reads it.
+	 */
+	readonly saysFinal?: true;
 }
 
 /** One HTTP request a reader asks for. The key sits where the feed table says. */
@@ -83,4 +89,10 @@ export interface Ask {
 	readonly now: number;
 	/** This seat's key and nothing else. */
 	readonly key: string;
+	/**
+	 * Verification only, before a start is written: the creator's date. Among the game's records in
+	 * the window, the one nearest it is the game. Without it, more than one leaves the feed silent
+	 * unless a hint chooses (src/pick.ts).
+	 */
+	readonly near?: number;
 }
