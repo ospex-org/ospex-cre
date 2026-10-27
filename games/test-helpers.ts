@@ -89,8 +89,8 @@ export function fakeChainOf(games: readonly ChainGame[], now: number, opts: Fake
 		window: BigInt(g.n),
 		day7Clock: BigInt(g.day7),
 		disputedAt: BigInt(g.dispute?.at ?? 0),
+		date: BigInt(g.date),
 		league: g.league,
-		hints: g.hints.map((h) => ({ seat: h.seat, id: h.id })),
 	});
 	return {
 		calls,
@@ -128,9 +128,10 @@ export function fakeChainOf(games: readonly ChainGame[], now: number, opts: Fake
 					return answerOf("getGameReporters", [list, list.map(() => 1)]);
 				}
 				case "getOpenGames": {
-					const [offset, limit] = args as [bigint, bigint];
+					// As the games set answers: the page from the offset, at most `count` long, clipped at the end.
+					const [offset, count] = args as [bigint, bigint];
 					const open = games.filter((g) => (opts.open === undefined ? !ENDED.has(g.status) : opts.open.includes(g.id))).sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
-					const page = open.slice(Number(offset), Number(offset) + Number(limit)).map(rowOf);
+					const page = open.slice(Number(offset), Number(offset) + Number(count)).map(rowOf);
 					return answerOf("getOpenGames", [page, BigInt(open.length)]);
 				}
 				case "getGameIdentity": {

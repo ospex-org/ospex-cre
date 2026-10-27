@@ -124,9 +124,11 @@ afternoon, after the workflow's reads moved to state and the harness kept the ev
 
 * The DON's own signatures and owner: the probe showed the path on mainnet under the organisation's
   derived owner; v3's plain-wallet owner is the cutover's.
-* The production reads: `chain.ts` reads the start report and the dispute records from the game's
-  creation block, which anvil serves without a block limit and the DON's log queries do not (100
-  blocks per query, 15 reads per run). What the ends read on the DON is under decision.
+* The production reads: the workflow reads a game past its creation from state, by reads the games
+  set at `4364295` does not have, so the harness reads the start report and the dispute records from
+  the game's events (`logs.ts`), which anvil serves without a block limit and the DON's log queries do
+  not (100 blocks per query, 15 reads per run). The tick is not in the rehearsal: its runs are
+  `runGame`'s, which the rehearsal delivers.
 * The simulator: its stand-in forwarder hands a receiver placeholder metadata, so a simulated write
   cannot meet the reporter's checks; the probe and this fork are the two ways through.
 * Two of the four starts were written by hand, where the program waited on the saved answers; the

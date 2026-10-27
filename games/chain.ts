@@ -1,16 +1,17 @@
 // What the workflow reads from the chain about a game, through a small interface over the EVM
 // capability so the reads can be tested against a fake chain. Everything the program takes about a
 // game comes from state: the games set's open list (the games not yet ended, with their clocks, their
-// league and their hints), a game's identity, the start report's reading kinds and each seat's last
-// vote, its reporters, and what the games set refuses as a payout (its own address, its coin, its
+// date and their league), a game's identity, the start report's readings and each seat's last vote,
+// its reporters, and what the games set refuses as a payout (its own address, its coin, its
 // reporters). The one log the workflow reads is its trigger's own, the creation event, for the start.
 //
-// The platform allows a run 15 chain reads, so the reads are few and whole: one for the open list (a
-// page at a time), and for one game's full read its identity, its readings and its reporters, three.
+// The platform allows a run 15 chain reads, so the reads are few and whole: a shard reads its own
+// pages of the open list, one per read, its first page every tick and one other in turn; a probe reads
+// the game's identity; a full read its identity, its readings and its reporters, three.
 
 import type { Address, Hex } from "viem";
 import type { ChainGame, PayoutRefused, ReportReading } from "../scoring/src/chain";
-import { GAME_STATUS, OPEN_PAGE, readAnswer, readCall, type Creation } from "./lib";
+import { GAME_STATUS, OPEN_PAGE, PAGES_PER_TICK, readAnswer, readCall, type Creation } from "./lib";
 
 /** The chain, as the reads need it. main.ts binds it to the EVM capability; tests bind a fake. */
 export interface Evm {
@@ -30,8 +31,25 @@ export interface OpenGame {
 	readonly day7Clock: number;
 	/** When the dispute record was written, or null without one. */
 	readonly disputedAt: number | null;
+	/** The creator's date, which an unverified game is verified from. */
+	readonly date: number;
 	readonly league: string;
-	readonly hints: ReadonlyArray<{ readonly seat: number; readonly id: string }>;
+}
+
+/** Which of the open list's pages a tick reads: shard `index` of `count` reads the pages index, index + count, index + 2 count, ... */
+export interface Shard {
+	readonly index: number;
+	readonly count: number;
+}
+
+/** The shard's rows this tick, with what the read cost and what it covered. */
+export interface OpenList {
+	readonly rows: readonly OpenGame[];
+	readonly reads: number;
+	/** How many games the whole list holds, from the first page's answer. */
+	readonly total: number;
+	/** The shard's own pages, and how many of them this tick read. */
+	readonly pages: { readonly own: number; readonly read: number };
 }
 
 /** A game's identity, as stored at its creation. */
@@ -105,32 +123,49 @@ export function readPayoutRefused(evm: Evm, games: Address, gameReporters: reado
 	return { gamesSet: games.toLowerCase(), coin: coin.toLowerCase(), reporters };
 }
 
-/** The games set's open list, whole: a page per read until the total is reached. Returns the rows and how many reads it took. */
-export function readOpenGames(evm: Evm, games: Address, pageSize = OPEN_PAGE): { readonly rows: readonly OpenGame[]; readonly reads: number } {
-	const rows: OpenGame[] = [];
+/**
+ * The shard's pages of the games set's open list, one read each. The shard's first page is read every
+ * tick (its answer carries the list's total, which says how many pages the shard owns); of its other
+ * pages, `pagesPerTick - 1` are read in turn, so a list longer than a tick's pages is covered over
+ * ticks and no tick reads past its budget. A page is one block's snapshot, and an end moves the last
+ * open game into the ended one's place, so a game can be missed on one tick and seen on the next.
+ */
+export function readOpenGames(evm: Evm, games: Address, shard: Shard = { index: 0, count: 1 }, turn = 0, pageSize = OPEN_PAGE, pagesPerTick = PAGES_PER_TICK): OpenList {
+	if (!Number.isInteger(shard.index) || !Number.isInteger(shard.count) || shard.count < 1 || shard.index < 0 || shard.index >= shard.count) throw new Error(`shard ${shard.index} of ${shard.count}`);
+	if (!Number.isInteger(pagesPerTick) || pagesPerTick < 2) throw new Error("a shard reads its first page and at least one other in turn");
+	if (!Number.isInteger(pageSize) || pageSize < 1) throw new Error(`a page of ${pageSize}`);
 	let reads = 0;
-	let offset = 0n;
-	for (;;) {
-		const [page, total] = readAnswer("getOpenGames", evm.call(games, readCall("getOpenGames", [offset, BigInt(pageSize)]))) as [
-			readonly { gameId: bigint; status: number; start: bigint; window: bigint; day7Clock: bigint; disputedAt: bigint; league: string; hints: readonly { seat: number; id: string }[] }[],
+	const page = (m: number): { readonly rows: OpenGame[]; readonly total: number } => {
+		const offset = BigInt(shard.index + m * shard.count) * BigInt(pageSize);
+		const [answer, total] = readAnswer("getOpenGames", evm.call(games, readCall("getOpenGames", [offset, BigInt(pageSize)]))) as [
+			readonly { gameId: bigint; status: number; start: bigint; window: bigint; day7Clock: bigint; disputedAt: bigint; date: bigint; league: string }[],
 			bigint,
 		];
 		reads++;
-		for (const r of page) {
-			rows.push({
+		return {
+			total: Number(total),
+			rows: answer.map((r) => ({
 				gameId: r.gameId,
 				status: statusOf(r.status),
 				start: r.start === 0n ? null : seconds(r.start, "the start"),
 				window: seconds(r.window, "n"),
 				day7Clock: seconds(r.day7Clock, "the day-7 clock"),
 				disputedAt: r.disputedAt === 0n ? null : seconds(r.disputedAt, "the dispute clock"),
+				date: seconds(r.date, "the date"),
 				league: r.league,
-				hints: r.hints.map((h) => ({ seat: h.seat, id: h.id })),
-			});
-		}
-		offset += BigInt(page.length);
-		if (page.length === 0 || offset >= total) return { rows, reads };
-	}
+			})),
+		};
+	};
+	const first = page(0);
+	const all = Math.ceil(first.total / pageSize);
+	const own = all <= shard.index ? 0 : Math.ceil((all - shard.index) / shard.count);
+	const rows = [...first.rows];
+	if (own <= 1) return { rows, reads, total: first.total, pages: { own, read: own } };
+	const rest = own - 1;
+	const slots = Math.min(rest, pagesPerTick - 1);
+	const from = ((Math.floor(turn) % rest) + rest) % rest;
+	for (let i = 0; i < slots; i++) rows.push(...page(1 + ((from + i) % rest)).rows);
+	return { rows, reads, total: first.total, pages: { own, read: 1 + slots } };
 }
 
 /** A game's identity, from state. */
@@ -196,12 +231,16 @@ export function gameOfCreation(creation: Creation): Omit<ChainGame, "payoutRefus
 	};
 }
 
+/** The readings of a game no report has reached: what a verification is handed without a read. */
+export const NO_READINGS: Readings = Object.freeze({ startReadings: [], votes: [], disputedAt: null });
+
 /**
  * A game as the chain holds it past its creation, for the program: the open list's row (its status and
  * clocks), its identity and its readings from state. The start report's readings are as it carried
  * them; the dispute record, when the game is disputed, is one record of each seat's last vote in seat
  * order, which is what the program reads from every record it would have. A game that has ended is
- * read no further than its status, since the program writes nothing to it.
+ * read no further than its status, since the program writes nothing to it; an unverified game is its
+ * identity and nothing else, as the creation event would give it.
  */
 export function gameOfState(row: OpenGame, identity: Identity, readings: Readings): Omit<ChainGame, "payoutRefused"> {
 	const base = {

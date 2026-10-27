@@ -13,9 +13,9 @@ is in it, since those live in the program, inside the fingerprint.
 |---|---|
 | `main.ts` | the entry: the games set's creation event as the trigger for a start, the tick as a cron in shards for the ends, the chain through the EVM capability, the feeds through confidential HTTP, the write through the reporter |
 | `lib.ts` | pure: the config schema, the chain table, the games set's event and read shapes, the one report shape as the reporter decodes it, the seat keys as the transport fills them, the tick's constants, the transport's memo and count |
-| `chain.ts` | what the workflow reads about a game, from state: the games set's open list with each game's clocks, league and hints; a game's identity, its start readings and each seat's last vote, its reporters; and what the games set refuses as a payout |
+| `chain.ts` | what the workflow reads about a game, from state: a shard's pages of the games set's open list, each game's clocks, date and league; a game's identity, its start readings and each seat's last vote, its reporters; and what the games set refuses as a payout |
 | `run.ts` | one run for one game: decide, write; written against interfaces so a test runs it with a fake chain and saved feed answers |
-| `tick.ts` | one cron fire for one shard of the open games: the clocks, the probe at seat 3, the full read on a final or a clock, under the platform's quotas |
+| `tick.ts` | one cron fire for one shard of the open list: the clocks, the probe at seat 3, the full read on a final or a clock, the verification on the hour's first tick, under the platform's quotas |
 | `*.test.ts` | `bun test`: the ABI pins, the four never-lines' wrapper halves, the chain reads, the tick |
 | `config.production.example.json` | the config template the reproducible build writes from; every address a placeholder |
 | `secrets.yaml` | the four seat keys' names in the vault |
@@ -24,10 +24,10 @@ is in it, since those live in the program, inside the fingerprint.
 
 ## What the wrapper hands the program
 
-* **The game**, from the chain. For a start, its identity and terms from the creation event, the
-  trigger's own payload. For an end, from state: the open list's row (its status and clocks), its
-  identity, the start report's readings and each seat's last vote folded into one record, and its
-  reporters. Nothing is read from a log past the trigger's own.
+* **The game**, from the chain. For a start at creation, its identity and terms from the creation
+  event, the trigger's own payload. For everything after, from state: the open list's row (its status,
+  its clocks and its date), its identity, the start report's readings and each seat's last vote folded
+  into one record, and its reporters. Nothing is read from a log past the trigger's own.
 * **The clock**: the latest block's timestamp, never the node's.
 * **The keys**: one per seat of the table. A seat whose key goes in a header gets the enclave's
   stand-in (`{{.SEAT1_KEY}}`), which confidential HTTP fills from the vault, so the key never enters
@@ -47,29 +47,37 @@ the fingerprinted files with the payout as a named placeholder; the never-line t
 delivery (`rehearsal/`), every report kind through the production forwarder's own bytecode into the
 games set, with the game's state as the receipt.
 
-**The tick.** Every five minutes (the schedule is config, inside the fingerprint) each shard reads the
-games set's open list and takes the games whose id is its share. A game past its written start plus
-the league's expected duration (a table in `lib.ts`) is probed: seat 3 by its hint, one request, or
-the spare for a game created without a usable hint. The full read, the program's run, happens on a
-final from the probe or on a clock from the chain's time: hour 24 (the start plus n) and day 7 (the
-dispute record plus its clock), each on every tick for two hours and then on the hour's first tick; a
-disputed game is probed for a change against its vote on record and read in full on the hour's first
-tick too. A full read never runs on the tick itself.
+**The tick.** Every five minutes (the schedule is config, inside the fingerprint) each shard reads its
+own pages of the games set's open list: pages of 64 rows, shard k of n reading pages k, k + n, k + 2n
+and so on, its first every tick and one other in turn, so no shard reads the whole list and a list
+longer than a tick's pages is covered over ticks. A game past its written start plus the league's
+expected duration (a table in `lib.ts`) is probed: its identity read, one chain read, then seat 3 by
+its hint, one request, or the spare for a game created without a usable hint. The full read, the
+program's run, happens on a final from the probe or on a clock from the chain's time: hour 24 (the
+start plus n) and day 7 (the dispute record plus its clock), each on every tick for two hours and then
+on the hour's second tick; a disputed game is probed for a change against its vote on record and read
+in full on the hour's second tick too. On the hour's first tick the full read is a verification: one
+game the creation trigger's run left unverified (the feeds list a game days ahead, a creator may
+create it months ahead), from seven days before its date until two days past it, in turn when there
+are several, so a game is verified when the feeds first carry it. A full read never runs on the tick
+itself.
 
 **The quotas.** The platform allows a run 15 chain reads and 15 feed requests. A tick reads the header
-and the open list, probes at no read, and runs at most one full read, started only with its six reads
-and ten requests in hand; a final found without room waits for the next tick, where the probes begin
-from another game. A request already made in a run is answered from memory, so the probe's answer at
-seat 3 serves the full read, and a start, which the program confirms by reading every seat again in
-the window, sends 11 distinct requests of the 18 it asks.
+and up to two pages, probes at one read each (two for a disputed game, its votes), and runs at most one
+full read, started only with its reads (six, or what the probe left to read) and ten requests in hand;
+a final found without room waits for the next tick, where the probes begin from another game. A
+verification is the hour's first act, with the whole count of requests. A request already made in a
+run is answered from memory, so the probe's answer at seat 3 serves the full read, and a start, which
+the program confirms by reading every seat again in the window, sends 11 distinct requests of the 18
+it asks. Throughput: one full read per tick per shard, so twelve finals an hour per shard, and one
+verification an hour per shard.
 
 **Waiting.** The games set's change that stores a game's identity, its readings and the open list is
-being written. Its identity and readings reads are coded to as posted; its open list is posted as ids
-alone, which would cost the tick four reads per candidate, so `chain.ts` reads rows (the id, status,
-clocks, league and hints) under that name until its shape is settled, and the names move in `lib.ts`
-only. The rehearsal still reads the games set at contracts-v2 main from its events, on a fork
-(`rehearsal/logs.ts`), until it is re-run against that games set. The first simulation on a college
-slate, with the platform's limits enforced, is the next proof after the merge.
+in review. Its reads are coded to as its branch names them, the open list's row with one word more,
+the game's date, asked of its writer for the verification's window; the names and the row move in
+`lib.ts` only, read by field name. The rehearsal still reads the games set at contracts-v2 main from
+its events, on a fork (`rehearsal/logs.ts`), until it is re-run against that games set. The first
+simulation on a college slate, with the platform's limits enforced, is the next proof after the merge.
 
 ## Build and test
 

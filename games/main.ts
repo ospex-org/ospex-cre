@@ -4,11 +4,12 @@
 //
 // Two triggers. The games set's GameCreated event: a new game is verified from it, the program reads
 // the feeds near the creator's date and decides the start, and the start report is written. And the
-// tick, a cron on the DON in shards (each shard a cron of its own, seconds apart, on its share of the
-// games by id): the open list from state, the probe at seat 3 for each game past its start plus the
+// tick, a cron on the DON in shards (each shard a cron of its own, seconds apart, on its own pages of
+// the open list): the open list from state, the probe at seat 3 for each game past its start plus the
 // league's duration, the full read on a final or a clock (hour 24, day 7, the hour for a disputed
-// game). Everything a run reads about a game past its creation comes from state; the one log read is
-// the creation trigger's own payload.
+// game), and on the hour's first tick a verification for a game the feeds did not list at its
+// creation. Everything a run reads about a game past its creation comes from state; the one log read
+// is the creation trigger's own payload.
 //
 // Grounded in @chainlink/cre-sdk@1.13.0, the pinned SDK (QuickJS/WASM: no Node builtins).
 

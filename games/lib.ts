@@ -75,7 +75,7 @@ export const MAX_SHARDS = 9;
  *   games set refuses as payouts too (it also refuses its coin and any reporter, which the program checks
  *   at the run with what it reads from the chain).
  * - schedule: the tick's cron; a slower tick is a config change, inside the fingerprint.
- * - shards: how many ticks run per schedule, each on its own share of the games (by id), staggered inside
+ * - shards: how many ticks run per schedule, each on its own pages of the open list, staggered inside
  *   the minute; each is one execution with its own quotas, so this is the throughput of finals.
  */
 export const configSchema = z
@@ -145,12 +145,37 @@ export const REQUESTS_PER_EXECUTION = 15;
 /**
  * What the tick keeps for one full read before it starts one: the most a scoring run asked on the saved
  * cases is 8 (3/3/1/1 by seat), and the probe's answer at seat 3 is reused, so 10 holds a run that
- * pages once more at a seat.
+ * pages once more at a seat. A verification is the tick's first act, with the whole count in hand: a
+ * start asks 18 and sends 11 distinct on the saved cases.
  */
 export const FULL_READ_RESERVE = 10;
 
-/** The chain reads one full read makes: the identity, the kinds and votes, the reporters, the coin, the approved list, the payout's record. */
+/** The chain reads one full read makes: the identity, the readings, the reporters, the coin, the approved list, the payout's record. */
 export const READS_PER_FULL_READ = 6;
+
+/**
+ * The open list's pages one shard reads in a tick: its first page every tick, and one other of its
+ * pages in turn, so a list longer than its pages is covered over ticks and the reads for the probes
+ * and the full read stay in hand (1 for the header, 2 here, 6 for a full read, the rest for probes).
+ */
+export const PAGES_PER_TICK = 2;
+
+/**
+ * When the tick verifies a game the creation trigger's run left unverified (the feeds list a game
+ * days ahead, a creator may create it months ahead): from seven days before its date, on the hour's
+ * first tick, as that tick's one full read; and until two days past its date, after which no feed
+ * will list it (the start may lie a day past the date, and a feed lists a game by the time it is
+ * played). The games set's own bound is its day-30 release.
+ */
+export const VERIFY_BEFORE = 7 * 86_400;
+export const VERIFY_AFTER = 2 * 86_400;
+
+/**
+ * Which tick of the hour does the hour's reads that are not a verification: a disputed game's full
+ * read, and a clock past its window. The first tick is the verification's, so neither keeps the
+ * other from its hour; a schedule divides the hour, so the second tick exists.
+ */
+export const HOURLY_TICK = 1;
 
 /**
  * How long after a clock runs out the tick keeps running the full read for the game on every tick, in
@@ -233,10 +258,12 @@ export const GAME_CREATED_TOPIC: Hex = toEventSelector(GAME_CREATED);
 export const GAME_REPORTED_TOPIC: Hex = toEventSelector(GAME_REPORTED);
 
 /**
- * One game on the games set's open list, as the tick reads it: enough to say whether the game is due
- * and to probe it, without another read. PLACEHOLDER SHAPE: the games set's change that stores a game's
- * identity, its readings and the open list is being written; its read names and shapes replace these
- * when they are posted, in this file only.
+ * One game on the games set's open list, as the tick reads it: the game's own words that say whether
+ * it is due, and its league. The hints are not here: the row's size is fixed with the league bounded,
+ * and the tick reads the identity of the few games it probes. The `date` is this workflow's one
+ * addition to the row as the games set's change settled it, asked of its writer: an unverified game
+ * is verified from seven days before its date, and its start is 0 until written. The games set's
+ * final row replaces this tuple, in this file only; the fields are read by name.
  */
 const OPEN_GAME = {
 	type: "tuple",
@@ -247,17 +274,16 @@ const OPEN_GAME = {
 		{ name: "window", type: "uint64" },
 		{ name: "day7Clock", type: "uint64" },
 		{ name: "disputedAt", type: "uint64" },
+		{ name: "date", type: "uint64" },
 		{ name: "league", type: "string" },
-		{ name: "hints", ...HINT, type: "tuple[]" },
 	],
 } as const;
 
 /**
  * The games set's reads the workflow takes. The first seven are IOspexGames at contracts-v2 main;
- * `getGameIdentity` and `getGameReadings` are as the games set's change names them (the readings read
- * gives the start report's readings whole and each seat's last vote in the order the seats first
- * voted, with the dispute clock); `getOpenGames` is the placeholder above, rows where the change
- * names ids, pending its answer.
+ * `getGameIdentity`, `getGameReadings` and `getOpenGames` are as the games set's change names them
+ * (the readings read gives the start report's readings whole and each seat's last vote in the order
+ * the seats first voted, with the dispute clock; the open list gives rows, the tuple above).
  */
 export const GAMES_READS = [
 	{ type: "function", name: "getGameStatus", stateMutability: "view", inputs: [{ name: "gameId", type: "uint256" }], outputs: [{ type: "uint8" }] },
@@ -271,7 +297,7 @@ export const GAMES_READS = [
 		type: "function",
 		name: "getOpenGames",
 		stateMutability: "view",
-		inputs: [{ name: "offset", type: "uint256" }, { name: "limit", type: "uint256" }],
+		inputs: [{ name: "offset", type: "uint256" }, { name: "count", type: "uint256" }],
 		outputs: [{ name: "rows", ...OPEN_GAME, type: "tuple[]" }, { name: "total", type: "uint256" }],
 	},
 	{
@@ -290,7 +316,11 @@ export const GAMES_READS = [
 	},
 ] as const;
 
-/** The most rows of the open list one read asks for: about 12 words a row, under the 25 KB an answer may be. */
+/**
+ * The rows of the open list one read asks for. The games set measures its row at 320 bytes and pins
+ * 77 rows a page under the 25,000 bytes an answer may be; with the date the row is 352 bytes and 70
+ * rows fit. 64 rows are 22,624 bytes, under the bound either way.
+ */
 export const OPEN_PAGE = 64;
 
 /** The games set's GameStatus, by number, to the program's names. 0 (None) is never a game. */
