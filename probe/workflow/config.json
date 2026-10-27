@@ -1,0 +1,7 @@
+{
+  "consumerAddress": "0x0000000000000000000000000000000000000000",
+  "chainSelectorName": "polygon-mainnet",
+  "chainId": 137,
+  "schedule": "0 */10 * * * *",
+  "tag": "osprobe-a"
+}

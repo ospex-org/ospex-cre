@@ -1,0 +1,4 @@
+{
+  "schedule": "0 */10 * * * *",
+  "tag": "osspare-a"
+}
