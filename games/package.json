@@ -1,0 +1,23 @@
+{
+  "name": "ospex-cre-games",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "The v3 Chainlink workflow: a thin wrapper on the scoring program, writing through the games set's Chainlink reporter.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@chainlink/cre-sdk": "1.13.0",
+    "viem": "2.34.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "ws": "8.21.0"
+  }
+}
