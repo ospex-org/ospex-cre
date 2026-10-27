@@ -1,20 +1,15 @@
-// The chain reads: what the wrapper asks the games set for a game in each status, and what it builds
-// from the answers. Every read is the one the status calls for, the events are read from the game's
-// creation block with the topics that name the game and the kind, and nothing is asked of a game that
-// has ended.
+// The chain reads: what the wrapper asks the games set for, from state, and what it builds from the
+// answers. The open list is a page per read and carries what the tick decides on; a game's identity,
+// its readings and its reporters are one read each, asked for the one game a full read is about; a
+// game before any report is the creation event's, and a game that has ended is read no further than
+// its status. Nothing is read from a log past the trigger's own.
 
 import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../scoring/src/chain";
+import { lastRecorded } from "../scoring/src/rule";
 import { chainOf } from "../scoring/test/rule-helpers";
-import { readDisputeRecords, readGame, readStartReadings, type Evm } from "./chain";
-import { GAME_REPORTED_TOPIC, KIND_DISPUTE, KIND_START, topicOf } from "./lib";
-import { COIN, GAMES, REPORTER, creationOf, fakeChain, refusedOf } from "./test-helpers";
-
-const SELECTORS = {
-	getGameStatus: "0x0f1bf454",
-	getGameStart: "0xc235a5c7",
-	getGameDisputedAt: "0x2978940d",
-};
+import { gameOfCreation, gameOfState, readIdentity, readOpenGames, readReadings, readReporters, recordOfVotes, type Evm, type OpenGame } from "./chain";
+import { GAMES, REPORTER, RETIRED, creationOf, fakeChain, fakeChainOf } from "./test-helpers";
 
 const RECORD_A = [
 	{ seat: 1, kind: 2 as const, homeScore: 114, awayScore: 106 },
@@ -23,76 +18,100 @@ const RECORD_A = [
 	{ seat: 4, kind: 2 as const, homeScore: 110, awayScore: 106 },
 ];
 const RECORD_B = RECORD_A.map((r) => (r.seat === 4 ? { ...r, homeScore: 114 } : r));
+const SEATS4 = [1, 2, 3, 4] as const;
 
-describe("the chain reads", () => {
-	test("an unverified game: its status, and nothing more", () => {
-		const base = chainOf("nfl not final");
-		const game: ChainGame = { ...base, status: "unverified", start: null, startReadings: null, dispute: null };
-		const chain = fakeChain(game, base.start! - 3600);
-		const read = readGame(chain, GAMES, creationOf(game), refusedOf([REPORTER]));
-		expect(read).toEqual({ ...game, payoutRefused: refusedOf([REPORTER]) });
-		expect(chain.calls.map((c) => c.selector)).toEqual([SELECTORS.getGameStatus]);
-		expect(chain.queries).toEqual([]);
-	});
+function rowOf(g: ChainGame): OpenGame {
+	return {
+		gameId: BigInt(g.id),
+		status: g.status,
+		start: g.start,
+		window: g.n,
+		day7Clock: g.day7,
+		disputedAt: g.dispute?.at ?? null,
+		league: g.league,
+		hints: g.hints,
+	};
+}
 
-	test("a verified game: its start, and the start report's readings from the games set's event", () => {
-		const game = chainOf("nba final, read after the game");
-		const creation = creationOf(game, [REPORTER], 96_000_000n);
-		const chain = fakeChain(game, game.start! + 60, { latestBlock: 96_123_456n });
-		const read = readGame(chain, GAMES, creation, refusedOf([REPORTER]));
-		expect(read.status).toBe("verified");
-		expect(read.start).toBe(game.start);
-		expect(read.startReadings).toEqual(game.startReadings);
-		expect(read.dispute).toBeNull();
-		expect(chain.calls.map((c) => c.selector)).toEqual([SELECTORS.getGameStatus, SELECTORS.getGameStart]);
-		expect(chain.queries).toEqual([
-			{ address: GAMES, topics: [GAME_REPORTED_TOPIC, topicOf(BigInt(game.id)), null, topicOf(KIND_START)], fromBlock: 96_000_000n, toBlock: 96_123_456n },
+describe("the chain reads, from state", () => {
+	test("the open list: every game not ended, a page per read, with its clocks, its league and its hints", () => {
+		const a = chainOf("nba final, read after the game");
+		const b: ChainGame = { ...chainOf("nfl not final"), id: "7", status: "unverified", start: null, startReadings: null, dispute: null };
+		const c: ChainGame = { ...a, id: "9", status: "disputed", dispute: { at: a.start! + 7_200, records: [RECORD_A] } };
+		const ended: ChainGame = { ...a, id: "11", status: "scored" };
+		const chain = fakeChainOf([a, b, c, ended], 1);
+		const { rows, reads } = readOpenGames(chain, GAMES, 2);
+		expect(reads).toBe(2);
+		expect(rows.map((r) => [r.gameId, r.status, r.start, r.disputedAt])).toEqual([
+			[7n, "unverified", null, null],
+			[9n, "disputed", a.start, a.start! + 7_200],
+			[42n, "verified", a.start, null],
 		]);
+		expect(rows[2]).toEqual({ gameId: 42n, status: "verified", start: a.start, window: a.n, day7Clock: a.day7, disputedAt: null, league: a.league, hints: a.hints });
+		expect(chain.names()).toEqual(["getOpenGames", "getOpenGames"]);
+		expect(chain.calls.map((c) => c.args)).toEqual([[0n, 2n], [2n, 2n]]);
 	});
 
-	test("a disputed game: when its record was written, and every dispute report in order", () => {
-		const base = chainOf("nba final, read after the game");
-		const game: ChainGame = { ...base, status: "disputed", dispute: { at: base.start! + 7200, records: [RECORD_A, RECORD_B] } };
-		const chain = fakeChain(game, base.start! + 10_000);
-		const read = readGame(chain, GAMES, creationOf(game), refusedOf([REPORTER]));
-		expect(read.dispute).toEqual({ at: base.start! + 7200, records: [RECORD_A, RECORD_B] });
-		expect(read.startReadings).toEqual(base.startReadings);
-		expect(chain.calls.map((c) => c.selector)).toEqual([SELECTORS.getGameStatus, SELECTORS.getGameStart, SELECTORS.getGameDisputedAt]);
-		expect(chain.queries.map((q) => q.topics[3])).toEqual([topicOf(KIND_START), topicOf(KIND_DISPUTE)]);
+	test("an empty open list is one read, and a list that fits a page is one read", () => {
+		expect(readOpenGames(fakeChainOf([], 1), GAMES)).toEqual({ rows: [], reads: 1 });
+		const a = chainOf("nba final, read after the game");
+		expect(readOpenGames(fakeChainOf([a], 1), GAMES).reads).toBe(1);
 	});
 
-	test("a game that has ended: its status, and nothing more", () => {
-		for (const status of ["scored", "voided", "released"] as const) {
-			const game: ChainGame = { ...chainOf("nba final, read after the game"), status };
-			const chain = fakeChain(game, game.start! + 90_000);
-			const read = readGame(chain, GAMES, creationOf(game), refusedOf([REPORTER]));
-			expect([read.status, read.start, read.startReadings, read.dispute]).toEqual([status, null, null, null]);
-			expect(chain.calls.length).toBe(1);
-			expect(chain.queries.length).toBe(0);
+	test("the identity, the readings and the reporters: one read each, lowercase addresses, the last vote per seat", () => {
+		const a = chainOf("nba final, read after the game");
+		const c: ChainGame = { ...a, status: "disputed", dispute: { at: a.start! + 7_200, records: [RECORD_A, RECORD_B] } };
+		const chain = fakeChainOf([c], 1, { reporters: { [c.id]: [REPORTER, RETIRED] } });
+		expect(readIdentity(chain, GAMES, 42n)).toEqual({ league: a.league, home: a.home, away: a.away, date: a.date, hints: a.hints });
+		// The votes come one per seat that voted, in the games set's order (the fake lists the last first); seat 3 never voted.
+		expect(readReadings(chain, GAMES, 42n)).toEqual({ startReadings: a.startReadings!, votes: [RECORD_B[3], RECORD_B[1], RECORD_B[0]], disputedAt: a.start! + 7_200 });
+		expect(recordOfVotes([RECORD_B[3], RECORD_B[1], RECORD_B[0]])).toEqual(lastRecorded([RECORD_A, RECORD_B], SEATS4));
+		expect(recordOfVotes([])).toEqual(SEATS4.map((seat) => ({ seat, kind: 0, homeScore: 0, awayScore: 0 })));
+		expect(readReporters(chain, GAMES, 42n)).toEqual([REPORTER, RETIRED]);
+		expect(chain.names()).toEqual(["getGameIdentity", "getGameReadings", "getGameReporters"]);
+	});
+
+	test("a game before any report is the creation event's identity and terms, unverified", () => {
+		const a = chainOf("nba final, read after the game");
+		const creation = { ...creationOf(a), league: "nhl", home: "H", away: "A", date: 123, hints: [{ seat: 3, id: "x" }], terms: { window: 100, day7Clock: 200, day30Clock: 300, fee: 0n } };
+		expect(gameOfCreation(creation)).toEqual({ id: a.id, league: "nhl", home: "H", away: "A", date: 123, hints: [{ seat: 3, id: "x" }], n: 100, day7: 200, status: "unverified", start: null, startReadings: null, dispute: null });
+	});
+
+	test("a verified game from state: its start and the start report's kinds as readings, no dispute", () => {
+		const a = chainOf("nba final, read after the game");
+		const chain = fakeChain(a, 1);
+		const game = gameOfState(rowOf(a), readIdentity(chain, GAMES, 42n), readReadings(chain, GAMES, 42n));
+		const { payoutRefused: _, ...expected } = a;
+		expect(game).toEqual(expected);
+	});
+
+	test("a disputed game from state: one record of each seat's last vote, with the clock the record set", () => {
+		const a = chainOf("nba final, read after the game");
+		const c: ChainGame = { ...a, status: "disputed", dispute: { at: a.start! + 7_200, records: [RECORD_A, RECORD_B] } };
+		const chain = fakeChain(c, 1);
+		const game = gameOfState(rowOf(c), readIdentity(chain, GAMES, 42n), readReadings(chain, GAMES, 42n));
+		expect(game.status).toBe("disputed");
+		expect(game.dispute).toEqual({ at: a.start! + 7_200, records: [lastRecorded([RECORD_A, RECORD_B], SEATS4)] });
+		expect(game.startReadings).toEqual(a.startReadings);
+	});
+
+	test("a game that has ended, or is not yet verified, is read no further than its status", () => {
+		const a = chainOf("nba final, read after the game");
+		for (const status of ["scored", "voided", "released", "unverified"] as const) {
+			const g: ChainGame = { ...a, status, start: status === "unverified" ? null : a.start };
+			const chain = fakeChain(g, 1);
+			const game = gameOfState(rowOf(g), readIdentity(chain, GAMES, 42n), readReadings(chain, GAMES, 42n));
+			expect([game.status, game.start, game.startReadings, game.dispute]).toEqual([status, null, null, null]);
 		}
 	});
 
-	test("a start report that is not on the chain reads null, so the program decides nothing on it", () => {
-		const game: ChainGame = { ...chainOf("nba final, read after the game"), startReadings: null };
-		const chain = fakeChain(game, game.start! + 60);
-		expect(readStartReadings(chain, GAMES, BigInt(game.id), 1n, 2_000_000_000n)).toBeNull();
-		expect(readDisputeRecords(chain, GAMES, BigInt(game.id), 1n, 2_000_000_000n)).toEqual([]);
-	});
-
-	test("the identity and the terms come from the creation event, the refusals from the reads", () => {
-		const game = chainOf("nba final, read after the game");
-		const creation = { ...creationOf(game), league: "nhl", home: "H", away: "A", date: 123, hints: [{ seat: 3, id: "x" }], terms: { window: 100, day7Clock: 200, day30Clock: 300, fee: 0n } };
-		const read = readGame(fakeChain(game, game.start! + 60), GAMES, creation, refusedOf([REPORTER], COIN));
-		expect([read.league, read.home, read.away, read.date, read.hints, read.n, read.day7]).toEqual(["nhl", "H", "A", 123, [{ seat: 3, id: "x" }], 100, 200]);
-		expect(read.payoutRefused).toEqual(refusedOf([REPORTER], COIN));
-	});
-
-	test("a status the games set does not have is refused", () => {
-		const bad: Evm = {
-			call: () => `0x${"7".padStart(64, "0")}`,
-			logs: () => [],
+	test("a status or a reading kind the games set does not have is refused", () => {
+		const bad = (word: string): Evm => ({
+			call: () => `0x${"20".padStart(64, "0")}${"1".padStart(64, "0")}${word.padStart(64, "0")}`,
 			latest: () => ({ number: 1n, timestamp: 1 }),
-		};
-		expect(() => readGame(bad, GAMES, creationOf(chainOf("nba final")), refusedOf([REPORTER]))).toThrow("status");
+		});
+		expect(() => readOpenGames(bad("7"), GAMES)).toThrow();
+		const chain = fakeChain(chainOf("nba final"), 1);
+		expect(() => readReadings({ ...chain, call: () => chain.call(GAMES, "0x") }, GAMES, 42n)).toThrow();
 	});
 });

@@ -2,14 +2,13 @@
 // start, score, void and dispute record, and this file, which finds the game on the chain, hands the
 // program what it reads, and writes the program's report through the games set's Chainlink reporter.
 //
-// Trigger, built here: the games set's GameCreated event. A new game is verified from it: the program
-// reads the feeds near the creator's date and decides the start, and the start report is written.
-//
-// Not built here, held for the ruling: what fires a run for a game past its start (the score, the
-// hour-24 void, the dispute record and its updates, the day-7 result). A run from the chain alone
-// walks the games on a cron; a run from the operator's box comes through an HTTP trigger carrying the
-// game id; either way the run reads the game from the chain and decides on the feeds alone. Until
-// that is decided, nothing here fires for a game past its start, and no file depends on which it is.
+// Two triggers. The games set's GameCreated event: a new game is verified from it, the program reads
+// the feeds near the creator's date and decides the start, and the start report is written. And the
+// tick, a cron on the DON in shards (each shard a cron of its own, seconds apart, on its share of the
+// games by id): the open list from state, the probe at seat 3 for each game past its start plus the
+// league's duration, the full read on a final or a clock (hour 24, day 7, the hour for a disputed
+// game). Everything a run reads about a game past its creation comes from state; the one log read is
+// the creation trigger's own payload.
 //
 // Grounded in @chainlink/cre-sdk@1.13.0, the pinned SDK (QuickJS/WASM: no Node builtins).
 
@@ -17,32 +16,37 @@ import {
 	cre,
 	Runner,
 	bytesToHex,
-	hexToBase64,
-	bigintToProtoBigInt,
 	protoBigIntToBigint,
 	encodeCallMsg,
 	logTriggerConfig,
 	prepareReportRequest,
 	LATEST_BLOCK_NUMBER,
 	TxStatus,
+	type CronPayload,
 	type EVMLog,
 	type Runtime,
 } from "@chainlink/cre-sdk";
 import type { Address, Hex } from "viem";
 import type { HttpRequest, HttpResponse, Seat } from "../scoring/src/types";
-import type { Evm } from "./chain";
+import { gameOfCreation, type Evm } from "./chain";
 import {
 	GAME_CREATED_TOPIC,
+	REQUESTS_PER_EXECUTION,
 	SECRET_IDS,
 	configSchema,
+	counted,
 	decodeGameCreated,
 	keysFor,
+	memoized,
+	periodOf,
 	querySeats,
 	resolveChainSelector,
 	secretOfHeader,
+	shardScheduleOf,
 	type Config,
 } from "./lib";
 import { runGame, summarize } from "./run";
+import { runTick, summarizeTick } from "./tick";
 
 const ZERO: Address = "0x0000000000000000000000000000000000000000";
 
@@ -53,23 +57,6 @@ function evmOf(runtime: Runtime<Config>, client: InstanceType<typeof cre.capabil
 		call(to, data) {
 			const reply = client.callContract(runtime, { call: encodeCallMsg({ from: ZERO, to, data }), blockNumber: LATEST_BLOCK_NUMBER }).result();
 			return bytesToHex(reply.data);
-		},
-		logs(address, topics, fromBlock, toBlock) {
-			const reply = client
-				.filterLogs(runtime, {
-					filterQuery: {
-						addresses: [hexToBase64(address)],
-						topics: topics.map((t) => ({ topic: t === null ? [] : [hexToBase64(t)] })),
-						fromBlock: bigintToProtoBigInt(fromBlock),
-						toBlock: bigintToProtoBigInt(toBlock),
-					},
-				})
-				.result();
-			return (reply.logs ?? []).map((l) => ({
-				topics: l.topics.map(bytesToHex),
-				data: bytesToHex(l.data),
-				blockNumber: l.blockNumber ? protoBigIntToBigint(l.blockNumber) : 0n,
-			}));
 		},
 		latest() {
 			const header = client.headerByNumber(runtime, { blockNumber: LATEST_BLOCK_NUMBER }).result().header;
@@ -84,11 +71,12 @@ function evmOf(runtime: Runtime<Config>, client: InstanceType<typeof cre.capabil
 /**
  * One request, one answer, through confidential HTTP: a header whose value is a seat's stand-in is
  * filled inside the enclave from the vault, so that key never enters the workflow. The response's
- * status and body go back to the reader as they came.
+ * status and body go back to the reader as they came. A request already made in this run is answered
+ * from memory, and the run refuses a request past the platform's count before sending it.
  */
 function transportOf(runtime: Runtime<Config>): (req: HttpRequest) => HttpResponse {
 	const conf = new cre.capabilities.ConfidentialHTTPClient();
-	return (req) => {
+	const raw = (req: HttpRequest): HttpResponse => {
 		const multiHeaders: Record<string, { values: string[] }> = {};
 		const vaultDonSecrets: { key: string; namespace: string; owner: string }[] = [];
 		for (const [k, v] of Object.entries(req.headers)) {
@@ -99,6 +87,7 @@ function transportOf(runtime: Runtime<Config>): (req: HttpRequest) => HttpRespon
 		const resp = conf.sendRequest(runtime, { vaultDonSecrets, request: { url: req.url, method: req.method, multiHeaders } }).result();
 		return { status: resp.statusCode, body: new TextDecoder().decode(resp.body) };
 	};
+	return memoized(counted(raw, REQUESTS_PER_EXECUTION).send);
 }
 
 /** The keys of the seats whose key goes in the query, read from the vault for this run. */
@@ -145,17 +134,50 @@ const onGameCreated = (runtime: Runtime<Config>, log: EVMLog): string => {
 			send: transportOf(runtime),
 			write: writerOf(runtime, client),
 		},
-		creation,
+		gameOfCreation(creation),
+		creation.reporters,
 	);
 	const line = summarize(run);
 	runtime.log(line);
 	return line;
 };
 
+// ──────────────────────────── The tick ────────────────────────────────
+
+const onTick =
+	(index: number) =>
+	(runtime: Runtime<Config>, payload: CronPayload): string => {
+		const scheduled = payload.scheduledExecutionTime?.seconds ?? 0n;
+		runtime.log(`tick ${index}/${runtime.config.shards} scheduled at ${scheduled}`);
+		const client = new cre.capabilities.EVMClient(resolveChainSelector(runtime.config.chainSelectorName, runtime.config.chainId));
+		// The transport here is the raw one: the tick counts and memoizes requests itself, so its own
+		// count is the one that holds a probe or a full read back.
+		const conf = transportOf(runtime);
+		const tick = runTick({
+			evm: evmOf(runtime, client),
+			games: runtime.config.eventAddress as Address,
+			payout: runtime.config.payoutAddress,
+			keys: keysFor(queryKeysOf(runtime)),
+			send: conf,
+			write: writerOf(runtime, client),
+			period: periodOf(runtime.config.schedule),
+			shard: { index, count: runtime.config.shards },
+		});
+		for (const l of tick.lines) runtime.log(l);
+		for (const w of tick.waiting) runtime.log(`waiting: ${w}`);
+		const line = summarizeTick(tick);
+		runtime.log(line);
+		return line;
+	};
+
 // ──────────────────────────── Wiring ─────────────────────────────────
 
 const initWorkflow = (config: Config) => {
 	const client = new cre.capabilities.EVMClient(resolveChainSelector(config.chainSelectorName, config.chainId));
+	const cron = new cre.capabilities.CronCapability();
+	const ticks = Array.from({ length: config.shards }, (_, index) =>
+		cre.handler(cron.trigger({ schedule: shardScheduleOf(config.schedule, index, config.shards) }), onTick(index)),
+	);
 	return [
 		cre.handler(
 			client.logTrigger(
@@ -167,6 +189,7 @@ const initWorkflow = (config: Config) => {
 			),
 			onGameCreated,
 		),
+		...ticks,
 	];
 };
 

@@ -18,6 +18,7 @@
     "lib.ts",
     "chain.ts",
     "run.ts",
+    "tick.ts",
     "../scoring/src/**/*.ts"
   ]
 }

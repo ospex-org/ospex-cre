@@ -15,10 +15,11 @@ import {
 	type Hex,
 } from "viem";
 import { z } from "zod";
-import { READING_KIND, REPORT_KIND, type Report, type ReportReading } from "../scoring/src/chain";
+import { READING_KIND, REPORT_KIND, type ChainGame, type Report, type ReportReading } from "../scoring/src/chain";
 import type { Keys } from "../scoring/src/keys";
-import { SEATS, seatRow } from "../scoring/src/table";
-import type { Seat } from "../scoring/src/types";
+import { hintOf } from "../scoring/src/readers/seat3";
+import { SEATS, SPARE, seatRow } from "../scoring/src/table";
+import type { HttpRequest, HttpResponse, Reading, Seat } from "../scoring/src/types";
 
 // ──────────────────────────── The chain ────────────────────────────
 
@@ -51,9 +52,20 @@ const address = z.string().regex(ADDRESS, "must be a 0x-prefixed 20-byte address
 const filledAddress = address.refine((a) => !ADDRESS.test(a) || BigInt(a) !== 0n, "must not be the zero address");
 
 /**
- * The config, which the workflow id hashes. Every field is a deploy's value, and nothing in it names a
- * feed, a seat, a count or a rule: those live in the scoring program, inside the fingerprint. The
- * schema is strict, so a field that is not here fails the load rather than ride along unread.
+ * The tick's schedule: a cron with a seconds field, at a whole number of minutes that divides the hour,
+ * so the hour's first tick exists (the disputed games' hourly read keys on it) and the shards can be
+ * staggered inside the minute. "0 star/5 star star star star" is every five minutes.
+ */
+const SCHEDULE = /^0 \*\/([1-9]|[1-5][0-9]) \* \* \* \*$/;
+
+/** The most cron triggers a workflow may register beside the creation trigger (ten triggers in all). */
+export const MAX_SHARDS = 9;
+
+/**
+ * The config, which the workflow id hashes. Every field is a deploy's value or the tick's shape, and
+ * nothing in it names a feed, a seat, a count or a rule: those live in the scoring program, inside the
+ * fingerprint. The schema is strict, so a field that is not here fails the load rather than ride along
+ * unread.
  *
  * - receiverAddress: the games set's Chainlink reporter, which the workflow writes to (B5 predicts it).
  * - eventAddress: the games set, whose creation event is the trigger and whose reads the program takes.
@@ -62,6 +74,9 @@ const filledAddress = address.refine((a) => !ADDRESS.test(a) || BigInt(a) !== 0n
  *   Refused: the zero address, the reserved range up to 0xffff, the reporter and the games set, which the
  *   games set refuses as payouts too (it also refuses its coin and any reporter, which the program checks
  *   at the run with what it reads from the chain).
+ * - schedule: the tick's cron; a slower tick is a config change, inside the fingerprint.
+ * - shards: how many ticks run per schedule, each on its own share of the games (by id), staggered inside
+ *   the minute; each is one execution with its own quotas, so this is the throughput of finals.
  */
 export const configSchema = z
 	.object({
@@ -72,6 +87,8 @@ export const configSchema = z
 		secretOwner: filledAddress,
 		secretNamespace: z.string().min(1),
 		payoutAddress: filledAddress,
+		schedule: z.string().regex(SCHEDULE, "a cron at a whole number of minutes: 0 */N * * * *").refine((s) => 60 % periodMinutes(s) === 0, "the minutes must divide the hour"),
+		shards: z.number().int().min(1).max(MAX_SHARDS),
 	})
 	.strict()
 	.superRefine((c, ctx) => {
@@ -92,6 +109,69 @@ export const configSchema = z
 		}
 	});
 export type Config = z.infer<typeof configSchema>;
+
+function periodMinutes(schedule: string): number {
+	const m = SCHEDULE.exec(schedule);
+	return m === null ? 0 : Number(m[1]);
+}
+
+/** The seconds between two ticks of the schedule. */
+export function periodOf(schedule: string): number {
+	const minutes = periodMinutes(schedule);
+	if (minutes === 0) throw new Error(`not a tick schedule: ${schedule}`);
+	return minutes * 60;
+}
+
+/** Shard k's own cron: the schedule with its seconds field moved, so the shards fire apart inside the minute. */
+export function shardScheduleOf(schedule: string, index: number, shards: number): string {
+	if (!Number.isInteger(index) || !Number.isInteger(shards) || shards < 1 || shards > MAX_SHARDS || index < 0 || index >= shards) {
+		throw new Error(`shard ${index} of ${shards}`);
+	}
+	periodOf(schedule);
+	const second = index * Math.floor(60 / shards);
+	return `${second}${schedule.slice(1)}`;
+}
+
+// ──────────────────────────── The tick's constants ─────────────────
+
+/**
+ * The platform's quotas per execution that the tick budgets against, as the service-quotas page gives
+ * them (last updated 2026-09-16) and the pinned CLI exports them: chain reads, and confidential HTTP
+ * requests. A tick stays under both by its own count, so the platform's refusal is never what stops it.
+ */
+export const READS_PER_EXECUTION = 15;
+export const REQUESTS_PER_EXECUTION = 15;
+
+/**
+ * What the tick keeps for one full read before it starts one: the most a scoring run asked on the saved
+ * cases is 8 (3/3/1/1 by seat), and the probe's answer at seat 3 is reused, so 10 holds a run that
+ * pages once more at a seat.
+ */
+export const FULL_READ_RESERVE = 10;
+
+/** The chain reads one full read makes: the identity, the kinds and votes, the reporters, the coin, the approved list, the payout's record. */
+export const READS_PER_FULL_READ = 6;
+
+/**
+ * How long after a clock runs out the tick keeps running the full read for the game on every tick, in
+ * seconds, before it falls back to the hour's first tick. A clock read that keeps deciding to wait (a
+ * game the feeds dropped) would otherwise take every tick's one full read for days.
+ */
+export const CLOCK_WINDOW = 2 * 3_600;
+
+/**
+ * The first probe at the start plus the league's expected duration, in seconds. From the card's table;
+ * observed durations replace it after a month. A league missing here is not probed, and the program
+ * does not offer it either.
+ */
+export const EXPECTED_DURATION: Readonly<Record<string, number>> = Object.freeze({
+	nfl: 3 * 3_600,
+	ncaaf: 3 * 3_600 + 15 * 60,
+	nba: 2 * 3_600 + 30 * 60,
+	ncaab: 2 * 3_600,
+	mlb: 2 * 3_600 + 45 * 60,
+	nhl: 2 * 3_600 + 30 * 60,
+});
 
 // ──────────────────────────── The games set ────────────────────────
 
@@ -152,7 +232,33 @@ export const GAME_REPORTED = {
 export const GAME_CREATED_TOPIC: Hex = toEventSelector(GAME_CREATED);
 export const GAME_REPORTED_TOPIC: Hex = toEventSelector(GAME_REPORTED);
 
-/** The games set's reads the workflow takes, as IOspexGames declares them. */
+/**
+ * One game on the games set's open list, as the tick reads it: enough to say whether the game is due
+ * and to probe it, without another read. PLACEHOLDER SHAPE: the games set's change that stores a game's
+ * identity, its readings and the open list is being written; its read names and shapes replace these
+ * when they are posted, in this file only.
+ */
+const OPEN_GAME = {
+	type: "tuple",
+	components: [
+		{ name: "gameId", type: "uint256" },
+		{ name: "status", type: "uint8" },
+		{ name: "start", type: "uint64" },
+		{ name: "window", type: "uint64" },
+		{ name: "day7Clock", type: "uint64" },
+		{ name: "disputedAt", type: "uint64" },
+		{ name: "league", type: "string" },
+		{ name: "hints", ...HINT, type: "tuple[]" },
+	],
+} as const;
+
+/**
+ * The games set's reads the workflow takes. The first seven are IOspexGames at contracts-v2 main;
+ * `getGameIdentity` and `getGameReadings` are as the games set's change names them (the readings read
+ * gives the start report's readings whole and each seat's last vote in the order the seats first
+ * voted, with the dispute clock); `getOpenGames` is the placeholder above, rows where the change
+ * names ids, pending its answer.
+ */
 export const GAMES_READS = [
 	{ type: "function", name: "getGameStatus", stateMutability: "view", inputs: [{ name: "gameId", type: "uint256" }], outputs: [{ type: "uint8" }] },
 	{ type: "function", name: "getGameStart", stateMutability: "view", inputs: [{ name: "gameId", type: "uint256" }], outputs: [{ type: "uint64" }] },
@@ -160,7 +266,32 @@ export const GAMES_READS = [
 	{ type: "function", name: "getApprovedReporters", stateMutability: "view", inputs: [], outputs: [{ type: "address[]" }, { type: "uint8[]" }] },
 	{ type: "function", name: "getReporter", stateMutability: "view", inputs: [{ name: "reporter", type: "address" }], outputs: [{ type: "uint8" }, { type: "bool" }, { type: "bytes32" }] },
 	{ type: "function", name: "i_token", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+	{ type: "function", name: "getGameReporters", stateMutability: "view", inputs: [{ name: "gameId", type: "uint256" }], outputs: [{ type: "address[]" }, { type: "uint8[]" }] },
+	{
+		type: "function",
+		name: "getOpenGames",
+		stateMutability: "view",
+		inputs: [{ name: "offset", type: "uint256" }, { name: "limit", type: "uint256" }],
+		outputs: [{ name: "rows", ...OPEN_GAME, type: "tuple[]" }, { name: "total", type: "uint256" }],
+	},
+	{
+		type: "function",
+		name: "getGameIdentity",
+		stateMutability: "view",
+		inputs: [{ name: "gameId", type: "uint256" }],
+		outputs: [{ name: "league", type: "string" }, { name: "homeTeam", type: "string" }, { name: "awayTeam", type: "string" }, { name: "date", type: "uint64" }, { name: "hints", ...HINT, type: "tuple[]" }],
+	},
+	{
+		type: "function",
+		name: "getGameReadings",
+		stateMutability: "view",
+		inputs: [{ name: "gameId", type: "uint256" }],
+		outputs: [{ name: "startReadings", ...READING, type: "tuple[]" }, { name: "votes", ...READING, type: "tuple[]" }, { name: "disputedAt", type: "uint64" }],
+	},
 ] as const;
+
+/** The most rows of the open list one read asks for: about 12 words a row, under the 25 KB an answer may be. */
+export const OPEN_PAGE = 64;
 
 /** The games set's GameStatus, by number, to the program's names. 0 (None) is never a game. */
 export const GAME_STATUS = Object.freeze({
@@ -386,4 +517,59 @@ export function keysFor(queryKeys: Readonly<Partial<Record<Seat, string>>>): Key
 /** The seats whose key goes in the query, which the run reads from the vault. */
 export function querySeats(): readonly Seat[] {
 	return SEATS.filter((r) => "query" in seatRow(r.seat).key).map((r) => r.seat);
+}
+
+// ──────────────────────────── The transport, bounded ───────────────
+
+/**
+ * A transport that answers a request it already made in this run from memory: the same method, URL and
+ * headers give the same answer. A run asks some requests twice (verification's probe near the date and
+ * its re-read in the window share filing dates; the tick's probe at seat 3 and the full read it leads
+ * to share the result), and the platform counts each request it sends; this keeps the count to the
+ * distinct ones. A request that throws is not kept, so the next ask of it sends again.
+ */
+export function memoized(send: (req: HttpRequest) => HttpResponse): (req: HttpRequest) => HttpResponse {
+	const seen = new Map<string, HttpResponse>();
+	return (req) => {
+		const headers = Object.entries(req.headers)
+			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+			.map(([k, v]) => `${k}: ${v}`)
+			.join("\n");
+		const key = `${req.method} ${req.url}\n${headers}`;
+		const hit = seen.get(key);
+		if (hit !== undefined) return hit;
+		const res = send(req);
+		seen.set(key, res);
+		return res;
+	};
+}
+
+/** A transport that refuses the request past the limit, before sending, so the run's own count is what stops it. */
+export function counted(send: (req: HttpRequest) => HttpResponse, limit: number): { send: (req: HttpRequest) => HttpResponse; used: () => number } {
+	let used = 0;
+	return {
+		used: () => used,
+		send(req) {
+			if (used >= limit) throw new Error(`the run's ${limit} requests are used`);
+			used++;
+			return send(req);
+		},
+	};
+}
+
+// ──────────────────────────── The probe ────────────────────────────
+
+/**
+ * The seat the tick probes for a game: seat 3, read by its hint in one request, or, for a game created
+ * without a usable seat 3 hint, the spare that stands in for it. The probe asks only whether the game
+ * is over; whether the seat counts at scoring is the program's to decide from the start report. A
+ * reading says final when it carries a final, or when the feed says the game is over without points
+ * the program could take.
+ */
+export function probeSeatFor(hints: ChainGame["hints"]): Seat {
+	return "none" in hintOf(hints) ? SPARE : 3;
+}
+
+export function saysFinal(r: Reading): boolean {
+	return r.kind === "final" || r.saysFinal === true;
 }

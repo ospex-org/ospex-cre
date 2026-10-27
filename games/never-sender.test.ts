@@ -16,14 +16,14 @@ import { KEY, saved } from "../scoring/test/fixtures";
 import { PAYOUT, chainOf } from "../scoring/test/rule-helpers";
 import { decodeReport, encodeReport, keysFor } from "./lib";
 import { runGame } from "./run";
-import { GAMES, ZERO, creationOf, fakeChain, recordingWriter } from "./test-helpers";
+import { GAMES, REPORTER, ZERO, fakeChain, recordingWriter } from "./test-helpers";
 
 const KEYS = keysFor({ 4: KEY });
 const OTHER = "0x00000000000000000000000000000000000b2b2b";
 
 function written(game: ReturnType<typeof chainOf>, now: number, payout: string) {
 	const writer = recordingWriter();
-	const run = runGame({ evm: fakeChain(game, now), games: GAMES, payout, keys: KEYS, send: saved(undefined, now).send, write: writer.write }, creationOf(game));
+	const run = runGame({ evm: fakeChain(game, now), games: GAMES, payout, keys: KEYS, send: saved(undefined, now).send, write: writer.write }, game, [REPORTER]);
 	return { run, bytes: writer.written };
 }
 

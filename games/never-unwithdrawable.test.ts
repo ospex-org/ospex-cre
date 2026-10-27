@@ -19,7 +19,7 @@ import { PAYOUT, chainOf } from "../scoring/test/rule-helpers";
 import { readPayoutRefused } from "./chain";
 import { configSchema, keysFor } from "./lib";
 import { runGame } from "./run";
-import { COIN, GAMES, REPORTER, RETIRED, creationOf, fakeChain, recordingWriter } from "./test-helpers";
+import { COIN, GAMES, REPORTER, RETIRED, fakeChain, recordingWriter } from "./test-helpers";
 
 const KEYS = keysFor({ 4: KEY });
 const VALID = {
@@ -30,6 +30,8 @@ const VALID = {
 	secretOwner: "0x40047BAFcdEd16C938058b7b67186299a2893561",
 	secretNamespace: "main",
 	payoutAddress: PAYOUT,
+	schedule: "0 */5 * * * *",
+	shards: 3,
 };
 
 describe("never: the dollar goes where it cannot be withdrawn", () => {
@@ -77,13 +79,13 @@ describe("never: the dollar goes where it cannot be withdrawn", () => {
 			[GAMES, "the games set"],
 		] as const) {
 			const writer = recordingWriter();
-			const go = () => runGame({ evm: fakeChain(game, after), games: GAMES, payout, keys: KEYS, send: saved(undefined, after).send, write: writer.write }, creationOf(game));
+			const go = () => runGame({ evm: fakeChain(game, after), games: GAMES, payout, keys: KEYS, send: saved(undefined, after).send, write: writer.write }, game, [REPORTER]);
 			expect(go).toThrow(why);
 			expect(writer.written.length).toBe(0);
 		}
 		// The control: a payout the games set takes is written.
 		const writer = recordingWriter();
-		runGame({ evm: fakeChain(game, after), games: GAMES, payout: PAYOUT, keys: KEYS, send: saved(undefined, after).send, write: writer.write }, creationOf(game));
+		runGame({ evm: fakeChain(game, after), games: GAMES, payout: PAYOUT, keys: KEYS, send: saved(undefined, after).send, write: writer.write }, game, [REPORTER]);
 		expect(writer.written.length).toBe(1);
 	});
 });

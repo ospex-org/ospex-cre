@@ -14,7 +14,7 @@
 import { describe, expect, test } from "bun:test";
 import { SEATS } from "../scoring/src/table";
 import type { Seat } from "../scoring/src/types";
-import { configSchema, keysFor, placeholderFor, querySeats, secretOfHeader } from "./lib";
+import { configSchema, keysFor, periodOf, placeholderFor, querySeats, secretOfHeader, shardScheduleOf } from "./lib";
 
 const VALID = {
 	receiverAddress: "0x4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e",
@@ -24,19 +24,35 @@ const VALID = {
 	secretOwner: "0x40047BAFcdEd16C938058b7b67186299a2893561",
 	secretNamespace: "main",
 	payoutAddress: "0x00000000000000000000000000000000000a1a1a",
+	schedule: "0 */5 * * * *",
+	shards: 3,
 };
 
 describe("never: nothing outside the fingerprint chooses the feeds or the counts", () => {
-	test("the config is seven deploy values and refuses any other field", () => {
+	test("the config is seven deploy values and the tick's shape, and refuses any other field", () => {
 		const ok = configSchema.safeParse(VALID);
 		expect(ok.success).toBe(true);
 		expect(Object.keys(ok.success ? ok.data : {}).sort()).toEqual(
-			["chainId", "chainSelectorName", "eventAddress", "payoutAddress", "receiverAddress", "secretNamespace", "secretOwner"],
+			["chainId", "chainSelectorName", "eventAddress", "payoutAddress", "receiverAddress", "schedule", "secretNamespace", "secretOwner", "shards"],
 		);
-		for (const extra of [{ seats: [1, 2] }, { agree: 2 }, { counting: [1, 2, 3] }, { feeds: {} }, { rule: "afterN" }, { schedule: "* * * * *" }]) {
+		for (const extra of [{ seats: [1, 2] }, { agree: 2 }, { counting: [1, 2, 3] }, { feeds: {} }, { rule: "afterN" }, { duration: { nba: 1 } }, { probe: 3 }, { reserve: 10 }]) {
 			const r = configSchema.safeParse({ ...VALID, ...extra });
 			expect({ extra, refused: !r.success }).toEqual({ extra, refused: true });
 		}
+	});
+
+	test("the schedule is a tick at whole minutes that divide the hour, and the shards one to nine", () => {
+		for (const schedule of ["0 */5 * * * *", "0 */1 * * * *", "0 */30 * * * *", "0 */60 * * * *"]) {
+			expect({ schedule, ok: configSchema.safeParse({ ...VALID, schedule }).success }).toEqual({ schedule, ok: schedule !== "0 */60 * * * *" });
+		}
+		for (const schedule of ["*/5 * * * * *", "0 */7 * * * *", "30 */5 * * * *", "0 5 * * * *", "* * * * *", ""]) {
+			expect({ schedule, ok: configSchema.safeParse({ ...VALID, schedule }).success }).toEqual({ schedule, ok: false });
+		}
+		for (const shards of [0, 10, 1.5, -1]) expect(configSchema.safeParse({ ...VALID, shards }).success).toBe(false);
+		for (const shards of [1, 9]) expect(configSchema.safeParse({ ...VALID, shards }).success).toBe(true);
+		expect(periodOf("0 */5 * * * *")).toBe(300);
+		expect([0, 1, 2].map((k) => shardScheduleOf("0 */5 * * * *", k, 3))).toEqual(["0 */5 * * * *", "20 */5 * * * *", "40 */5 * * * *"]);
+		expect(() => shardScheduleOf("0 */5 * * * *", 3, 3)).toThrow();
 	});
 
 	test("the chain is named once: a selector name beside another chain's id is refused", () => {

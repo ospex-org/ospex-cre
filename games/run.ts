@@ -1,7 +1,7 @@
-// One run for one game: read the game from the chain, hand it to the scoring program with the keys,
-// the payout address and the chain's clock, and write the report it decided, if it decided one. The
-// wrapper's whole job is in this file, and it is written against interfaces so a test can run it with
-// a fake chain, saved feed answers and a recording writer.
+// One run for one game: hand the game, as the chain holds it, to the scoring program with the keys,
+// the payout address, the chain's clock and what the games set refuses as a payout, and write the
+// report it decided, if it decided one. The wrapper's whole job is in this file, and it is written
+// against interfaces so a test can run it with a fake chain, saved feed answers and a recording writer.
 //
 // What the wrapper never does: it decides nothing. The report it writes is the program's Report,
 // encoded as the one shape, field for field; a run the program decided to wait on writes nothing. The
@@ -13,8 +13,8 @@ import type { Decision, ChainGame, Report } from "../scoring/src/chain";
 import type { Keys } from "../scoring/src/keys";
 import { scoreGameSync } from "../scoring/src/program";
 import type { HttpRequest, HttpResponse } from "../scoring/src/types";
-import { readGame, readPayoutRefused, type Evm } from "./chain";
-import { encodeReport, type Creation } from "./lib";
+import { readPayoutRefused, type Evm } from "./chain";
+import { encodeReport } from "./lib";
 
 /** What a run needs from outside. */
 export interface Deps {
@@ -44,16 +44,21 @@ export interface Run {
 	readonly txHash: string | null;
 }
 
-/** Runs the program for one game and writes what it decided. */
-export function runGame(deps: Deps, creation: Creation): Run {
-	const refused = readPayoutRefused(deps.evm, deps.games, creation.reporters, deps.payout);
-	const game = readGame(deps.evm, deps.games, creation, refused);
-	const now = deps.evm.latest().timestamp;
-	const outcome = (deps.score ?? scoreGameSync)(game, deps.keys, deps.payout, now, deps.send);
-	if (outcome.report === null) return { game, now, decision: outcome.decision, report: null, written: null, txHash: null };
+/**
+ * Runs the program for one game and writes what it decided. The game is handed in as the chain holds
+ * it (from the creation event for a start, from state for an end); the run adds what the games set
+ * refuses as a payout, read from the chain with the game's own reporters, and the chain's clock.
+ */
+export function runGame(deps: Deps, game: Omit<ChainGame, "payoutRefused">, reporters: readonly Address[], clock?: number): Run {
+	const refused = readPayoutRefused(deps.evm, deps.games, reporters, deps.payout);
+	const held: ChainGame = { ...game, payoutRefused: refused };
+	// The chain's clock: read here, or handed in by a tick that read it already for this run.
+	const now = clock ?? deps.evm.latest().timestamp;
+	const outcome = (deps.score ?? scoreGameSync)(held, deps.keys, deps.payout, now, deps.send);
+	if (outcome.report === null) return { game: held, now, decision: outcome.decision, report: null, written: null, txHash: null };
 	const written = encodeReport(outcome.report);
 	const txHash = deps.write(written);
-	return { game, now, decision: outcome.decision, report: outcome.report, written, txHash };
+	return { game: held, now, decision: outcome.decision, report: outcome.report, written, txHash };
 }
 
 /** The run's one line for the log. */

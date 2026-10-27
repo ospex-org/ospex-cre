@@ -39,7 +39,8 @@ and destination separation each behave as the spec says.
 |---|---|
 | `fork.ts` | the harness: the forwarder's DON, the deploy, four games, the runs, the deliveries, every check |
 | `forwarder.ts` | the forwarder's calling convention: the raw report's header, the signatures, the metadata slice |
-| `rpc.ts` | the wrapper's chain interface over a node, counting its reads |
+| `rpc.ts` | the wrapper's chain interface over a node, with the log query a fork serves, counting its reads |
+| `logs.ts` | a game past its creation read from the games set's events, as the games set at `4364295` lets a fork read it; the workflow reads from state once the games set stores it, and this stays with the rehearsal until it is re-run against that games set |
 | `requests.ts` | how many feed requests a run makes, per saved case, against the per-execution quota |
 | `transcript.txt` | the run of 27 Oct 2026, as printed |
 
@@ -95,7 +96,9 @@ deliveries, every one read back from the chain (`transcript.txt`).
 | 22 | NHL | day 7, "three sources or more, the same final" | 0 | 6, 2, 2 | scored | 144,746 |
 
 The payout address withdrew the four fees; the games set held no coin at the end. A delivery that
-lands costs the transmitter 124,000 to 160,000 gas; a refused one 85,000 to 109,000.
+lands costs the transmitter 124,000 to 160,000 gas; a refused one 85,000 to 109,000. Re-run the same
+afternoon, after the workflow's reads moved to state and the harness kept the event reads
+(`logs.ts`): the same 51 checks and 22 deliveries, exit 0.
 
 ## What it showed beyond the list
 

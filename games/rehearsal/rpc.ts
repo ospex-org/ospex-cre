@@ -22,8 +22,11 @@ function hex(n: bigint): Hex {
 	return `0x${n.toString(16)}`;
 }
 
-/** The wrapper's chain, over a node: counts its reads so a run's cost can be stated. */
-export function evmOverRpc(url: string): Evm & { readonly reads: { calls: number; logs: number; headers: number } } {
+/** The wrapper's chain, over a node, with the log query a fork serves (logs.ts): counts its reads so a run's cost can be stated. */
+export function evmOverRpc(url: string): Evm & {
+	readonly reads: { calls: number; logs: number; headers: number };
+	logs(address: Address, topics: readonly (Hex | null)[], fromBlock: bigint, toBlock: bigint): readonly RawLog[];
+} {
 	const reads = { calls: 0, logs: 0, headers: 0 };
 	return {
 		reads,

@@ -34,6 +34,7 @@ import { KEY, saved, type Derive } from "../../scoring/test/fixtures";
 import { GAME_CREATED, GAME_CREATED_TOPIC, GAME_REPORTED, decodeGameCreated, encodeReport, keysFor, type Creation } from "../lib";
 import { runGame, type Run } from "../run";
 import { CONTEXT, FORWARDER, FORWARDER_ABI, metadataOf, rawReportOf, signaturesOf } from "./forwarder";
+import { gameFromLogs } from "./logs";
 import { evmOverRpc } from "./rpc";
 
 // ──────────────────────────── The fork and its accounts ────────────────
@@ -220,7 +221,8 @@ function runOf(games: Address, creation: Creation, asOf: number, derive?: Derive
 				return null;
 			},
 		},
-		creation,
+		gameFromLogs(evm, games, creation),
+		creation.reporters,
 	);
 	const reads = { calls: evm.reads.calls - before.calls, logs: evm.reads.logs - before.logs, headers: evm.reads.headers - before.headers };
 	say(

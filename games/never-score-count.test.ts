@@ -19,7 +19,7 @@ import { KEY, saved } from "../scoring/test/fixtures";
 import { PAYOUT, chainOf } from "../scoring/test/rule-helpers";
 import { decodeReport, keysFor } from "./lib";
 import { runGame } from "./run";
-import { GAMES, creationOf, fakeChain, recordingWriter } from "./test-helpers";
+import { GAMES, REPORTER, fakeChain, recordingWriter } from "./test-helpers";
 
 const KEYS = keysFor({ 4: KEY });
 
@@ -30,7 +30,7 @@ function deps(game: ReturnType<typeof chainOf>, now: number, score?: (...a: neve
 	return {
 		chain,
 		writer,
-		run: () => runGame({ evm: chain, games: GAMES, payout: PAYOUT, keys: KEYS, send: t.send, write: writer.write, score: score as never }, creationOf(game)),
+		run: () => runGame({ evm: chain, games: GAMES, payout: PAYOUT, keys: KEYS, send: t.send, write: writer.write, score: score as never }, game, [REPORTER]),
 	};
 }
 
