@@ -155,6 +155,38 @@ The id is rebuilt from source the way BUILD.md describes, with the derived owner
 `cre workflow hash ./workflow --target probe-settings --public_key 0x48bA031941af7e8657B5C8B8Ea130717A9d7c443`
 with `workflow/config.json` as deployed must print E1 (and, with the tag changed, E2).
 
+## The run, 27 Oct 2026
+
+* **The consumer:** `0xA0aB892B1B22D7c6381408D19E891DBE3a3f551F` on Polygon, deployed by the
+  operator's working wallet at block 96,251,090 (transaction `0xddbad83f6c4ad970de6bc6857519e8d7131f97c5775defe43ed37ac438dda6be`),
+  799,185 gas at 192 gwei: 0.153 POL. Its creation calldata is byte for byte this folder's initcode
+  plus the forwarder argument.
+* **E1:** `osprobe` deployed to the private registry with the tag `osprobe-a`, id
+  `0x000f950dd837c795bbec5bf251beb68dda1ee328b0115e50fc5d6ce54ef6c7b7`, active under the derived
+  owner. `cre workflow hash` with the config as deployed and `--public_key` the derived owner
+  reproduces it (binary `22002ff0…`, config `418e193d…`).
+* **The first delivery**, at the 06:40 UTC cron mark: forwarder transaction
+  `0xba40fb34ead1bc849512471bf27eb50ad66cb47ac31eb6b6288eb323edc07038`, block 96,251,892 at
+  06:40:09 UTC, 442,178 gas paid by a DON transmitter. The probe kept 64 bytes of metadata:
+  the id E1, the name `0x38633764313938666164` (ASCII `8c7d198fad`, the first ten hex characters
+  of SHA-256 of `osprobe`), the owner `0x48bA031941af7e8657B5C8B8Ea130717A9d7c443`, the report id
+  `0x0000`; and a 128-byte report decoding as `(1793083200, "osprobe-a")`. The forwarder's
+  `ReportProcessed` carried result `1`.
+* **E2:** the redeploy with the tag `osprobe-b`, id
+  `0x00ef7f8306d7dc61246768ac928a7919b24c9caec0eb6803c27db85c077259f1`, the binary hash unchanged
+  and the config hash moved, reproduced the same way; this time `list` and `get` showed it within
+  minutes.
+* **The second delivery**, at the 06:50 UTC mark: forwarder transaction
+  `0x7614280737361a263199b3eef8702b2915705c8183babc2cf98ee2943fcb58bd`, block 96,252,292 at
+  06:50:09 UTC, 424,250 gas, another transmitter. The same 64-byte layout with the id E2, the same
+  name and owner, the report id `0x0000` again, the report `(1793083800, "osprobe-b")`, result `1`.
+* **Deleted** afterwards; a second `delete` answered "workflow not found". The consumer stays on
+  chain with its two deliveries.
+
+Two things learned on the way: the signature form of `cast logs` ignores a positional topic and
+returns every receiver's logs (`steps/read.ps1` filters by raw topics), and the report id was
+`0x0000` on both deliveries, where v2's live report carried `0x0002`.
+
 ## What this does and does not prove
 
 It proves the path: a workflow on the private registry writes to Polygon through the production

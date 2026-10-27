@@ -43,12 +43,15 @@ Write-Host ""
 Write-Host ("expected workflowName for osprobe: " + $asBytes + "  (ASCII '" + $ten + "')")
 Write-Host "expected workflowOwner: 0x48bA031941af7e8657B5C8B8Ea130717A9d7c443 (the organisation's derived owner)"
 
-# --- Command 4 of 4: the forwarder's own record of each delivery to this probe over the last 9,000 blocks (ReportProcessed: receiver, workflowExecutionId, reportId, result)
+# --- Command 4 of 4: the forwarder's own record of each delivery to this probe over the last 9,000 blocks
+# (ReportProcessed(address indexed receiver, bytes32 indexed workflowExecutionId, bytes2 indexed reportId, bool result);
+# raw topics, since the signature form of cast logs ignores a positional topic and returns every receiver's logs)
 
 $latest = [int64](cast block-number --rpc-url $Rpc)
 $from = $latest - 9000
 if ($from -lt 0) { $from = 0 }
+$topic0 = "0x3617b009e9785c42daebadb6d3fb553243a4bf586d07ea72d65d80013ce116b5"
 $topic1 = "0x" + ("0" * 24) + $Probe.Substring(2).ToLower()
 Write-Host ""
-Write-Host ("ReportProcessed logs for this probe, blocks " + $from + " to " + $latest + ":")
-cast logs --rpc-url $Rpc --from-block $from --to-block $latest --address $forwarder "ReportProcessed(address,bytes32,bytes2,bool)" $topic1
+Write-Host ("ReportProcessed logs for this probe, blocks " + $from + " to " + $latest + " (data 0x..01 = taken, 0x..00 = refused):")
+cast logs --rpc-url $Rpc --from-block $from --to-block $latest --address $forwarder $topic0 $topic1
