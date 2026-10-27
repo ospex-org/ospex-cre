@@ -19,6 +19,7 @@ is in it, since those live in the program, inside the fingerprint.
 | `config.production.example.json` | the config template the reproducible build writes from; every address a placeholder |
 | `secrets.yaml` | the four seat keys' names in the vault |
 | `workflow.yaml` | the CRE target: `osgames` on the onchain registry |
+| `rehearsal/` | the fork delivery: the runs delivered through the production forwarder's own bytecode on a fork of Polygon, with its record |
 
 ## What the wrapper hands the program
 
@@ -41,14 +42,21 @@ is in it, since those live in the program, inside the fingerprint.
 
 Built: the creation event as the EVM log trigger, so a new game is verified and its start written;
 the chain reads for every status; the report writer; the fingerprinted files with the payout as a
-named placeholder; the never-line tests.
+named placeholder; the never-line tests; and the fork delivery (`rehearsal/`), every report kind
+through the production forwarder's own bytecode into the games set, with the game's state as the
+receipt.
 
-Waiting on a ruling: **what fires a run for a game past its start** (the score, the hour-24 void,
-the dispute record and its updates, the day-7 result). A cron on the DON walks the open games; an
-HTTP trigger from the operator's box carries the game id at the moment it matters. Either way the run
-reads the game from the chain and decides on the feeds alone. Until it is ruled, `main.ts` has no
-handler for a game past its start, and no file depends on which it will be: the second trigger, how
-that run finds the game's creation event, and whatever the trigger needs in the config.
+Waiting on a decision: **the ends**, a run for a game past its start (the score, the hour-24 void,
+the dispute record and its updates, the day-7 result), to be a cron on the DON that walks the
+games past their start plus the league's expected duration, probes seat 3 for each, and runs the full
+read on seat 3's final or a clock. Before its first file, two of the platform's quotas stopped it: a
+run may make 15 chain reads and a log query may span 100 blocks, so a run for a game past its start
+cannot find the creation event, which alone carries the game's identity, nor the start report's
+readings and the dispute records, which are in events only (the games set stores none of them); and
+a verification that writes a start asks 18 feed requests against a cap of 15 per run. What the ends
+need is the identity and the readings in state, by one of the ways under decision; until then no
+file here depends on which. The reads in `chain.ts` from the creation block run on a fork and in
+the tests; on the DON they wait on that decision.
 
 ## Build and test
 
