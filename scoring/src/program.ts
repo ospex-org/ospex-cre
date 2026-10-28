@@ -26,7 +26,9 @@
 //
 // The run is written once, as a plan that yields one seat's reading at a time, and driven by a
 // synchronous transport (the Chainlink workflow's) or an asynchronous one (a sealed machine's
-// fetch). A transport that throws makes that seat silent, never the run's decision.
+// fetch). A transport that throws makes that seat silent, never the run's decision, with one
+// exception: a cut (run.ts, Cut), the caller's own count of requests used up, is raised through the
+// run, which then decides nothing and builds no report.
 
 import { READING_KIND, type ChainGame, type Decision, type Report, type ReportReading } from "./chain";
 import { readerFor, seatsFor } from "./index";
@@ -35,7 +37,7 @@ import { checkBoard, type BoardCheck, type BoardRun } from "./readers/board3";
 import { hintOf } from "./readers/seat3";
 import { toReport } from "./report";
 import { OPEN_FOR, countingFor, decideDisputed, decideVerified, lastRecorded, silentForGame } from "./rule";
-import { MAX_REQUESTS, runAsync, runSync, silent } from "./run";
+import { MAX_REQUESTS, isCut, runAsync, runSync, silent } from "./run";
 import { leagueRow } from "./table";
 import type { Game, HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
 import { START_BOUND, confirmStart, decideStart } from "./verify";
@@ -271,7 +273,8 @@ function boardSync(run: BoardRun, send: (req: HttpRequest) => HttpResponse): Boa
 			if (asked >= MAX_REQUESTS) return { kind: "silent", why: "request bound" };
 			step = run.next(send(step.value));
 		}
-	} catch {
+	} catch (e) {
+		if (isCut(e)) throw e;
 		return { kind: "silent", why: "transport" };
 	}
 	return step.value;
@@ -285,7 +288,8 @@ async function boardAsync(run: BoardRun, send: (req: HttpRequest) => Promise<Htt
 			if (asked >= MAX_REQUESTS) return { kind: "silent", why: "request bound" };
 			step = run.next(await send(step.value));
 		}
-	} catch {
+	} catch (e) {
+		if (isCut(e)) throw e;
 		return { kind: "silent", why: "transport" };
 	}
 	return step.value;

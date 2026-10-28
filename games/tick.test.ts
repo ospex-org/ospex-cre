@@ -306,7 +306,7 @@ describe("one tick", () => {
 		const first = tick(games, PROBING, { says: () => "final" });
 		const read = first.result.fullRead?.gameId;
 		expect(["1", "2", "3"]).toContain(read);
-		expect([...first.result.waiting].sort()).toEqual(["1", "2", "3"].filter((id) => id !== read).map((id) => `${id}: final at seat 3, the full read waits for the next tick`));
+		expect([...first.result.waiting].sort()).toEqual(["1", "2", "3"].filter((id) => id !== read).map((id) => `${id}: final at seat 3 waits: one full read a tick`));
 		expect(first.written.length).toBe(1);
 		const next = tick(games, PROBING + PERIOD, { says: () => "final" });
 		expect(["1", "2", "3"]).toContain(next.result.fullRead?.gameId);
@@ -323,7 +323,7 @@ describe("one tick", () => {
 				expect([f.result.open, f.result.mine]).toEqual([count, Math.min(count, 128)]);
 				expect(f.written.length).toBe(says === "final" && count > 0 ? 1 : 0);
 				expect(f.result.probes.length + f.result.waiting.filter((w) => w.endsWith("for its probe")).length).toBe(f.result.mine);
-				if (says === "final" && count > 1) expect(f.result.waiting.filter((w) => w.includes("waits for the next tick")).length).toBe(f.result.probes.length - 1);
+				if (says === "final" && count > 1) expect(f.result.waiting.filter((w) => w.endsWith("waits: one full read a tick")).length).toBe(f.result.probes.length - 1);
 			}
 		}
 	});
@@ -475,7 +475,7 @@ describe("the verification on the hour's first tick", () => {
 		const inWindow = unverifiedOf(9, { date: day7 + 86_400 });
 		expect(dueOf(row(inWindow), day7, PERIOD)).toEqual({ kind: "verify", fires: true });
 		const atDay7 = tick([inWindow, disputed], day7, { program: waiter() });
-		expect([atDay7.result.fullRead?.why, atDay7.result.waiting]).toEqual(["verification", ["8: day 7"]]);
+		expect([atDay7.result.fullRead?.why, atDay7.result.waiting]).toEqual(["verification", ["8: day 7 waits: one full read a tick"]]);
 		expect(tick([inWindow, disputed], day7 + PERIOD, { program: waiter() }).result.fullRead?.why).toBe("day 7");
 		const unverified = unverifiedOf(9);
 		// Six verified games final at seat 3 beside the unverified one: the real verification sends 11, four probes follow, the rest wait.
@@ -486,17 +486,53 @@ describe("the verification on the hour's first tick", () => {
 		const f = tick([unverified, ...finals], VERIFY_AT, { program: "real", send });
 		expect([f.result.fullRead?.why, f.result.fullRead?.run?.decision.action, f.written.length]).toEqual(["verification", "start", 1]);
 		expect([f.result.requests, f.result.probes.length, f.result.probes.every((p) => p.final)]).toEqual([15, 4, true]);
-		expect(f.result.waiting.filter((w) => w.endsWith("the full read waits for the next tick")).length).toBe(4);
+		expect(f.result.waiting.filter((w) => w.endsWith("waits: one full read a tick")).length).toBe(4);
 		expect(f.result.waiting.filter((w) => w.endsWith("no request left for its probe")).length).toBe(2);
 		expect(f.result.reads).toBeLessThanOrEqual(READS_PER_EXECUTION);
 	});
 
-	test("a verification that reaches the count sends no more: the seats past it read silent, the program waits, nothing is written", () => {
+	test("a full read starts only when its league's worst case of requests fits the count; otherwise it waits, with nothing of it sent", () => {
+		// A verification needs 13 for this league (budget.test.ts): under a count of 5 it is not started.
 		const t = saved(undefined, VERIFY_AT);
 		const f = tick([unverifiedOf(1)], VERIFY_AT, { program: "real", send: t.send, requestsLimit: 5 });
-		expect(f.result.fullRead).toMatchObject({ gameId: "1", why: "verification", error: null });
-		expect(f.result.fullRead?.run?.decision.action).toBe("wait");
-		expect([f.written.length, f.result.requests, t.asked.length]).toEqual([0, 5, 5]);
+		expect([f.result.fullRead, f.result.waiting, f.written.length, f.result.requests, t.asked.length]).toEqual([null, ["1: verification waits: needs 13 requests, 5 left"], 0, 0, 0]);
+		// Under a count of 13 it is: 11 sent on the saved answers, the start written.
+		const t13 = saved(undefined, VERIFY_AT);
+		const ok = tick([unverifiedOf(1)], VERIFY_AT, { program: "real", send: t13.send, requestsLimit: 13 });
+		expect([ok.result.fullRead?.why, ok.result.fullRead?.run?.decision.action, ok.written.length, ok.result.requests]).toEqual(["verification", "start", 1, 11]);
+		// College: a scoring run's worst case is 26 and a verification's 27, past the platform's 15, so under
+		// it neither starts: the final found by the probe waits every tick, holding the work, and the
+		// unverified game waits every hour; nothing is sent for either. Under a count that holds the worst
+		// case, both run.
+		const college = gameOf(1, { league: "ncaab" });
+		const held = tick([college], PROBING, { says: () => "final" });
+		expect([held.result.probes.length, held.result.fullRead, held.result.waiting, held.asked.length, held.written.length]).toEqual([1, null, ["1: final at seat 3 waits: needs 26 requests, 14 left"], 1, 0]);
+		const room = tick([college], PROBING, { says: () => "final", requestsLimit: 30 });
+		expect([room.result.fullRead?.why, room.written.length]).toEqual(["final at seat 3", 1]);
+		const unverified = tick([unverifiedOf(1, { league: "ncaab" })], VERIFY_AT, { program: waiter() });
+		expect([unverified.result.fullRead, unverified.result.waiting, unverified.handed.length, unverified.asked.length]).toEqual([null, ["1: verification waits: needs 27 requests, 15 left"], 0, 0]);
+		expect(tick([unverifiedOf(1, { league: "ncaab" })], VERIFY_AT, { program: waiter(), requestsLimit: 27 }).handed.length).toBe(1);
+	});
+
+	test("a full read the count cuts all the same writes nothing: the readers raise the cut, the run ends undecided, and the tick's line says cut", () => {
+		// A program stand-in that sends `n` distinct requests through the run's transport before it scores.
+		const sender = (n: number): TickDeps["score"] =>
+			((game: ChainGame, _k: unknown, _p: unknown, _now: unknown, send: (req: HttpRequest) => HttpResponse): Outcome => {
+				for (let i = 0; i < n; i++) send({ method: "GET", url: `https://example.invalid/${i}`, headers: {} });
+				return { decision: { action: "score", home: 114, away: 106, readings: [], why: "a stand-in scores" }, report: SCORE_REPORT(game.id) };
+			}) as TickDeps["score"];
+		const answers = (): HttpResponse => ({ status: 200, body: "[]" });
+		const g = gameOf(1);
+		const at = START + g.n + 10;
+		const chain = fakeChainOf([g], at);
+		const writer = recordingWriter();
+		const cut = runTick({ evm: chain, games: GAMES, payout: PAYOUT, keys: KEYS, send: answers, write: writer.write, score: sender(20), period: PERIOD, shard: { index: 0, count: 1 } });
+		expect(cut.fullRead).toEqual({ gameId: "1", why: "hour 24", run: null, error: "the run's 15 requests are used", cut: true });
+		expect(cut.lines).toContain("full read, hour 24: game 1 cut: the run's 15 requests are used");
+		expect([writer.written.length, cut.requests]).toEqual([0, 15]);
+		// The same stand-in within the count: the score is written, and the full read is not a cut.
+		const ok = runTick({ evm: fakeChainOf([g], at), games: GAMES, payout: PAYOUT, keys: KEYS, send: answers, write: writer.write, score: sender(5), period: PERIOD, shard: { index: 0, count: 1 } });
+		expect([ok.fullRead?.cut, ok.fullRead?.run?.decision.action, writer.written.length, ok.requests]).toEqual([false, "score", 1, 5]);
 	});
 
 	test("a write the reporter refuses ends the run with its error on the tick's line, and the tick goes on", () => {

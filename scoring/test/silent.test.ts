@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { readerFor } from "../src/index";
-import { MAX_REQUESTS, runAsync, runSync } from "../src/run";
+import { Cut, MAX_REQUESTS, isCut, runAsync, runSync } from "../src/run";
 import type { Game, HttpRequest, HttpResponse, Seat } from "../src/types";
 import { CASES, NOW } from "./cases";
 import { KEY, copy, readSaved, saved, type Derive } from "./fixtures";
@@ -49,6 +49,17 @@ describe("silent", () => {
 			const r = await runAsync(seat, readerFor(seat)({ game: gameFor(seat), now: NOW, key: KEY }), async () => { throw new Error("boom"); });
 			expect(r).toMatchObject({ kind: "silent", detail: "transport" });
 		}
+	});
+
+	test("a cut is never silence: a transport whose own count is used up is raised by the reader, at every seat, sync and async", async () => {
+		for (const seat of SEATS) {
+			expect(() => readWith(seat, gameFor(seat), () => { throw new Cut("the run's 15 requests are used"); })).toThrow(Cut);
+			// Any error carrying `cut: true` is a cut too; a plain error with any other word is silence (above).
+			expect(() => readWith(seat, gameFor(seat), () => { throw Object.assign(new Error("used up"), { cut: true }); })).toThrow("used up");
+			expect(runAsync(seat, readerFor(seat)({ game: gameFor(seat), now: NOW, key: KEY }), async () => { throw new Cut("cut"); })).rejects.toThrow(Cut);
+		}
+		expect(isCut(new Cut("x"))).toBe(true);
+		expect([isCut(new Error("x")), isCut(null), isCut("cut")]).toEqual([false, false, false]);
 	});
 
 	test("an answer of the wrong shape, or a record the reader cannot read", () => {

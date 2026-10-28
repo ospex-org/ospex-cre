@@ -28,6 +28,7 @@ import {
 	type Runtime,
 } from "@chainlink/cre-sdk";
 import type { Address, Hex } from "viem";
+import { isCut } from "../scoring/src/run";
 import type { HttpRequest, HttpResponse, Seat } from "../scoring/src/types";
 import { gameOfCreation, type Evm } from "./chain";
 import {
@@ -126,18 +127,28 @@ const onGameCreated = (runtime: Runtime<Config>, log: EVMLog): string => {
 	});
 	runtime.log(`game created: ${creation.gameId} ${creation.league} at block ${creation.blockNumber}`);
 	const client = new cre.capabilities.EVMClient(resolveChainSelector(runtime.config.chainSelectorName, runtime.config.chainId));
-	const run = runGame(
-		{
-			evm: evmOf(runtime, client),
-			games: runtime.config.eventAddress as Address,
-			payout: runtime.config.payoutAddress,
-			keys: keysFor(queryKeysOf(runtime)),
-			send: transportOf(runtime),
-			write: writerOf(runtime, client),
-		},
-		gameOfCreation(creation),
-		creation.reporters,
-	);
+	let run;
+	try {
+		run = runGame(
+			{
+				evm: evmOf(runtime, client),
+				games: runtime.config.eventAddress as Address,
+				payout: runtime.config.payoutAddress,
+				keys: keysFor(queryKeysOf(runtime)),
+				send: transportOf(runtime),
+				write: writerOf(runtime, client),
+			},
+			gameOfCreation(creation),
+			creation.reporters,
+		);
+	} catch (e) {
+		// The run's own count of requests used up: the readers raised it, the program decided nothing and
+		// nothing was written. The tick verifies the game on the hour's first tick, with the same count.
+		if (!isCut(e)) throw e;
+		const line = `game ${creation.gameId}: verification cut: ${e instanceof Error ? e.message : String(e)}`;
+		runtime.log(line);
+		return line;
+	}
 	const line = summarize(run);
 	runtime.log(line);
 	return line;

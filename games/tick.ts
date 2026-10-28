@@ -12,23 +12,25 @@
 // anywhere but the chain and the feeds.
 //
 // The tick budgets the platform's quotas per execution: 15 chain reads and 15 feed requests. One full
-// read per tick, started only with its reads and requests in hand; probes while reads and requests
-// remain; a final found without room for its full read waits for the next tick, where the probes
-// start from another game, so no game is starved. Nothing here decides a score: the full read is the
-// program's run, and the probe asks only whether the game is over.
+// read per tick, started only with its reads in hand and the most requests the program may send for
+// that league (lib.ts, scoringRequests and verifyingRequests, from the readers' own pagination), so
+// the count never cuts a run short of the seats the program would read; probes while reads and
+// requests remain; a full read found without room waits for the next tick, where the probes start
+// from another game, so no game is starved and no work is dropped. Should the count still stop a run,
+// the readers raise the cut and the run writes nothing. Nothing here decides a score: the full read is
+// the program's run, and the probe asks only whether the game is over.
 
 import type { Address } from "viem";
 import type { ChainGame, ReportReading } from "../scoring/src/chain";
 import { readerFor } from "../scoring/src/index";
 import { keyFor } from "../scoring/src/keys";
 import { OPEN_FOR } from "../scoring/src/rule";
-import { runSync } from "../scoring/src/run";
+import { isCut, runSync } from "../scoring/src/run";
 import type { Game, HttpRequest, HttpResponse, Reading, Seat } from "../scoring/src/types";
 import { NO_READINGS, gameOfState, readIdentity, readOpenGames, readReadings, readReporters, type Evm, type Identity, type OpenGame, type Readings, type Shard } from "./chain";
 import {
 	CLOCK_WINDOW,
 	EXPECTED_DURATION,
-	FULL_READ_RESERVE,
 	HOURLY_TICK,
 	READS_PER_EXECUTION,
 	REQUESTS_PER_EXECUTION,
@@ -38,6 +40,8 @@ import {
 	memoized,
 	probeSeatFor,
 	saysFinal,
+	scoringRequests,
+	verifyingRequests,
 } from "./lib";
 import { runGame, summarize, type Deps, type Run } from "./run";
 
@@ -75,9 +79,11 @@ export interface Probe {
 export interface FullRead {
 	readonly gameId: string;
 	readonly why: string;
-	/** The run, or null when it threw: a read or a request past the count, or the write refused. */
+	/** The run, or null when it threw: a read past the count, the write refused, or a cut. */
 	readonly run: Run | null;
 	readonly error: string | null;
+	/** True when the tick's own count of requests cut the run: the readers raised it, nothing was decided or written. */
+	readonly cut: boolean;
 }
 
 export interface TickResult {
@@ -197,50 +203,67 @@ export function runTick(deps: TickDeps): TickResult {
 	};
 	/** The chain reads a full read of this game still needs: its identity and its readings unless in hand (an unverified game has none), its reporters, the three for the payout's refusals. */
 	const readsForFull = (row: OpenGame): number => (identities.has(row.gameId) ? 0 : 1) + (row.status === "unverified" || readings.has(row.gameId) ? 0 : 1) + 1 + 3;
-	const roomFor = (row: OpenGame, requestsNeeded: number): boolean => fullRead === null && reads + readsForFull(row) <= readsLimit && requests.used() + requestsNeeded <= requestsLimit;
+	/**
+	 * The most requests a full read of this game may send, the league's worst case from the readers' own
+	 * pagination: a verification's, a scoring run's, or none at day 7, which asks no seat.
+	 */
+	const requestsForFull = (row: OpenGame, why: string): number => {
+		if (why === "verification") return verifyingRequests(row.league, row.date, row.window);
+		if (why === "day 7") return 0;
+		return scoringRequests(row.league, row.start ?? now, row.window);
+	};
+	/** Why a full read of this game cannot start on this tick, or null when it can: one a tick, its reads, its league's worst case in requests. */
+	const shortOf = (row: OpenGame, why: string): string | null => {
+		if (fullRead !== null) return "one full read a tick";
+		const needReads = readsForFull(row);
+		if (reads + needReads > readsLimit) return `needs ${needReads} reads, ${readsLimit - reads} left`;
+		const need = requestsForFull(row, why);
+		if (requests.used() + need > requestsLimit) return `needs ${need} requests, ${requestsLimit - requests.used()} left`;
+		return null;
+	};
+	/** A full read of this game now, or the line that says why it waits, holding the work for the next tick or turn. */
+	const fullReadOrWait = (row: OpenGame, why: string): void => {
+		const short = shortOf(row, why);
+		if (short === null) fullReadOf(row, why);
+		else waiting.push(`${row.gameId}: ${why} waits: ${short}`);
+	};
 
-	const fullReadOf = (row: OpenGame, why: string): void => {
+	function fullReadOf(row: OpenGame, why: string): void {
 		try {
 			const identity = identityOf(row.gameId);
 			const held = row.status === "unverified" ? NO_READINGS : readingsOf(row.gameId);
 			const reporters = readReporters(evm, deps.games, row.gameId);
 			const run = runGame(runDeps, gameOfState(row, identity, held), reporters, now);
-			fullRead = { gameId: row.gameId.toString(), why, run, error: null };
+			fullRead = { gameId: row.gameId.toString(), why, run, error: null, cut: false };
 			lines.push(`full read, ${why}: ${summarize(run)}`);
 		} catch (e) {
-			// A read or a request past the count, or the write refused: the run is over, and the game's next
-			// tick or turn reads it afresh. The count is what stops it, never the platform's refusal.
+			// The run is over and nothing was written; the game's next tick or turn reads it afresh. A cut is
+			// the tick's own count of requests used up, raised by the readers so the program never decides
+			// on the part it saw; the rest is a read past the count or the write refused. The count is what
+			// stops a run, never the platform's refusal.
 			const error = e instanceof Error ? e.message : String(e);
-			fullRead = { gameId: row.gameId.toString(), why, run: null, error };
-			lines.push(`full read, ${why}: game ${row.gameId} failed: ${error}`);
+			const cut = isCut(e);
+			fullRead = { gameId: row.gameId.toString(), why, run: null, error, cut };
+			lines.push(`full read, ${why}: game ${row.gameId} ${cut ? "cut" : "failed"}: ${error}`);
 		}
-	};
+	}
 
-	// The hour's first tick: one verification, the game whose turn it is, with the whole count of
-	// requests in hand (a start asks 18 and sends 11 distinct on the saved cases). The others take
-	// their turn on the hours after.
+	// The hour's first tick: one verification, the game whose turn it is, with its league's worst case
+	// of requests in hand. The others take their turn on the hours after.
 	const verifies = dues
 		.filter((d): d is { row: OpenGame; due: Extract<Due, { kind: "verify" }> } => d.due.kind === "verify" && d.due.fires)
 		.sort((a, b) => a.row.date - b.row.date || (a.row.gameId < b.row.gameId ? -1 : 1));
 	if (verifies.length > 0) {
 		const pick = verifies[Math.floor(now / 3_600) % verifies.length];
-		if (roomFor(pick.row, requestsLimit)) fullReadOf(pick.row, "verification");
-		else waiting.push(`${pick.row.gameId}: verification, no room`);
+		fullReadOrWait(pick.row, "verification");
 		for (const v of verifies) if (v !== pick) waiting.push(`${v.row.gameId}: verification waits for its hour's turn`);
 	}
 
-	// Then the clocks: day 7 asks no seat, so it costs no request; hour 24 and the hour's read cost a full read's.
+	// Then the clocks: day 7 asks no seat, so it costs no request; hour 24 and the hour's read cost a scoring run's.
 	const clocks = dues
 		.filter((d): d is { row: OpenGame; due: Extract<Due, { kind: "clock" }> } => d.due.kind === "clock" && d.due.fires)
 		.sort((a, b) => CLOCK_ORDER[a.due.clock] - CLOCK_ORDER[b.due.clock] || (a.row.start ?? 0) - (b.row.start ?? 0));
-	for (const c of clocks) {
-		const need = c.due.clock === "day 7" ? 0 : FULL_READ_RESERVE;
-		if (!roomFor(c.row, need)) {
-			waiting.push(`${c.row.gameId}: ${c.due.clock}`);
-			continue;
-		}
-		fullReadOf(c.row, c.due.clock);
-	}
+	for (const c of clocks) fullReadOrWait(c.row, c.due.clock);
 
 	// Then the probes, in start order, begun from a game that turns with the tick, so a run of games not
 	// yet final at the front never keeps the ones behind them from their turn. A probe reads the game's
@@ -286,12 +309,7 @@ export function runTick(deps: TickDeps): TickResult {
 		}
 		probes.push({ gameId: row.gameId.toString(), seat, kind: reading.kind, final: saysFinal(reading), changed });
 		if (!read) continue;
-		const why = changed === null ? `final at seat ${seat}` : `a change at seat ${seat}`;
-		if (!roomFor(row, FULL_READ_RESERVE)) {
-			waiting.push(`${row.gameId}: ${why}, the full read waits for the next tick`);
-			continue;
-		}
-		fullReadOf(row, why);
+		fullReadOrWait(row, changed === null ? `final at seat ${seat}` : `a change at seat ${seat}`);
 	}
 
 	return { now, shard: deps.shard, open: open.total, mine: open.rows.length, pages: open.pages, reads, requests: requests.used(), probes, fullRead, waiting, lines };
@@ -312,7 +330,7 @@ export function summarizeTick(t: TickResult): string {
 		fullRead:
 			t.fullRead === null
 				? null
-				: { gameId: t.fullRead.gameId, why: t.fullRead.why, action: t.fullRead.run?.decision.action ?? null, written: t.fullRead.run?.written != null, error: t.fullRead.error },
+				: { gameId: t.fullRead.gameId, why: t.fullRead.why, action: t.fullRead.run?.decision.action ?? null, written: t.fullRead.run?.written != null, error: t.fullRead.error, cut: t.fullRead.cut },
 		waiting: t.waiting.length,
 	});
 }

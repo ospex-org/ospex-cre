@@ -18,8 +18,12 @@ import { z } from "zod";
 import { READING_KIND, REPORT_KIND, type ChainGame, type Report, type ReportReading } from "../scoring/src/chain";
 import type { Keys } from "../scoring/src/keys";
 import { silentForGame } from "../scoring/src/rule";
+import { Cut, MAX_REQUESTS } from "../scoring/src/run";
 import { SEATS, SPARE, seatRow } from "../scoring/src/table";
+import { TEAMS } from "../scoring/src/teams/index";
 import type { HttpRequest, HttpResponse, Reading, Seat } from "../scoring/src/types";
+import { START_BOUND } from "../scoring/src/verify";
+import { filingDates } from "../scoring/src/window";
 
 // ──────────────────────────── The chain ────────────────────────────
 
@@ -143,12 +147,68 @@ export const READS_PER_EXECUTION = 15;
 export const REQUESTS_PER_EXECUTION = 15;
 
 /**
- * What the tick keeps for one full read before it starts one: the most a scoring run asked on the saved
- * cases is 8 (3/3/1/1 by seat), and the probe's answer at seat 3 is reused, so 10 holds a run that
- * pages once more at a seat. A verification is the tick's first act, with the whole count in hand: a
- * start asks 18 and sends 11 distinct on the saved cases.
+ * The most requests one full read may send, by league, derived from the readers' own pagination and
+ * the program's own bound on a reader. A full read starts only when this fits in the count the tick
+ * has left, so the tick's own budget never cuts a run short of the seats the program would read: a run
+ * cut short would decide on the part it saw (lib.ts, counted; the readers raise a cut). Per seat:
+ *
+ *   seats 1 and 2   one request per filing date of the window read (window.ts, filingDates) per page
+ *                   of ROWS_A_PAGE rows. A date lists at most one game per team of the league's own
+ *                   list (baseball's doubleheaders stay under a page), so a date fills
+ *                   ceil(teams / 100) pages at seat 1, which ends on the page without a cursor, and
+ *                   floor(teams / 100) + 1 at seat 2, which asks once more after a full page. One
+ *                   reader run stops at MAX_REQUESTS (12) and reads silent, the program's own bound.
+ *   seat 3          one: its result by hint, or the board at verification.
+ *   seat 4          one.
+ *
+ * A scoring run (a verified game; a disputed one before day 7) reads the game's window, 3 dates for a
+ * day's window: 3 + 3 + 1 + 1 = 8 for a league whose dates fit one page (the saved cases' most), and
+ * 12 + 12 + 2 = 26 for college, where both readers reach the bound. A verification reads two days
+ * around the date by team (4 dates) and then the window again from the start chosen, which reaches one
+ * date more when the start is a day past the date; a request already made is answered from memory, so
+ * only that date's pages are sent again: 5 + 5 + 3 = 13 for a league of one page (the board, seat 3's
+ * result, the spare), and 12 + 12 + 3 = 27 for college, whose readers are cut on the first read. Day 7
+ * asks no seat. The numbers are derived by running the readers in budget.test.ts.
  */
-export const FULL_READ_RESERVE = 10;
+export const ROWS_A_PAGE = 100;
+
+/** The pages a filing date of a league fills at seats 1 and 2: 1 and 1 for a league under 100 teams. */
+export function pagesADate(league: string): { readonly 1: number; readonly 2: number } {
+	const teams = Object.prototype.hasOwnProperty.call(TEAMS, league) ? TEAMS[league].length : 0;
+	return { 1: Math.ceil(teams / ROWS_A_PAGE), 2: Math.floor(teams / ROWS_A_PAGE) + 1 };
+}
+
+/** One reader run over `dates` filing dates at `pages` a date, stopped at the program's bound. */
+function readerSends(dates: number, pages: number): number {
+	return Math.min(dates * pages, MAX_REQUESTS);
+}
+
+/** The most requests a scoring run of a game in `league` sends, its window [start, start + window). */
+export function scoringRequests(league: string, start: number, window: number): number {
+	const dates = filingDates({ from: start, to: start + window }).length;
+	const p = pagesADate(league);
+	return readerSends(dates, p[1]) + readerSends(dates, p[2]) + 2;
+}
+
+/**
+ * The most requests a verification of a game in `league` sends: the range read, [date - START_BOUND,
+ * date + START_BOUND], then the window again from the start chosen, whose new dates are the ones a
+ * start at the range's far end reaches, sent only while the re-read's own run is under the bound (the
+ * new date is its last). A reader cut on the range read makes the run wait, with no re-read.
+ */
+export function verifyingRequests(league: string, date: number, window: number): number {
+	const range = filingDates({ from: date - START_BOUND, to: date + START_BOUND + 1 });
+	const again = filingDates({ from: date + START_BOUND, to: date + START_BOUND + window });
+	const fresh = again.filter((d) => !range.includes(d)).length;
+	const p = pagesADate(league);
+	const seat = (pages: number): number => {
+		const first = range.length * pages;
+		if (first > MAX_REQUESTS) return MAX_REQUESTS;
+		const before = (again.length - fresh) * pages;
+		return first + Math.max(0, Math.min(fresh * pages, MAX_REQUESTS - before));
+	};
+	return seat(p[1]) + seat(p[2]) + 3;
+}
 
 /** The chain reads one full read makes: the identity, the readings, the reporters, the coin, the approved list, the payout's record. */
 export const READS_PER_FULL_READ = 6;
@@ -581,13 +641,19 @@ export function memoized(send: (req: HttpRequest) => HttpResponse): (req: HttpRe
 	};
 }
 
-/** A transport that refuses the request past the limit, before sending, so the run's own count is what stops it. */
+/**
+ * A transport that refuses the request past the limit, before sending, so the run's own count is what
+ * stops it, never the platform's refusal. The refusal is a cut (scoring/src/run.ts, Cut): the readers
+ * raise it rather than read the seat silent, so a run the count stops decides nothing and writes
+ * nothing. A full read is started only when its league's worst case fits the count (scoringRequests,
+ * verifyingRequests), so the cut is the backstop, not the plan.
+ */
 export function counted(send: (req: HttpRequest) => HttpResponse, limit: number): { send: (req: HttpRequest) => HttpResponse; used: () => number } {
 	let used = 0;
 	return {
 		used: () => used,
 		send(req) {
-			if (used >= limit) throw new Error(`the run's ${limit} requests are used`);
+			if (used >= limit) throw new Cut(`the run's ${limit} requests are used`);
 			used++;
 			return send(req);
 		},

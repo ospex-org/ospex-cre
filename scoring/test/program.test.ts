@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../src/chain";
 import { scoreGameAsync, scoreGameSync } from "../src/program";
 import { silentForGame } from "../src/rule";
+import { Cut } from "../src/run";
 import { CASES, LATE, NOW } from "./cases";
 import { KEY, at, copy, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, chainOf } from "./rule-helpers";
@@ -252,6 +253,25 @@ describe("one run", () => {
 			return saved(undefined, NOW).send(q);
 		});
 		expect([v.decision.action, v.decision.why]).toEqual(["wait", "seat 3's board is silent: transport"]);
+	});
+
+	test("a transport that cuts the run ends it undecided: the reader raises it through the run, no report is built", async () => {
+		// The same two reads as above, the throw a cut: the caller's own count of requests used up. The
+		// run that would have waited on a silent seat 2 now ends with nothing; the board's cut the same.
+		const g = chainOf("nba final");
+		const t = saved(undefined, NOW);
+		expect(() =>
+			scoreGameSync(g, KEYS, PAYOUT, NOW, (q) => {
+				if (locate(q)?.seat === 2) throw new Cut("the run's 15 requests are used");
+				return t.send(q);
+			}),
+		).toThrow(Cut);
+		await expect(
+			scoreGameAsync({ ...chainOf("nfl not final"), status: "unverified", start: null, startReadings: null }, KEYS, PAYOUT, NOW, async (q) => {
+				if (q.url.includes("/odds/")) throw new Cut("the run's 15 requests are used");
+				return saved(undefined, NOW).send(q);
+			}),
+		).rejects.toThrow(Cut);
 	});
 
 	test("async, after n: seats 1 and 2 answer without a final at once, the spare's final arrives last, and the run waits for it: a dispute, never a void", async () => {

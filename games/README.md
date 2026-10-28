@@ -67,13 +67,23 @@ itself.
 
 **The quotas.** The platform allows a run 15 chain reads and 15 feed requests. A tick reads the header
 and up to two pages, probes at two reads each (the identity and the readings), and runs at most one
-full read, started only with its reads (six, or the four a probe left to read) and ten requests in hand;
-a final found without room waits for the next tick, where the probes begin from another game. A
-verification is the hour's first act, with the whole count of requests. A request already made in a
-run is answered from memory, so the probe's answer at seat 3 serves the full read, and a start, which
-the program confirms by reading every seat again in the window, sends 11 distinct requests of the 18
-it asks. Throughput: one full read per tick per shard, so twelve finals an hour per shard, and one
-verification an hour per shard.
+full read, started only with its reads in hand (six, or the four a probe left to read) and the most
+requests the program may send for that league, derived from the readers' own pagination (`lib.ts`,
+`scoringRequests` and `verifyingRequests`; `budget.test.ts` derives the numbers by running the readers).
+A scoring run reads the game's window, three filing dates for a day's window, one page a date at seats
+1 and 2 for a league under a hundred teams, one request each at seats 3 and 4: 8. A verification reads
+two days around the date by team and the window again from the start chosen, the board, seat 3's
+result and the spare: 13. Day 7 asks no seat. College fills four pages a date or more, and each reader
+stops at the program's own bound of twelve, so its worst case is 26 for a scoring run and 27 for a
+verification, past the platform's 15: under that count a college game's full read waits every tick and
+its verification every hour, nothing of it sent, until the per-execution quota is raised, which is the
+platform's to do. A full read found without room waits for the next tick or its next turn, where the
+probes begin from another game, holding the work. Should the count still stop a run, the readers raise
+the cut rather than read the seat silent, the program decides nothing, nothing is written, and the
+tick's line says cut. A request already made in a run is answered from memory, so the probe's answer
+serves the full read, and a start, which the program confirms by reading every seat again in the
+window, sends 11 distinct requests of the 18 it asks on the saved answers. Throughput: one full read
+per tick per shard, so twelve finals an hour per shard, and one verification an hour per shard.
 
 **Waiting.** The games set's change that stores a game's identity, its readings and the open list is
 in review. Its reads are coded as its branch gives them: the interface's ABI at that branch's head is
