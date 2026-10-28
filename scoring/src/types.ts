@@ -46,11 +46,11 @@ export interface Reading {
 	/** The away team's points, the same way; null when the feed gave none. */
 	readonly away: number | null;
 	/**
-	 * The feed's own word that the game will not or did not play, on the game's own row: postponed,
-	 * cancelled, or not started. After n, a void rests on two counting seats' answers that carry one
-	 * (rule.ts, affirmsNoFinal); a row in play carries none, and is never a void's vote.
+	 * The feed's own word that the game will not or did not play, on the game's own row: postponed or
+	 * cancelled, and nothing else. After n, a void rests on two counting seats' answers that carry one
+	 * (rule.ts, affirmsNoFinal); a row scheduled or in play carries none, and is never a void's vote.
 	 */
-	readonly recorded: "postponed" | "canceled" | "not_started" | null;
+	readonly recorded: "postponed" | "canceled" | null;
 	/** Why the reading is what it is, in a word or two, for the record and the tests. */
 	readonly detail: string;
 	/**

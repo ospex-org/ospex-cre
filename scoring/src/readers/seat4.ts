@@ -54,7 +54,7 @@ export function toRecord(e: Record<string, unknown>): FeedRecord | null {
 		id,
 		time: parseIsoSeconds(e.commence_time),
 		teams: [team(home, e.scores), team(away, e.scores)],
-		state: e.completed === true ? "final" : e.completed === false ? "in_progress" : "no_status",
+		state: e.completed === true ? "final" : e.completed === false ? "not_final" : "no_status",
 		status: e.completed === true ? "completed" : e.completed === false ? "not completed" : "no completed flag",
 	};
 }

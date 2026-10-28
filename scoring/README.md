@@ -104,10 +104,11 @@ game.
   needs the feed's own sign of a whole game: at seats 1 and 2 the period count reached the league's
   regulation (or, where seat 1 fills in no period count, every quarter scored); at seat 3
   `FinalType` "Finished"; at seat 4 `completed`. A record that says final short of that reads
-  silent: neither a final the reader can take nor a game the feed calls unfinished. Postponed,
-  cancelled and not started, each in the feed's own words, ride on the reading, and after n a void
-  rests on two counting seats' rows that carry one (below); a row in play carries none; a row
-  without a readable status is silent, a partial row. Each reader's header says its feed's words.
+  silent: neither a final the reader can take nor a game the feed calls unfinished. Postponed and
+  cancelled, in the feed's own words, ride on the reading, and after n a void rests on two counting
+  seats' rows that carry one (below); a row scheduled or in play carries none, an answer that is
+  never a void's vote; a row without a readable status is silent, a partial row. Each reader's
+  header says its feed's words.
 * **One game under two dates.** A feed can list the same record under two of the dates asked for.
   Identical copies are one record; if the record changed between the two requests, the later answer
   stands, unless the copies name different teams or the earlier was already final.
@@ -121,7 +122,8 @@ game.
   hint naming a row for part of the game. **An irreversible end never rests on fewer than two
   counting seats' affirmative answers; absence and a partial row are silence.** An affirmative
   answer is the game's own row, bound by its ids or names and time, that says in the feed's own
-  words what became of the game: a final, or that it will not or did not play. Absence is silence
+  words what became of the game: a final, or that it will not or did not play, postponed or
+  cancelled and nothing else. Absence is silence
   everywhere: a game not in an answer, empty or not, says nothing, since a spelling the feed no
   longer uses, a filter it did not apply or a list that stops short answers that way too; and a row
   without a status says nothing of the game's end ([`test/never-affirmative.test.ts`](test/never-affirmative.test.ts),
@@ -181,10 +183,12 @@ inside the fingerprint. For a game whose start is written:
   that answered without a final isn't silent, so that is a disagreement, not a score.
 * **The hour-24 void** comes only from start + n, and is held to the finals' count: two counting
   seats or more answer affirmatively that the game will not or did not play (the game's own row,
-  bound by its ids or names and time, whose status in the feed's own words is postponed, cancelled
-  or not started), the rest of the counting seats are silent, and no seat that answers shows a
-  final. A row that says the game is in play is not a void's vote, and beside two affirmative
-  answers it holds the void as it would hold a score. Fewer than two affirmative answers: the run
+  bound by its ids or names and time, whose status in the feed's own words is postponed or
+  cancelled, and nothing else: seat 1's flag and its `postponed` and `canceled`, seat 2's
+  `postponed` and `canceled`, seat 3's `FinalType` Postponed and Canceled), the rest of the
+  counting seats are silent, and no seat that answers shows a final. A row that says the game is
+  scheduled or in play is not a void's vote, and beside two affirmative answers it holds the void as
+  it would hold a score. Fewer than two affirmative answers: the run
   waits every tick, its line saying what each seat gave; the program never ends a game on fewer,
   and the games set's own clocks end a game the feeds never settle.
 * **A disagreement** is either of two things. Any two finals that differ, from any seat. Or, after

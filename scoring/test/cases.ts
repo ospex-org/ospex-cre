@@ -32,7 +32,7 @@ export interface Expected {
 	readonly kind: "silent" | "no_final" | "final";
 	readonly home: number | null;
 	readonly away: number | null;
-	readonly recorded: "postponed" | "canceled" | "not_started" | null;
+	readonly recorded: "postponed" | "canceled" | null;
 	readonly detail: string;
 	readonly id: string | null;
 }
@@ -62,7 +62,7 @@ const noFinal = (detail: string, id: string | null, home: number | null = null, 
 	kind: "no_final",
 	home,
 	away,
-	recorded: detail === "postponed" || detail === "canceled" ? detail : detail === "scheduled" ? "not_started" : null,
+	recorded: detail === "postponed" || detail === "canceled" ? detail : null,
 	detail,
 	id,
 });

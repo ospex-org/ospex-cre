@@ -18,11 +18,11 @@
 //              answer without one are not enough.
 //   Void       Only from start + n, and held to the finals' count: two counting seats answer
 //              affirmatively that the game will not or did not play (a row of the game, bound by
-//              its ids or names and time, whose status in the feed's own words is postponed,
-//              cancelled or not started: affirmsNoFinal), the rest of the counting seats silent, and
-//              no seat that answers shows a final. A row that says the game is in play is an answer,
-//              not a void's vote, and beside two affirmative answers it holds the void as it would
-//              hold a score; absence, a
+//              its ids or names and time, whose status in the feed's own words is postponed or
+//              cancelled, and nothing else: affirmsNoFinal), the rest of the counting seats silent,
+//              and no seat that answers shows a final. A row that says the game is scheduled or in
+//              play is an answer, not a void's vote, and beside two affirmative answers it holds the
+//              void as it would hold a score; absence, a
 //              listing without the game, and a row without a status are silence (pick.ts). Fewer
 //              than two affirmative answers: the run waits, its line saying what each seat gave.
 //   Disagree   Any two finals that differ, from any seat asked, the spare's included, inside n or
@@ -105,9 +105,9 @@ export function countingFor(down: Seat | null): readonly Seat[] {
 
 /**
  * An affirmative no-final answer: the game's own row, bound by its ids or names and time, whose
- * status in the feed's own words says the game will not or did not play: postponed, cancelled or
- * not started (the reading's `recorded`). The only answer without a final a void may rest on. A row
- * in play is an answer, not a void's vote.
+ * status in the feed's own words says the game will not or did not play: postponed or cancelled, and
+ * nothing else (the reading's `recorded`). The only answer without a final a void may rest on. A row
+ * scheduled or in play is an answer, not a void's vote.
  */
 export function affirmsNoFinal(r: Reading): boolean {
 	return r.kind === "no_final" && r.recorded !== null;

@@ -35,8 +35,9 @@
 // listing proves the game is not there. So the feed is silent, with the reason (absent, outside
 // window), and never says the game has no final. A row of the game without a readable status is
 // silence too (readingOf): a partial row says nothing about the game's end. What a row does say, in
-// the feed's own words (postponed, cancelled, not started, in play), rides on the reading's `recorded`
-// and `detail`, and rule.ts decides what each is worth.
+// the feed's own words, rides on the reading: postponed or cancelled on `recorded`, the word itself on
+// `detail`; rule.ts decides what each is worth, and a row scheduled or in play is an answer that is
+// never a void's vote.
 
 import { resolveTeam } from "./teams";
 import { silent } from "./run";
@@ -52,12 +53,12 @@ export interface FeedRecord {
 	readonly teams: readonly [FeedTeam, FeedTeam];
 	/**
 	 * The feed's status, mapped. Only "final" can make a final. "short" is a final the feed's own
-	 * count shows short of a whole game: it reads silent, neither final nor not final. "postponed",
-	 * "canceled" and "not_started" are the feed's own words that the game will not or did not play;
-	 * "in_progress" is any other word short of a final; "no_status" is a row with no readable status,
+	 * count shows short of a whole game: it reads silent, neither final nor not final. "postponed" and
+	 * "canceled" are the feed's own words that the game will not or did not play; "not_final" is any
+	 * other word short of a final, scheduled or in play; "no_status" is a row with no readable status,
 	 * which reads silent.
 	 */
-	readonly state: "final" | "short" | "postponed" | "canceled" | "not_started" | "in_progress" | "no_status";
+	readonly state: "final" | "short" | "postponed" | "canceled" | "not_final" | "no_status";
 	/** The feed's own status words, kept for the reading's detail. */
 	readonly status: string;
 }
@@ -214,15 +215,15 @@ function readingOf(seat: Seat, league: string, r: FeedRecord, homeKey: string): 
 	// A row without a readable status is a partial row: it says nothing about the game's end.
 	if (r.state === "no_status") return silent(seat, "no status");
 	// The feed's own word that the game will not or did not play rides on the reading: a void may rest
-	// on it (rule.ts). A row in play carries none.
-	const recorded = r.state === "postponed" || r.state === "canceled" || r.state === "not_started" ? r.state : null;
+	// on it (rule.ts). A row scheduled or in play carries none.
+	const recorded = r.state === "postponed" || r.state === "canceled" ? r.state : null;
 	return {
 		seat,
 		kind: "no_final",
 		home: homeTeam.points,
 		away: awayTeam.points,
 		recorded,
-		detail: recorded === null || recorded === "not_started" ? r.status : recorded,
+		detail: recorded ?? r.status,
 		record,
 	};
 }

@@ -7,15 +7,14 @@
 // names its fields its own way, so each has a small map below. A team is named by its full name, and in college by its school's name too; never by its
 // city, which two teams can share.
 //
-// Status: the nine-state `status_state` decides where a record has it: `final` is final;
-// `postponed`, `canceled` and `scheduled` (not started) are the feed's own words that the game will
-// not or did not play, and a void may rest on them (rule.ts); `in_progress`, `delayed`, `suspended`
-// and `abandoned` are not final, in play or held; `unknown`, or no word at all, is no status, a
-// partial row that reads silent. Where a record lacks `status_state`, the reader falls back to the
-// league's older field: only that field's own unambiguous words count (see `older`: its final,
-// postponed, cancelled and not-started words), any other word is not final, and none is no status.
-// College's older field says "post" for a final, a postponed and a cancelled game alike, so a
-// college record without `status_state` is never final; its "pre" is not started.
+// Status: the nine-state `status_state` decides where a record has it: `final` is final; `postponed`
+// and `canceled` are the feed's own words that the game will not or did not play, and a void may rest
+// on them (rule.ts); `scheduled`, `in_progress`, `delayed`, `suspended` and `abandoned` are not final,
+// an answer that is never a void's vote; `unknown`, or no word at all, is no status, a partial row that
+// reads silent. Where a record lacks `status_state`, the reader falls back to the league's older
+// field: only that field's own unambiguous final, postponed and cancelled words count (see `older`),
+// any other word is not final, and none is no status. College's older field says "post" for a final,
+// a postponed and a cancelled game alike, so a college record without `status_state` is never final.
 //
 // A final also needs the feed's own count of the game's parts to show a whole game: the period
 // reached, at least the league's regulation (four quarters, four in basketball, three in hockey,
@@ -97,30 +96,28 @@ const FIELDS: Readonly<Record<string, Fields>> = {
 					? "postponed"
 					: g.status === "STATUS_CANCELED"
 						? "canceled"
-						: g.status === "STATUS_SCHEDULED"
-							? "not_started"
-							: null,
+						: null,
 		short: periods(9),
 	},
 	nhl: {
 		time: (g) => g.start_time_utc,
 		home: (g) => team(g.home_team, ["full_name"], g.home_score),
 		away: (g) => team(g.away_team, ["full_name"], g.away_score),
-		older: (g) => (g.game_state === "OFF" ? "final" : g.game_state === "FUT" ? "not_started" : null),
+		older: (g) => (g.game_state === "OFF" ? "final" : null),
 		short: periods(3),
 	},
 	ncaaf: {
 		time: (g) => g.date,
 		home: (g) => team(g.home_team, ["full_name", "college"], g.home_score),
 		away: (g) => team(g.visitor_team, ["full_name", "college"], g.away_score),
-		older: (g) => (g.status === "pre" ? "not_started" : null),
+		older: () => null,
 		short: quarters(["home_score_q1", "home_score_q2", "home_score_q3", "home_score_q4", "away_score_q1", "away_score_q2", "away_score_q3", "away_score_q4"]),
 	},
 	ncaab: {
 		time: (g) => g.date,
 		home: (g) => team(g.home_team, ["full_name", "college"], g.home_score),
 		away: (g) => team(g.visitor_team, ["full_name", "college"], g.away_score),
-		older: (g) => (g.status === "pre" ? "not_started" : null),
+		older: () => null,
 		short: periods(2),
 	},
 };
@@ -129,11 +126,11 @@ const STATE: Readonly<Record<string, FeedRecord["state"]>> = {
 	final: "final",
 	postponed: "postponed",
 	canceled: "canceled",
-	scheduled: "not_started",
-	in_progress: "in_progress",
-	delayed: "in_progress",
-	suspended: "in_progress",
-	abandoned: "in_progress",
+	scheduled: "not_final",
+	in_progress: "not_final",
+	delayed: "not_final",
+	suspended: "not_final",
+	abandoned: "not_final",
 	unknown: "no_status",
 };
 
@@ -145,11 +142,11 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 	let status: string;
 	if (typeof raw === "string") {
 		// A word the nine states don't name is the feed saying something short of a final; no word is no status.
-		state = Object.prototype.hasOwnProperty.call(STATE, raw) ? STATE[raw] : raw.trim() === "" ? "no_status" : "in_progress";
+		state = Object.prototype.hasOwnProperty.call(STATE, raw) ? STATE[raw] : raw.trim() === "" ? "no_status" : "not_final";
 		status = raw;
 	} else {
 		const word = String(g.status ?? g.game_state ?? "").trim();
-		state = f.older(g) ?? (word === "" ? "no_status" : "in_progress");
+		state = f.older(g) ?? (word === "" ? "no_status" : "not_final");
 		status = `no status_state; ${word}`.trim();
 	}
 	if (state === "final") {

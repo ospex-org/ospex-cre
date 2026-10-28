@@ -5,9 +5,10 @@
 // and takes two dates as a range), a hundred to a page, stepping `skip` while a page comes back full.
 // Never the day's slate: a slate page of college games is past the size a run's answer may be, and
 // one game's read costs one request whatever the league. Status, in the feed's own words: `final`
-// is final; `canceled`, `postponed` and `scheduled` (not started) say the game will not or did not
-// play, and a void may rest on them (rule.ts); any other word is not final; no word is no status, a
-// partial row that reads silent. A final also needs the feed's own period count to have reached the
+// is final; `canceled` and `postponed` say the game will not or did not play, and a void may rest on
+// them (rule.ts); `scheduled` and any other word short of a final are not final, an answer that is
+// never a void's vote; no word is no status, a partial row that reads silent. A final also needs the
+// feed's own period count to have reached the
 // league's regulation (four quarters, three periods, nine innings, two halves in college basketball):
 // a record that says final short of it reads silent. A conference missing or null on a college team
 // says nothing about the team: the record binds by its names and time (src/pick.ts). A game whose
@@ -48,11 +49,9 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 				? "canceled"
 				: status === "postponed"
 					? "postponed"
-					: status === "scheduled"
-						? "not_started"
-						: status.trim() === ""
-							? "no_status"
-							: "in_progress";
+					: status.trim() === ""
+						? "no_status"
+						: "not_final";
 	if (state === "final") {
 		const least = Object.prototype.hasOwnProperty.call(REGULATION, league) ? REGULATION[league] : null;
 		const p = board?.currentPeriod;

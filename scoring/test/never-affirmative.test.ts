@@ -3,7 +3,8 @@
 //
 // An affirmative answer is the game's own row, bound by its ids or names and time, that says in the
 // feed's own words what became of the game: a final, or that the game will not or did not play
-// (postponed, cancelled, not started). A void after n needs two counting seats' affirmative no-final
+// (postponed or cancelled, and nothing else: a scheduled row is an answer, never a void's vote). A
+// void after n needs two counting seats' affirmative no-final
 // answers, as a score needs two finals, the rest of the counting seats silent (rule.ts). Everything
 // short of that is silence or an answer in play, and neither ends a game: an empty answer; a listing
 // that does not give the game, empty or not (the game absent from it, or the two teams' record
