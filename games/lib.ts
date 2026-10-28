@@ -600,7 +600,7 @@ export function memoized(send: (req: HttpRequest) => HttpResponse): (req: HttpRe
 			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
 			.map(([k, v]) => `${k}: ${v}`)
 			.join("\n");
-		const key = `${req.method} ${req.url}\n${headers}`;
+		const key = `${req.method} ${req.url}\n${headers}\n${req.body ?? ""}`;
 		const hit = seen.get(key);
 		if (hit !== undefined) return hit;
 		const res = send(req);

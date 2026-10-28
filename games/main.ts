@@ -86,7 +86,7 @@ function transportOf(runtime: Runtime<Config>): (req: HttpRequest) => HttpRespon
 			const secret = secretOfHeader(v);
 			if (secret !== null) vaultDonSecrets.push({ key: secret, namespace: runtime.config.secretNamespace, owner: runtime.config.secretOwner });
 		}
-		const resp = conf.sendRequest(runtime, { vaultDonSecrets, request: { url: req.url, method: req.method, multiHeaders } }).result();
+		const resp = conf.sendRequest(runtime, { vaultDonSecrets, request: { url: req.url, method: req.method, multiHeaders, ...(req.body === undefined ? {} : { bodyString: req.body }) } }).result();
 		return { status: resp.statusCode, body: new TextDecoder().decode(resp.body) };
 	};
 	return memoized(counted(raw, REQUESTS_PER_EXECUTION).send);

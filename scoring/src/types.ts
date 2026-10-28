@@ -64,9 +64,11 @@ export interface Reading {
 
 /** One HTTP request a reader asks for. The key sits where the feed table says. */
 export interface HttpRequest {
-	readonly method: "GET";
+	readonly method: "GET" | "POST";
 	readonly url: string;
 	readonly headers: Readonly<Record<string, string>>;
+	/** A POST's body, JSON text (seat 3's board is asked for one game that way); a GET has none. */
+	readonly body?: string;
 }
 
 /** What came back. The body is the raw text; readers parse it themselves. */

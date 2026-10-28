@@ -5,16 +5,18 @@ import { seatRow } from "../table";
 import type { HttpRequest, HttpResponse, Seat } from "../types";
 
 /**
- * A GET to `path` (with its query, already encoded) at the seat's host, carrying the seat's key.
- * The key goes in as given, unencoded, so a caller can hand in a placeholder its transport fills.
+ * A GET to `path` (with its query, already encoded) at the seat's host, carrying the seat's key, or a
+ * POST of `body` (JSON text) to it. The key goes in as given, unencoded, so a caller can hand in a
+ * placeholder its transport fills.
  */
-export function request(seat: Seat, path: string, key: string): HttpRequest {
+export function request(seat: Seat, path: string, key: string, body?: string): HttpRequest {
 	const row = seatRow(seat);
 	const headers: Record<string, string> = { ...row.headers };
 	let url = `https://${row.host}${path}`;
 	if ("header" in row.key) headers[row.key.header] = key;
 	else url += `${path.includes("?") ? "&" : "?"}${row.key.query}=${key}`;
-	return { method: "GET", url, headers };
+	if (body === undefined) return { method: "GET", url, headers };
+	return { method: "POST", url, headers: { ...headers, "content-type": "application/json" }, body };
 }
 
 /** The body as JSON, when the answer was a 200 that parses; otherwise why not. */
