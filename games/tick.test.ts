@@ -9,7 +9,9 @@
 // any bytes written from there,
 //   ->  deps.write("0x" + "00".repeat(64));
 // Two more that redden it: the verification's `&& d.due.fires` dropped (verified on every tick), and
-// `hourly` keyed to tick 0 (the hour's reads on the verification's tick).
+// `hourly` keyed to tick 0 (the hour's reads on the verification's tick). And the probe's seat taken
+// from the hint alone (lib.ts, probeSeatFor: `"none" in hintOf(game.hints) ? SPARE : 3`): the probe asks
+// a seat the start report excluded.
 
 import { describe, expect, test } from "bun:test";
 import type { ChainGame, Report } from "../scoring/src/chain";
@@ -227,14 +229,42 @@ describe("what a game is due for", () => {
 });
 
 describe("one tick", () => {
-	test("a game not final: its identity read, one probe at seat 3 by its hint, nothing written", () => {
+	test("a game not final: its identity and its readings read, one probe at seat 3 by its hint, nothing written", () => {
 		const f = tick([gameOf(1)], PROBING);
 		expect(f.result.probes).toEqual([{ gameId: "1", seat: 3, kind: "no_final", final: false, changed: null }]);
 		expect(f.asked.length).toBe(1);
 		expect(f.asked[0].endsWith(`/results/${hintOf(1)}`)).toBe(true);
 		expect([f.result.fullRead, f.written.length, f.handed.length]).toEqual([null, 0, 0]);
-		expect(f.names).toEqual(["getOpenGames", "getGameIdentity"]);
-		expect([f.result.reads, f.result.requests, f.result.pages]).toEqual([3, 1, { own: 1, read: 1 }]);
+		expect(f.names).toEqual(["getOpenGames", "getGameIdentity", "getGameReadings"]);
+		expect([f.result.reads, f.result.requests, f.result.pages]).toEqual([4, 1, { own: 1, read: 1 }]);
+	});
+
+	test("the probe's seat follows the start report: a hint the start marked silent is not probed, the spare is; a hint the start shows readable is", () => {
+		const seat4 = (req: HttpRequest): HttpResponse => {
+			if (!req.url.includes("/scores/")) throw new Error("not the spare");
+			return {
+				status: 200,
+				body: JSON.stringify([{ id: "x", commence_time: new Date(START * 1000).toISOString(), completed: false, home_team: BASE.home, away_team: BASE.away, scores: null }]),
+			};
+		};
+		// A usable hint, and a start report that marked seat 3 silent for the game: the board check failed at verification.
+		const down = gameOf(1, { startReadings: BASE.startReadings!.map((r) => (r.seat === 3 ? { ...r, kind: 0 } : r)) });
+		const f = tick([down], PROBING, { send: seat4 });
+		expect(f.result.probes).toEqual([{ gameId: "1", seat: 4, kind: "no_final", final: false, changed: null }]);
+		expect(f.names).toEqual(["getOpenGames", "getGameIdentity", "getGameReadings"]);
+		// The same hint with the start report showing seat 3 readable: seat 3 is the probe.
+		const up = tick([gameOf(1)], PROBING);
+		expect(up.result.probes[0]?.seat).toBe(3);
+		expect(up.asked[0].endsWith(`/results/${hintOf(1)}`)).toBe(true);
+		// The real program on the saved game with seat 3 marked silent at the start: the spare's final is the
+		// probe, the full read scores on seats 1, 2 and the spare, and seat 3 is never asked.
+		const game = { ...chainOf("nba final, read after the game"), id: "1", startReadings: down.startReadings };
+		const t = saved(undefined, LATE);
+		const real = runTick({ evm: fakeChainOf([game], LATE), games: GAMES, payout: PAYOUT, keys: KEYS, send: t.send, write: recordingWriter().write, period: PERIOD, shard: { index: 0, count: 1 } });
+		expect(real.probes[0]).toMatchObject({ seat: 4, final: true });
+		expect([real.fullRead?.why, real.fullRead?.run?.decision.action]).toEqual(["final at seat 4", "score"]);
+		expect(real.fullRead?.run?.report?.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 2], [3, 0], [4, 2]]);
+		expect(t.asked.some((r) => r.url.includes("/results/"))).toBe(false);
 	});
 
 	test("a game final at seat 3: the probe, then the full read from state with the identity in hand, and the program's report written", () => {
@@ -376,7 +406,7 @@ describe("one tick", () => {
 		const at = START + 7_200;
 		const disputed = gameOf(1, { hints: [], status: "disputed", dispute: { at, records: [SCORE_REPORT("1").readings] } });
 		const closed = tick([disputed], laterTick(START + 67 * 3_600), { send: seat4 });
-		expect([closed.result.probes.length, closed.names, closed.result.lines]).toEqual([0, ["getOpenGames", "getGameIdentity"], ["game 1: seat 4 is closed, not probed"]]);
+		expect([closed.result.probes.length, closed.names, closed.result.lines]).toEqual([0, ["getOpenGames", "getGameIdentity", "getGameReadings"], ["game 1: seat 4 is closed, not probed"]]);
 	});
 
 	test("never: a probe writes nothing, and a full read the program waits on writes nothing, a verification included", () => {

@@ -52,8 +52,10 @@ games set, with the game's state as the receipt.
 own pages of the games set's open list: pages of 64 rows, shard k of n reading pages k, k + n, k + 2n
 and so on, its first every tick and one other in turn, so no shard reads the whole list and a list
 longer than a tick's pages is covered over ticks. A game past its written start plus the league's
-expected duration (a table in `lib.ts`) is probed: its identity read, one chain read, then seat 3 by
-its hint, one request, or the spare for a game created without a usable hint. The full read, the
+expected duration (a table in `lib.ts`) is probed: its identity and its readings read, two chain reads,
+then one request at the seat the start report shows readable: seat 3 by its hint, or the spare where
+the start marked seat 3 silent for the game (no usable hint, or a hint that failed the board check),
+the program's own rule for which seat counts. The full read, the
 program's run, happens on a final from the probe or on a clock from the chain's time: hour 24 (the
 start plus n) and day 7 (the dispute record plus its clock), each on every tick for two hours and then
 on the hour's second tick; a disputed game is probed for a change against its vote on record and read
@@ -64,8 +66,8 @@ are several, so a game is verified when the feeds first carry it. A full read ne
 itself.
 
 **The quotas.** The platform allows a run 15 chain reads and 15 feed requests. A tick reads the header
-and up to two pages, probes at one read each (two for a disputed game, its votes), and runs at most one
-full read, started only with its reads (six, or what the probe left to read) and ten requests in hand;
+and up to two pages, probes at two reads each (the identity and the readings), and runs at most one
+full read, started only with its reads (six, or the four a probe left to read) and ten requests in hand;
 a final found without room waits for the next tick, where the probes begin from another game. A
 verification is the hour's first act, with the whole count of requests. A request already made in a
 run is answered from memory, so the probe's answer at seat 3 serves the full read, and a start, which

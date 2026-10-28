@@ -17,7 +17,7 @@ import {
 import { z } from "zod";
 import { READING_KIND, REPORT_KIND, type ChainGame, type Report, type ReportReading } from "../scoring/src/chain";
 import type { Keys } from "../scoring/src/keys";
-import { hintOf } from "../scoring/src/readers/seat3";
+import { silentForGame } from "../scoring/src/rule";
 import { SEATS, SPARE, seatRow } from "../scoring/src/table";
 import type { HttpRequest, HttpResponse, Reading, Seat } from "../scoring/src/types";
 
@@ -152,6 +152,13 @@ export const FULL_READ_RESERVE = 10;
 
 /** The chain reads one full read makes: the identity, the readings, the reporters, the coin, the approved list, the payout's record. */
 export const READS_PER_FULL_READ = 6;
+
+/**
+ * The chain reads one probe makes: the game's identity (its hints, and its teams for the spare) and its
+ * readings (the start report, which says which seat the probe asks; a disputed game's votes). A full
+ * read on the probe's final has both in hand.
+ */
+export const READS_PER_PROBE = 2;
 
 /**
  * The open list's pages one shard reads in a tick: its first page every tick, and one other of its
@@ -590,14 +597,16 @@ export function counted(send: (req: HttpRequest) => HttpResponse, limit: number)
 // ──────────────────────────── The probe ────────────────────────────
 
 /**
- * The seat the tick probes for a game: seat 3, read by its hint in one request, or, for a game created
- * without a usable seat 3 hint, the spare that stands in for it. The probe asks only whether the game
- * is over; whether the seat counts at scoring is the program's to decide from the start report. A
- * reading says final when it carries a final, or when the feed says the game is over without points
- * the program could take.
+ * The seat the tick probes for a game, following the start report: seat 3, read by its hint in one
+ * request, when the start report shows it readable; otherwise the spare, which stands in for it. The
+ * rule is the program's own (silentForGame): a game created without a usable seat 3 hint, or whose
+ * hint failed the board check at verification, has seat 3 silent for the whole game, and the program
+ * never asks it, so a probe there would ask a seat the full read will not read. The probe asks only
+ * whether the game is over. A reading says final when it carries a final, or when the feed says the
+ * game is over without points the program could take.
  */
-export function probeSeatFor(hints: ChainGame["hints"]): Seat {
-	return "none" in hintOf(hints) ? SPARE : 3;
+export function probeSeatFor(game: Pick<ChainGame, "hints" | "startReadings">): Seat {
+	return silentForGame(game) === 3 ? SPARE : 3;
 }
 
 export function saysFinal(r: Reading): boolean {

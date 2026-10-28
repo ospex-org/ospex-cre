@@ -1,7 +1,8 @@
 // The tick: what one cron fire does for its shard of the open list. It reads its pages of the list,
 // and for each game past its written start plus the league's expected duration it reads the game's
-// identity and probes one seat (seat 3 by its hint, one request; the spare for a game created
-// without a usable hint), and runs the full read, the program's run, on a final or on a clock: hour
+// identity and its readings and probes one seat (seat 3 by its hint, one request, when the start
+// report shows it readable; the spare where the start marked seat 3 silent for the game), and runs
+// the full read, the program's run, on a final or on a clock: hour
 // 24 (the start plus n) and day 7 (the dispute record plus its clock), both from the chain's clock.
 // A full read never runs on the tick itself. A disputed game's probe is a change at the probed seat
 // against its vote on record, and its full read also runs on the hour's second tick, so the other
@@ -243,8 +244,9 @@ export function runTick(deps: TickDeps): TickResult {
 
 	// Then the probes, in start order, begun from a game that turns with the tick, so a run of games not
 	// yet final at the front never keeps the ones behind them from their turn. A probe reads the game's
-	// identity (its hints, and its teams for the spare), and a disputed game's votes; it keeps the reads
-	// a full read on its final would need, while this tick has none yet.
+	// identity (its hints, and its teams for the spare) and its readings (the start report, which says
+	// which seat it asks; a disputed game's votes); it keeps the reads a full read on its final would
+	// need, while this tick has none yet.
 	const due = dues.filter((d): d is { row: OpenGame; due: Extract<Due, { kind: "probe" }> } => d.due.kind === "probe").sort((a, b) => (a.row.start ?? 0) - (b.row.start ?? 0));
 	const shift = due.length === 0 ? 0 : Math.floor(now / deps.period) % due.length;
 	const ordered = [...due.slice(shift), ...due.slice(0, shift)];
@@ -254,14 +256,15 @@ export function runTick(deps: TickDeps): TickResult {
 			waiting.push(`${row.gameId}: no request left for its probe`);
 			continue;
 		}
-		const probeReads = (identities.has(row.gameId) ? 0 : 1) + (row.status === "disputed" && !readings.has(row.gameId) ? 1 : 0);
+		const probeReads = (identities.has(row.gameId) ? 0 : 1) + (readings.has(row.gameId) ? 0 : 1);
 		const keep = fullRead === null ? readsForFull(row) - probeReads : 0;
 		if (reads + probeReads + keep > readsLimit) {
 			waiting.push(`${row.gameId}: no read left for its probe`);
 			continue;
 		}
 		const identity = identityOf(row.gameId);
-		const seat = probeSeatFor(identity.hints);
+		const held = readingsOf(row.gameId);
+		const seat = probeSeatFor({ hints: identity.hints, startReadings: held.startReadings.length === 0 ? null : held.startReadings });
 		const openFor = OPEN_FOR[seat];
 		if (openFor !== null && now - (row.start as number) > openFor) {
 			lines.push(`game ${row.gameId}: seat ${seat} is closed, not probed`);
@@ -278,7 +281,7 @@ export function runTick(deps: TickDeps): TickResult {
 		let read = saysFinal(reading);
 		if (row.status === "disputed") {
 			// A change against the seat's vote on record is what calls for the full read.
-			changed = !sameVote(readingsOf(row.gameId).votes.find((v) => v.seat === seat), reading);
+			changed = !sameVote(held.votes.find((v) => v.seat === seat), reading);
 			read = changed;
 		}
 		probes.push({ gameId: row.gameId.toString(), seat, kind: reading.kind, final: saysFinal(reading), changed });
