@@ -18,7 +18,10 @@
 // The break that turns it red (tick.ts, inTurn): the head's move to the front dropped,
 //   ->  return turned;
 // with which the turn begins at the game the count names in the due list, and 58 of the 500 never
-// enter the verification.
+// enter the verification. And for the mixed ages (tick.ts, the verification's turn): the named game
+// no longer moved before the nearer tier,
+//   ->  for (const v of byTier) {
+// with which game 1, dated three days behind, never enters while the 499 nearer games are due.
 
 import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../scoring/src/chain";
@@ -136,6 +139,39 @@ describe("every game enters the program within own x 64 of its class's own ticks
 			expect({ pagesWithinOwn: pagesLate.every((p) => p <= 3), pagesLate }).toEqual({ pagesWithinOwn: true, pagesLate });
 		}, 120_000);
 	}
+});
+
+describe("a game dated days behind, among games dated ahead, enters within the bound all the same: the named turn is honored across the nearer and the farther", () => {
+	// The verification's turn goes to the nearer games first, those not yet two days past their date; the
+	// game at the place the hour's count names comes before that order, whatever its date, so the bound
+	// holds for every due game. Game 1 dated three days behind among 499 dated seven days ahead, on three
+	// shards, and the same among six rows in pages of two.
+	const mixed = (count: number): ChainGame[] => Array.from({ length: count }, (_, i) => unverified(i + 1, i === 0 ? FROM - 3 * 86_400 : FROM + 7 * 86_400));
+	const work: Work = { name: "the verification, mixed ages", games: mixed(COUNT), own: (t) => t === 0, send: () => ({ status: 200, body: "[]" }) };
+
+	test("500 games on three shards: 500 entered, game 1 within its shard's bound", () => {
+		const r = run(work, 0, 3 * OPEN_PAGE, OPEN_PAGE);
+		const mine = work.games.filter((_, i) => Math.floor(i / OPEN_PAGE) % SHARDS === 0).map((g) => g.id);
+		expect(mine.filter((id) => !r.entered.has(id))).toEqual([]);
+		expect({ game1: (r.entered.get("1") ?? Infinity) <= 192, latest: Math.max(...mine.map((id) => r.entered.get(id) ?? Infinity)) <= 192 }).toEqual({ game1: true, latest: true });
+		for (const shard of [1, 2]) {
+			const bound = (shard === 2 ? 2 : 3) * OPEN_PAGE;
+			const rs = run(work, shard, bound, OPEN_PAGE);
+			const theirs = work.games.filter((_, i) => Math.floor(i / OPEN_PAGE) % SHARDS === shard).map((g) => g.id);
+			expect({ shard, unentered: theirs.filter((id) => !rs.entered.has(id)), within: Math.max(...theirs.map((id) => rs.entered.get(id) ?? Infinity)) <= bound }).toEqual({ shard, unentered: [], within: true });
+		}
+	}, 120_000);
+
+	test("six rows in pages of two: six entered within six hours, game 1 among them", () => {
+		const games = mixed(6);
+		const handed: string[] = [];
+		for (let h = 0; h < 6; h++) {
+			const program = waiter();
+			runTick({ evm: fakeChainOf(games, FROM + h * 3_600 + 10), games: GAMES, payout: PAYOUT, keys: KEYS, send: () => ({ status: 200, body: "[]" }), write: recordingWriter().write, score: program.score as never, period: PERIOD, shard: { index: 0, count: 1 }, pageSize: 2 });
+			handed.push(...program.handed);
+		}
+		expect([...handed].sort()).toEqual(["1", "2", "3", "4", "5", "6"]);
+	});
 });
 
 describe("the six-row reproduction: pages of two on one shard, every row named within six", () => {

@@ -514,17 +514,25 @@ describe("the verification on the hour's first tick", () => {
 		expect([late.result.fullRead?.why, late.handed.length]).toEqual(["verification", 1]);
 	});
 
-	test("the nearer games take the turns, in turn by the hour's count: a game more than two days past its date is verified only when no nearer game is due", () => {
+	test("the nearer games take the turns, in turn by the hour's count, and a game further past its date takes a turn when no nearer game is due or when the hour's count names its place", () => {
 		const nearer = [unverifiedOf(1, { date: VERIFY_AT + 2 * 86_400 }), unverifiedOf(2, { date: VERIFY_AT + 86_400 })];
 		const far = [unverifiedOf(3, { date: VERIFY_AT - 5 * 86_400 }), unverifiedOf(4, { date: VERIFY_AT - 9 * 86_400 })];
+		// Pages of 64 on one shard: game n sits at place n - 1, and the hour's count names place hour mod 64.
+		const named = (now: number): string => String(placeNamed(hourCount(now), 1, 64) + 1);
 		const handed: string[] = [];
 		for (let hour = 0; hour < 4; hour++) {
-			const f = tick([...nearer, ...far], VERIFY_AT + hour * 3_600, { program: waiter() });
+			const now = VERIFY_AT + hour * 3_600;
+			const f = tick([...nearer, ...far], now, { program: waiter() });
 			handed.push(f.handed[0].id);
-			expect(f.result.waiting.filter((w) => w.startsWith("3:") || w.startsWith("4:"))).toEqual(["3: verification waits for its hour's turn", "4: verification waits for its hour's turn"]);
+			// A far game is read on the hour that names its place, and only then; the rest of the hour's games wait for their turn.
+			if (["3", "4"].includes(named(now))) expect(f.handed[0].id).toBe(named(now));
+			else expect(["1", "2"]).toContain(f.handed[0].id);
+			expect(f.result.waiting.length).toBe(3);
+			expect(f.result.waiting.every((w) => w.endsWith("verification waits for its hour's turn"))).toBe(true);
 		}
-		// Four hours, the two nearer games in turn, each twice.
-		expect([...handed].sort()).toEqual(["1", "1", "2", "2"]);
+		// Four hours: the nearer games take every turn the count does not give a far one, in turn.
+		const nearerTurns = handed.filter((id) => id === "1" || id === "2");
+		expect(Math.abs(nearerTurns.filter((id) => id === "1").length - nearerTurns.filter((id) => id === "2").length)).toBeLessThanOrEqual(1);
 		// With no nearer game due, the far ones take turns, nearest first.
 		const alone: string[] = [];
 		for (let hour = 0; hour < 2; hour++) alone.push(tick(far, VERIFY_AT + hour * 3_600, { program: waiter() }).handed[0].id);
@@ -567,13 +575,13 @@ describe("the verification on the hour's first tick", () => {
 	});
 
 	test("a full read starts only when its worst case of requests fits the count; otherwise it waits with nothing sent, and the next due game that fits takes the read", () => {
-		// A verification needs 9 (budget.test.ts): under a count of 5 it is not started.
+		// A verification needs 10 at most (budget.test.ts): under a count of 5 it is not started.
 		const t = saved(undefined, VERIFY_AT);
 		const f = tick([unverifiedOf(1)], VERIFY_AT, { program: "real", send: t.send, requestsLimit: 5 });
-		expect([f.result.fullRead, f.result.waiting, f.written.length, f.result.requests, t.asked.length]).toEqual([null, ["1: verification waits: needs 9 requests, 5 left"], 0, 0, 0]);
-		// Under a count of 9 it is: 9 sent on the saved answers, the start written.
+		expect([f.result.fullRead, f.result.waiting, f.written.length, f.result.requests, t.asked.length]).toEqual([null, ["1: verification waits: needs 10 requests, 5 left"], 0, 0, 0]);
+		// Under a count of 10 it is: 9 sent on the saved answers, the start written.
 		const t9 = saved(undefined, VERIFY_AT);
-		const ok = tick([unverifiedOf(1)], VERIFY_AT, { program: "real", send: t9.send, requestsLimit: 9 });
+		const ok = tick([unverifiedOf(1)], VERIFY_AT, { program: "real", send: t9.send, requestsLimit: 10 });
 		expect([ok.result.fullRead?.why, ok.result.fullRead?.run?.decision.action, ok.written.length, ok.result.requests]).toEqual(["verification", "start", 1, 9]);
 		// College fits the count like any league: the readers ask for the one game, so a scoring run is 5 and
 		// a verification 9 whatever the league, and a college final is read under the platform's 15.
@@ -591,10 +599,10 @@ describe("the verification on the hour's first tick", () => {
 		expect(hours.every((f) => f.result.waiting.every((w) => w.endsWith("waits for its hour's turn")))).toBe(true);
 		for (const h of [0, 1]) {
 			const short = tick(pair, VERIFY_AT + h * 3_600, { program: waiter(), requestsLimit: 7 });
-			expect([short.handed.length, short.asked.length, [...short.result.waiting].sort()]).toEqual([0, 0, ["1: verification waits: needs 9 requests, 7 left", "2: verification waits: needs 9 requests, 7 left"]]);
+			expect([short.handed.length, short.asked.length, [...short.result.waiting].sort()]).toEqual([0, 0, ["1: verification waits: needs 10 requests, 7 left", "2: verification waits: needs 10 requests, 7 left"]]);
 		}
-		// A game whose full read cannot fit does not take the turn: an hour-24 read (5) under a count of 4,
-		// beside a day-7 read (none) due the same tick. Hour 24 records its wait; day 7 is read, and written.
+		// A game whose full read cannot fit does not take the turn: an hour-24 read (6 at most) under a count
+		// of 4, beside a day-7 read (none) due the same tick. Hour 24 records its wait; day 7 is read, and written.
 		const at = START + 7_200;
 		const disputed = gameOf(2, { status: "disputed", dispute: { at, records: [SCORE_REPORT("2").readings] } });
 		const when = laterTick(at + disputed.day7);
@@ -604,7 +612,7 @@ describe("the verification on the hour's first tick", () => {
 		expect([both.result.fullRead?.why, both.result.fullRead?.gameId, both.written.length]).toEqual(["day 7", "2", 1]);
 		expect(both.result.waiting.some((w) => w.startsWith("1: hour 24 waits: "))).toBe(true);
 		// Alone, the same hour-24 read waits with its reason, every tick.
-		for (const k of [0, 1]) expect(tick([hour24], when + k * PERIOD, { requestsLimit: 4 }).result.waiting).toEqual(["1: hour 24 waits: needs 5 requests, 4 left"]);
+		for (const k of [0, 1]) expect(tick([hour24], when + k * PERIOD, { requestsLimit: 4 }).result.waiting).toEqual(["1: hour 24 waits: needs 6 requests, 4 left"]);
 	});
 
 	test("a page with a row shorter than the interface's: the tick reads nothing, writes nothing, and its error names the row", () => {

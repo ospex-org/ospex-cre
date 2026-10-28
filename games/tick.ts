@@ -298,19 +298,20 @@ export function runTick(deps: TickDeps): TickResult {
 		return at <= 0 ? turned : [turned[at], ...turned.slice(0, at), ...turned.slice(at + 1)];
 	};
 
-	// The hour's first tick: one verification, with its worst case of requests in hand. The turns go to
-	// the nearer games, those not yet VERIFY_NEAR past their date; a game further past its date takes a
-	// turn only when no nearer game is due. A game whose full read cannot fit the count does not take the
-	// turn: its line records the wait, and the next due game that fits takes the read the same tick. The
-	// others take their turn on the hours after.
+	// The hour's first tick: one verification, with its worst case of requests in hand. First the game at
+	// the place the hour's count names, whatever its date's distance, so the bound holds for every due
+	// game; then the nearer games, those not yet VERIFY_NEAR past their date, in turn; then the rest in
+	// turn: nearer-first orders the turn, it never keeps a game out of it. A game whose full read cannot
+	// fit the count does not take the turn: its line records the wait, and the next due game that fits
+	// takes the read the same tick. The others take their turn on the hours after.
 	const verifies = dues.filter((d): d is { row: PlacedGame; due: Extract<Due, { kind: "verify" }> } => d.due.kind === "verify" && d.due.fires);
 	const near = verifies.filter((v) => now <= v.row.date + VERIFY_NEAR);
-	const tier = near.length > 0 ? near : verifies;
-	for (const v of inTurn(tier, hourTurn, hourHead)) {
+	const byTier = [...inTurn(near, hourTurn, hourHead), ...inTurn(verifies.filter((v) => !near.includes(v)), hourTurn, hourHead)];
+	const named = verifies.find((v) => v.row.place === hourHead);
+	for (const v of named === undefined ? byTier : [named, ...byTier.filter((v) => v !== named)]) {
 		if (fullRead !== null) waiting.push(`${v.row.gameId}: verification waits for its hour's turn`);
 		else fullReadOrWait(v.row, "verification");
 	}
-	for (const v of verifies) if (!tier.includes(v)) waiting.push(`${v.row.gameId}: verification waits for its hour's turn`);
 
 	/**
 	 * One probe: the game's identity (its hints, and its teams for the spare) and its readings (the start
