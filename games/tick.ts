@@ -8,8 +8,8 @@
 // against its vote on record, and its full read also runs on the hour's second tick, so the other
 // seats' changes are recorded within the hour, and at day 7. On the hour's first tick the full read
 // is a verification: one game the creation trigger's run left unverified, from seven days before its
-// date, so a game created before the feeds list it is verified when they do, with nothing from
-// anywhere but the chain and the feeds.
+// date until it leaves the list, the nearer dates first, so a game created before the feeds list it
+// is verified when they do, however late, with nothing from anywhere but the chain and the feeds.
 //
 // The tick budgets the platform's quotas per execution: 15 chain reads and 15 feed requests. One full
 // read per tick, started only with its reads in hand and the most requests the program may send for
@@ -36,8 +36,8 @@ import {
 	HOURLY_TICK,
 	READS_PER_EXECUTION,
 	REQUESTS_PER_EXECUTION,
-	VERIFY_AFTER,
 	VERIFY_BEFORE,
+	VERIFY_NEAR,
 	counted,
 	memoized,
 	probeSeatFor,
@@ -133,8 +133,8 @@ export function dueOf(row: OpenGame, now: number, period: number): Due {
 	const duration = EXPECTED_DURATION[row.league];
 	if (duration === undefined) return none("league not offered");
 	if (row.status === "unverified") {
+		// Due until the game leaves the list: a feed that lists it late still gets it verified.
 		if (now < row.date - VERIFY_BEFORE) return none("before seven days to its date");
-		if (now > row.date + VERIFY_AFTER) return none("two days past its date, unverified");
 		return { kind: "verify", fires: onTheHour(now, period) };
 	}
 	if (row.status !== "verified" && row.status !== "disputed") return none(`status ${row.status}`);
@@ -275,12 +275,14 @@ export function runTick(deps: TickDeps): TickResult {
 	};
 
 	// The hour's first tick: one verification, the game whose turn it is, with its league's worst case
-	// of requests in hand. The others take their turn on the hours after.
-	const verifies = dues
-		.filter((d): d is { row: OpenGame; due: Extract<Due, { kind: "verify" }> } => d.due.kind === "verify" && d.due.fires)
-		.sort((a, b) => a.row.date - b.row.date || (a.row.gameId < b.row.gameId ? -1 : 1));
-	if (verifies.length > 0) {
-		const pick = verifies[hourTurn % verifies.length];
+	// of requests in hand. The turns go to the nearer games, those not yet VERIFY_NEAR past their date,
+	// nearest date first; a game further past its date takes a turn only when no nearer game is due.
+	// The others take their turn on the hours after.
+	const verifies = dues.filter((d): d is { row: OpenGame; due: Extract<Due, { kind: "verify" }> } => d.due.kind === "verify" && d.due.fires);
+	const near = verifies.filter((v) => now <= v.row.date + VERIFY_NEAR);
+	const queue = (near.length > 0 ? near : verifies).sort((a, b) => Math.abs(a.row.date - now) - Math.abs(b.row.date - now) || (a.row.gameId < b.row.gameId ? -1 : 1));
+	if (queue.length > 0) {
+		const pick = queue[hourTurn % queue.length];
 		fullReadOrWait(pick.row, "verification");
 		for (const v of verifies) if (v !== pick) waiting.push(`${v.row.gameId}: verification waits for its hour's turn`);
 	}

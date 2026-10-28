@@ -11,7 +11,8 @@
 // Two more that redden it: the verification's `&& d.due.fires` dropped (verified on every tick), and
 // `hourly` keyed to tick 0 (the hour's reads on the verification's tick). And the probe's seat taken
 // from the hint alone (lib.ts, probeSeatFor: `"none" in hintOf(game.hints) ? SPARE : 3`): the probe asks
-// a seat the start report excluded.
+// a seat the start report excluded. And in dueOf a cutoff two days past the date for an unverified
+// game (`if (now > row.date + VERIFY_NEAR) return none(...)`): a game the feeds list late is skipped for good.
 
 import { describe, expect, test } from "bun:test";
 import type { ChainGame, Report } from "../scoring/src/chain";
@@ -21,7 +22,7 @@ import { KEY, saved } from "../scoring/test/fixtures";
 import { PAYOUT, chainOf } from "../scoring/test/rule-helpers";
 import type { HttpRequest, HttpResponse } from "../scoring/src/types";
 import type { OpenGame } from "./chain";
-import { CLOCK_WINDOW, EXPECTED_DURATION, HOURLY_TICK, READS_PER_EXECUTION, REQUESTS_PER_EXECUTION, VERIFY_AFTER, VERIFY_BEFORE, decodeReport, keysFor } from "./lib";
+import { CLOCK_WINDOW, EXPECTED_DURATION, HOURLY_TICK, READS_PER_EXECUTION, REQUESTS_PER_EXECUTION, VERIFY_BEFORE, VERIFY_NEAR, decodeReport, keysFor } from "./lib";
 import { GAMES, fakeChainOf, recordingWriter } from "./test-helpers";
 import { dueOf, onTheHour, pageTurnsOf, runTick, sameVote, tickOfHour, type TickDeps, type TickResult } from "./tick";
 
@@ -205,16 +206,16 @@ describe("what a game is due for", () => {
 		expect(dueOf(row(g), at + g.day7, PERIOD)).toMatchObject({ kind: "clock", clock: "day 7", fires: true, since: at + g.day7 });
 	});
 
-	test("an unverified game: a verification from seven days before its date to two days after, firing on the hour's first tick", () => {
+	test("an unverified game: a verification from seven days before its date until it leaves the list, firing on the hour's first tick", () => {
 		const g = unverifiedOf(1);
 		const opens = g.date - VERIFY_BEFORE;
-		const closes = g.date + VERIFY_AFTER;
 		expect(dueOf(row(g), opens - 1, PERIOD)).toEqual({ kind: "none", why: "before seven days to its date" });
-		expect(dueOf(row(g), closes + 1, PERIOD)).toEqual({ kind: "none", why: "two days past its date, unverified" });
 		expect(dueOf(row(g), firstTick(opens), PERIOD)).toEqual({ kind: "verify", fires: true });
 		expect(dueOf(row(g), secondTick(opens), PERIOD)).toEqual({ kind: "verify", fires: false });
-		expect(dueOf(row(g), laterTick(closes - 86_400), PERIOD)).toEqual({ kind: "verify", fires: false });
-		expect(dueOf(row(g), firstTick(closes - 86_400), PERIOD)).toEqual({ kind: "verify", fires: true });
+		expect(dueOf(row(g), laterTick(g.date + 86_400), PERIOD)).toEqual({ kind: "verify", fires: false });
+		// No later cutoff: two days past its date, and thirty, it is still due on the hour's first tick.
+		expect(dueOf(row(g), firstTick(g.date + VERIFY_NEAR + 3_600), PERIOD)).toEqual({ kind: "verify", fires: true });
+		expect(dueOf(row(g), firstTick(g.date + 30 * 86_400), PERIOD)).toEqual({ kind: "verify", fires: true });
 	});
 
 	test("nothing for an ended game, or a league the table does not have", () => {
@@ -472,7 +473,7 @@ describe("the verification on the hour's first tick", () => {
 	test("the real program on the saved answers: an unverified game within seven days of its date is verified as the tick's one full read, and the start is written", () => {
 		const game = unverifiedOf(1);
 		// The fixture's game is in the window at the tick, and the tick is the hour's first.
-		expect([VERIFY_AT >= game.date - VERIFY_BEFORE, VERIFY_AT <= game.date + VERIFY_AFTER, tickOfHour(VERIFY_AT, PERIOD)]).toEqual([true, true, 0]);
+		expect([VERIFY_AT >= game.date - VERIFY_BEFORE, VERIFY_AT <= game.date + VERIFY_NEAR, tickOfHour(VERIFY_AT, PERIOD)]).toEqual([true, true, 0]);
 		const t = saved(undefined, VERIFY_AT);
 		const f = tick([game], VERIFY_AT, { program: "real", send: t.send });
 		expect(f.result.fullRead).toMatchObject({ gameId: "1", why: "verification", error: null });
@@ -485,18 +486,34 @@ describe("the verification on the hour's first tick", () => {
 		expect(f.result.probes).toEqual([]);
 	});
 
-	test("on another tick of the hour nothing is verified; before seven days to the date, or two days past it, nothing either", () => {
+	test("on another tick of the hour nothing is verified; before seven days to the date nothing either; thirty days past it, still its turn", () => {
 		const game = unverifiedOf(1);
 		for (const now of [secondTick(NOW), laterTick(NOW)]) {
 			const f = tick([game], now, { program: waiter() });
 			expect([f.result.fullRead, f.handed.length, f.result.waiting]).toEqual([null, 0, []]);
 		}
-		const early = unverifiedOf(1, { date: VERIFY_AT + VERIFY_BEFORE + 3_600 });
-		const late = unverifiedOf(1, { date: VERIFY_AT - VERIFY_AFTER - 3_600 });
-		for (const g of [early, late]) {
-			const f = tick([g], VERIFY_AT, { program: waiter() });
-			expect([f.result.fullRead, f.handed.length]).toEqual([null, 0]);
+		const early = tick([unverifiedOf(1, { date: VERIFY_AT + VERIFY_BEFORE + 3_600 })], VERIFY_AT, { program: waiter() });
+		expect([early.result.fullRead, early.handed.length]).toEqual([null, 0]);
+		const late = tick([unverifiedOf(1, { date: VERIFY_AT - 30 * 86_400 })], VERIFY_AT, { program: waiter() });
+		expect([late.result.fullRead?.why, late.handed.length]).toEqual(["verification", 1]);
+	});
+
+	test("the nearer games take the turns, nearest date first: a game more than two days past its date is verified only when no nearer game is due", () => {
+		const nearer = [unverifiedOf(1, { date: VERIFY_AT + 2 * 86_400 }), unverifiedOf(2, { date: VERIFY_AT + 86_400 })];
+		const far = [unverifiedOf(3, { date: VERIFY_AT - 5 * 86_400 }), unverifiedOf(4, { date: VERIFY_AT - 9 * 86_400 })];
+		const handed: string[] = [];
+		for (let hour = 0; hour < 4; hour++) {
+			const f = tick([...nearer, ...far], VERIFY_AT + hour * 3_600, { program: waiter() });
+			handed.push(f.handed[0].id);
+			expect(f.result.waiting.filter((w) => w.startsWith("3:") || w.startsWith("4:"))).toEqual(["3: verification waits for its hour's turn", "4: verification waits for its hour's turn"]);
 		}
+		// Four hours, the two nearer games in turn, the nearest (game 2, a day out) on the hours whose count is even.
+		expect([...new Set(handed)].sort()).toEqual(["1", "2"]);
+		expect(handed.filter((id, i) => (Math.floor(VERIFY_AT / 3_600) + i) % 2 === 0)).toEqual(["2", "2"]);
+		// With no nearer game due, the far ones take turns, nearest first.
+		const alone: string[] = [];
+		for (let hour = 0; hour < 2; hour++) alone.push(tick(far, VERIFY_AT + hour * 3_600, { program: waiter() }).handed[0].id);
+		expect([...alone].sort()).toEqual(["3", "4"]);
 	});
 
 	test("one verification an hour, the game whose turn it is; the others wait for theirs, and over the hours each has its turn", () => {

@@ -17,7 +17,7 @@ is in it, since those live in the program, inside the fingerprint.
 | `run.ts` | one run for one game: decide, write; written against interfaces so a test runs it with a fake chain and saved feed answers |
 | `tick.ts` | one cron fire for one shard of the open list: the clocks, the probe at seat 3, the full read on a final or a clock, the verification on the hour's first tick, under the platform's quotas |
 | `abi/IOspexGames.json` | the games set's interface ABI as forge builds it at the commit the reads are coded to; `abi.test.ts` pins every read and the open list's row to it |
-| `*.test.ts` | `bun test`: the ABI pins, the four never-lines' wrapper halves, the chain reads, the tick |
+| `*.test.ts` | `bun test`: the ABI pins, the four never-lines' wrapper halves, the chain reads, the tick, the worst case derived from the readers (`budget.test.ts`), the pages and the hour over 48 hours (`parity.test.ts`) |
 | `config.production.example.json` | the config template the reproducible build writes from; every address a placeholder |
 | `secrets.yaml` | the four seat keys' names in the vault |
 | `workflow.yaml` | the CRE target: `osgames` on the onchain registry |
@@ -64,8 +64,10 @@ start plus n) and day 7 (the dispute record plus its clock), each on every tick 
 on the hour's second tick; a disputed game is probed for a change against its vote on record and read
 in full on the hour's second tick too. On the hour's first tick the full read is a verification: one
 game the creation trigger's run left unverified (the feeds list a game days ahead, a creator may
-create it months ahead), from seven days before its date until two days past it, in turn when there
-are several, so a game is verified when the feeds first carry it. Each class of work (the verification,
+create it months ahead), from seven days before its date until the game leaves the list, the nearer
+dates first and in turn when there are several (a game more than two days past its date takes a turn
+only when no nearer game is due), so a game is verified when the feeds first carry it, however late,
+and never skipped for good. Each class of work (the verification,
 the hour's reads, the clocks in their windows, the probes) takes its games in turn by its own count, so
 a game that waited or failed last turn is not first next turn and no head keeps the rest from theirs. A
 full read never runs on the tick itself.

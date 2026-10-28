@@ -234,12 +234,15 @@ export const MOST_PAGES_PER_TICK = 3;
 /**
  * When the tick verifies a game the creation trigger's run left unverified (the feeds list a game
  * days ahead, a creator may create it months ahead): from seven days before its date, on the hour's
- * first tick, as that tick's one full read; and until two days past its date, after which no feed
- * will list it (the start may lie a day past the date, and a feed lists a game by the time it is
- * played). The games set's own bound is its day-30 release.
+ * first tick, as that tick's one full read, until the game leaves the open list, by its start written
+ * or its day-30 release. There is no later cutoff: a game the feeds list late is verified late, never
+ * skipped for good. The turns go to the nearer dates first: a game more than VERIFY_NEAR past its date
+ * (the start may lie a day past the date, and a feed lists a game by the time it is played) takes a
+ * turn only when no nearer game is due, so a creation no feed will ever list costs turns only when
+ * nothing else is waiting.
  */
 export const VERIFY_BEFORE = 7 * 86_400;
-export const VERIFY_AFTER = 2 * 86_400;
+export const VERIFY_NEAR = 2 * 86_400;
 
 /**
  * Which tick of the hour does the hour's reads that are not a verification: a disputed game's full
