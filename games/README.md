@@ -68,10 +68,12 @@ start plus n) and day 7 (the dispute record plus its clock), each on every tick 
 on the hour's second tick; a disputed game is probed for a change against its vote on record and read
 in full on the hour's second tick too. On the hour's first tick the full read is a verification: one
 game the creation trigger's run left unverified (the feeds list a game days ahead, a creator may
-create it months ahead), from seven days before its date until the game leaves the list, the nearer
-games first and in turn when there are several (a game more than two days past its date takes a turn
-only when no nearer game is due), so a game is verified when the feeds first carry it, however late,
-and never skipped for good. A game whose full read cannot fit the count does not take the turn: its
+create it months ahead), from seven days before its date until the game leaves the list: first the
+game at the place the hour's count names, whatever its date's distance, then the nearer games (not
+yet two days past their date) in turn, then the rest in turn, so nearer-first orders the turn and
+never keeps a game out of it, the bound above holds for every due game (`parity.test.ts`, the mixed
+ages: a game dated three days behind among 499 dated a week ahead), and a game is verified when the
+feeds first carry it, however late, and never skipped for good. A game whose full read cannot fit the count does not take the turn: its
 line records the wait, and the next due game that fits takes the read the same tick. A full read
 never runs on the tick itself.
 
@@ -80,22 +82,26 @@ and up to three pages, probes at two reads each (the identity and the readings),
 full read, started only with its reads in hand (six, or the four a probe left to read) and the most
 requests the program may send for it. The readers ask for one game at a time (seat 1 for the two
 teams' games on the window's dates by its own ids for the teams, seat 2 for each team's games by its
-own spelling, seat 3 for its result by hint, the spare for the game by its id or its slate), so the
-count turns on no league: a scoring run is 1 + 2 + 1 + 1 = 5, a verification 9 (the range read at
-seats 1, 2 and the spare, the board, then the window again at seats 1 and 2 and seat 3's result), day 7
-none (`lib.ts`, `requestsFor`; `budget.test.ts` derives the numbers by running the readers and the
-program in every league, college included, and on the saved answers). The assumption behind them: a
+own spelling, seat 3 for its result by hint and its board for the hint's row by its id, the spare for
+the game by its id, else its slate where the league's fits), so the count turns on no league: a
+scoring run is 1 + 2 + 1 + 1 = 5 (4 in college basketball without the spare's id, where the spare
+asks nothing), and 6 behind an id the feed answers nothing for, with the slate behind it, the most a
+full read is admitted on; a verification 9 (the range read at seats 1, 2 and the spare, the board's
+row, then the window again at seats 1 and 2 and seat 3's result) and 10 behind such an id, the most;
+day 7 none (`lib.ts`, `requestsFor`; `budget.test.ts` derives the numbers by running the readers and
+the program in every league, college included, by each branch, and on the saved answers). The assumption behind them: a
 team's games on a window's filing dates fit one page of a hundred rows. A feed that pages past it is
 stopped by the program's own bound on a reader (twelve), and the tick's count cuts the run first: the
 readers raise the cut rather than read the seat silent, the program decides nothing, nothing is
 written, and the tick's line says cut. A request already made in a run is answered from memory, so the
 probe's answer serves the full read: a scoring run after a probe sends 4 more. What one game's answer
 weighs, per seat and league, is the viability table in `budget.test.ts`, from the saved answers: under
-10 KB at seats 1 and 2 in every league saved, 200 bytes at seat 3, the spare's slate 0.6 to 20 KB;
-the two slates still asked for are the ones past the platform's 25 KB for an answer: seat 3's board at
-verification in college football as saved (29,367 bytes) and in college basketball in season, and the
-spare's slate for a college basketball game created without its id, in season. Those are the wrong
-feeds for those leagues at those reads, and they are reported, not worked around. Throughput: one
+10 KB at seats 1 and 2 in every league saved, 200 bytes at seat 3's result and 579 at its board's row,
+349 at the spare's row by its id, the spare's slate 0.6 to 20 KB where it is still read. No answer past
+the platform's 25 KB is asked for: the board's slate is not read (its row for the hint is), and the
+spare's slate for a college basketball game created without its id, in season past the size, is not
+read either, the spare silent there without a request. That is the wrong feed for that read, reported,
+not worked around: such a game is read at seats 1, 2 and 3 alone. Throughput: one
 full read per tick per shard, so twelve finals an hour per shard, and one verification an hour per shard.
 
 **Waiting.** The games set's change that stores a game's identity, its readings and the open list is

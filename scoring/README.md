@@ -32,12 +32,16 @@ seats are asked.
 Seats 1, 2 and 4 are read by team and window, each asked for the one game: seat 1 for the two
 teams' games on the window's filing dates by its own ids for the teams, seat 2 for each team's
 games over those dates by its own spelling of the team, the spare for the game by its own id when
-the creation hints carry one and for its slate of live, upcoming and recent games otherwise (it
-cannot be asked by team). Neither seat 1 nor seat 2 is ever asked for a day's slate: one game's
-read costs one request at seat 1 and two at seat 2 whatever the league, and a slate page of
-college games is past the size a run's answer may be. Seat 3 is read by its creation hint: its results
-carry points and status but no team names and no game time, and its board, which has both, drops
-a game once the game is final, so the hint is the only thing that ties a result to a game.
+the creation hints carry one, else for its slate of live, upcoming and recent games (it cannot be
+asked by team) where the league's slate fits the size a run's answer may be: college basketball's
+does not, so a game there created without the spare's id is not asked for at the spare. An id the
+feed answers nothing for, or whose row is not the game, falls back to the slate the same way.
+Neither seat 1 nor seat 2 is ever asked for a day's slate: one game's read costs one request at
+seat 1 and two at seat 2 whatever the league, and a slate page of college games is past the size a
+run's answer may be. Seat 3 is read by its creation hint: its results carry points and status but
+no team names and no game time, and its board, which has both and is asked for the hint's row by
+its id, drops a game once the game is final, so the hint is the only thing that ties a result to a
+game.
 
 * **By team.** A feed's record is the game only when its two teams resolve to the game's two
   teams, in either order. Points come back by team, never by the feed's home or away slot, so a
@@ -85,10 +89,12 @@ a game once the game is final, so the hint is the only thing that ties a result 
   found by its teams. A hinted record of the two teams outside the window leaves the seat silent
   while anything inside the window could be the game, and otherwise is dropped too. Two different
   hints for one seat leave it silent. In a doubleheader or a series, a hint is what lets a seat
-  choose between the games inside the window; verification holds each hint to the record nearest
-  the creator's date (The start, below). The spare asked by its hint reads the hinted record when it
-  is the game's two teams inside the window, and weighs anything else against its slate, as it
-  would without the hint, in one more request.
+  choose between the games inside the window; verification holds a hint at seats 1 and 2 to the
+  record nearest the creator's date (The start, below). The spare asked by its id reads the hinted
+  record when it is the game's two teams inside the window; an id the feed answers nothing for, or
+  whose row is not the game, is unusable, and the slate then decides as it would without the id, in
+  one more request, where the league's slate fits the size an answer may be (`SLATE_FITS` in
+  [`src/readers/seat4.ts`](src/readers/seat4.ts)); where it does not, the seat is silent.
 * **Seat 3, by hint.** One request: the feed's result for the game's seat 3 id. The hint rides in
   the creation event on chain, so anyone can re-run the match while the feed answers for that id:
   in the answers saved on 22 Oct, a result about four days old answered, and ids 78 to 156 days
@@ -110,14 +116,19 @@ a game once the game is final, so the hint is the only thing that ties a result 
   request (a 401 from a league the seat's plan does not cover reads `http 401`, so the reason
   travels with the reading), an answer that doesn't parse, a record with no game time, a final
   without points or short of a whole game, more than one record that could be the game, two
-  different hints, a slate (the spare's) that came back empty when the game was not found, a closed
-  seat (below), a clock that isn't a number, and, at seat 3, no usable hint, no result for it,
-  or a hint naming a row for part of the game. A team's own answer that holds none of its games is
-  not silence: asked for the teams, an empty answer is the feed's answer, and the game is absent;
-  so a spelling seat 2 no longer uses for a team leaves that team's game absent there until the
-  lists are regenerated, while one team respelt still reaches the seat through the other team's
-  answer and reads as a name the lists don't know. Silent is never turned into "no
-  final". A final without points, or one short of a whole game, is silent and marked as the feed
+  different hints, an answer that came back empty, a closed seat (below), a clock that isn't a
+  number, and, at seat 3, no usable hint, no result for it, or a hint naming a row for part of the
+  game. **An irreversible end never rests on an empty answer.** From any seat, empty is silence,
+  never absence and never a game without a final, since nothing in it says the feed looked for the
+  game; absence needs a non-empty answer, the team's other games listed and this one not
+  ([`test/never-empty.test.ts`](test/never-empty.test.ts): the break that turns it red is the
+  empty-listing line in [`src/pick.ts`](src/pick.ts) dropped, with which a game one team's
+  seat 2 spelling no longer reaches is disputed at hour 24 beside two finals; its control, the same
+  game with the spelling the feed uses, scores). So a spelling seat 2 no longer uses for a team
+  leaves the seat silent for that team's games until the lists are regenerated, while one team
+  respelt still reaches the seat through the other team's answer and reads as a name the lists
+  don't know. The spare past the feed's three-day window is silent by its own date arithmetic, with
+  no request sent. Silent is never turned into "no final". A final without points, or one short of a whole game, is silent and marked as the feed
   saying the game is over: scoring never counts it, and verification writes no start on it.
 
 ## Open and closed: how long each seat is asked
@@ -143,12 +154,14 @@ is asked.
 
 One read of one game, whatever the league: seat 1 asks once (the two teams' games on the window's
 filing dates, one page); seat 2 once per team, two (one where its list lacks a team); seat 3 once,
-or not at all without a hint or past five days; seat 4 once (two credits on its plan; by its hint
-when it has one, else the slate), or not at all past 66 hours: 5 for a scoring run. A verification
-reads seats 1, 2 and 4 by team over the range (1 + 2 + 1), seat 3's board (1), its result where the
-board no longer lists the hint (1), then every seat again in the window from the start chosen,
-whose dates differ (1 + 2 more at seats 1 and 2, seat 3's result where it counts, the spare from
-memory): 9 at most. A disputed game's day-7 run asks nothing. The cap is 12 requests per seat per
+or not at all without a hint or past five days; seat 4 once by its id when it has one (two credits
+on its plan), else once for its slate where the league's fits, or not at all (college basketball
+without the id; past 66 hours): 5 for a scoring run, 6 behind an id the feed answers nothing for
+with the slate behind it, the most a full read is admitted on. A verification reads seats 1, 2 and
+4 over the range (1 + 2 + 1), seat 3's board for the hint's row (1), its result where the board has
+no row for the hint (1), then every seat again in the window from the start chosen, whose dates
+differ (1 + 2 more at seats 1 and 2, seat 3's result where it counts, the spare from memory): 9, 10
+behind such an id, the most. A disputed game's day-7 run asks nothing. The cap is 12 requests per seat per
 game (`MAX_REQUESTS` in `src/run.ts`), reached only by a feed that pages past what one game's
 answer should hold; the readers assume a team's games on a window's dates fit one page of a
 hundred rows. Each game is read on its own: a slate of games costs the sum.
@@ -199,10 +212,13 @@ inside the fingerprint. For a game whose start is written:
 
 [`src/verify.ts`](src/verify.ts) is the start's rule, written once at verification.
 
-* **The date says which game.** Seats 1, 2 and 4 are read by team without their hints, a day
+* **The date says which game.** Seats 1 and 2 are read by team without their hints, a day
   either side of the creator's date, and among records of the two teams the one nearest the date is
   the game. A seat whose hint names a different record makes the run wait. (At scoring, hints still
-  choose among the records in the window.)
+  choose among the records in the window.) The spare keeps its id: an id present is read by itself,
+  never the slate, and its record is the hint's own; where the feed has nothing for the id, the
+  slate's where the league's fits, else the spare is silent (`src/readers/seat4.ts`), and scoring
+  reads it the same way.
   * A record with a team the lists don't know, one of the game's teams beside a name they don't
     know or a record they can't place, is weighed only where scoring weighs it: in the window from
     the start chosen, when every seat is read again (below). A day before the game it stops nothing.
@@ -223,11 +239,11 @@ inside the fingerprint. For a game whose start is written:
     wait), the hint's row without readable teams, or the game's own row without a readable time. A
     row of other teams fails whatever its time says. A side the board names only by a placeholder
     ("TBD") isn't named yet: the row waits, unless the side it does name makes it another game.
-  * A hint not on the board fails only once the board lists some game at or after the game's own
-    time at seats 1 and 2, the later of the two (the creator's date when they don't both list it).
-    Short of that, the run waits. The board drops a finished game, so before such a hint stands
-    seat 3 down, seat 3's result for it is read: a final there writes nothing, and a read that
-    fails waits.
+  * The board is asked for the hint's row by its id, one path (`POST /odds/bygames`, the id, the
+    league's code and the game's odds type in the body; 579 bytes as saved): the row answers, or
+    nothing does. A hint it has no row for fails at once, whatever the game's date. The board drops
+    a finished game, so before such a hint stands seat 3 down, seat 3's result for it is read: a
+    final there writes nothing, and a read that fails waits.
   * With seat 3 counting, the spare, when it lists the game, must list it within the hour of the
     counting seats: scoring reads the spare by that record, and one further off is another game.
 * **The start written** is the earliest of the counting seats' scheduled times. The spare's time
@@ -237,10 +253,12 @@ inside the fingerprint. For a game whose start is written:
   by its result when it counts. Each counting seat read by team (seats 1 and 2, and the spare when
   it stands in) must read the record verification found, inside that window, and seat 3, when it
   counts, must read by its result. The spare, counting or not, may read no other record there, and
-  a spare with a hint must read that record: its hint, unchecked, would choose at scoring. A hinted
-  spare that doesn't count and whose record is within the hour of the start, a second before the
-  window included, is the game. An unhinted spare that doesn't count and is silent at the re-read
-  passes: nothing binds it, and the most it can cost is a dispute.
+  a spare with an id must read that record (by the id, or behind an unusable one the slate's, as
+  scoring will), or be silent by the feed's answer about the id, nothing for it and no slate behind
+  it, which is how scoring will read it too; silent by a read that failed, its hint is unchecked
+  and the run waits. A hinted spare that doesn't count and whose record is within the hour of the
+  start, a second before the window included, is the game. An unhinted spare that doesn't count
+  and is silent at the re-read passes: nothing binds it, and the most it can cost is a dispute.
 * **Never a finished game.** While any reading verification takes shows the game final, near the
   date or at the re-read, seat 3's result and the spare read by its hint included, nothing is
   written; and the same for a feed that says the game is finished without points, or with a count
