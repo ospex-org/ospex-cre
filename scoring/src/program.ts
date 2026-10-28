@@ -196,40 +196,36 @@ function* readAll(game: ChainGame, start: number, keys: Held, now: number, skip:
 }
 
 /**
- * Verification. Seats 1, 2 and 4 are read by team within a day of the date, nearest it, without
- * their hints: the date names the game, and decideStart holds each seat's hint to that record.
- * Seat 3's board is checked against its hint, the board's horizon being the later of the game's own
- * times at seats 1 and 2 when both list it; a hint the board no longer lists is read by its result before
- * seat 3 stands down, since the board drops a finished game. If that gives a start, every seat is
- * read again as scoring's first run will read it, and confirmStart writes the start only if that
+ * Verification. Seats 1 and 2 are read by team within a day of the date, nearest it, without their
+ * hints: the date names the game, and decideStart holds each seat's hint to that record. The spare is
+ * read the same way, keeping its hint: an id present is read by itself and never the slate, and an
+ * unusable one falls back to the slate where it fits (readers/seat4.ts), so its record is the hint's
+ * own or the slate's, as scoring reads it, and decideStart holds no hint to it. Seat 3's
+ * board is asked for the hint's row by its id; a hint the board does not list is read by its result
+ * before seat 3 stands down, since the board drops a finished game. If that gives a start, every seat
+ * is read again as scoring's first run will read it, and confirmStart writes the start only if that
  * read agrees.
  */
 function* verifying(game: ChainGame, keys: Held, now: number): Plan {
 	// The range the games set accepts a start in: [date - START_BOUND, date + START_BOUND], both ends in.
 	const range = { league: game.league, home: game.home, away: game.away, start: game.date - START_BOUND, n: 2 * START_BOUND + 1 };
-	const byTeamProbe: Game = { ...range, hints: [] };
-	const byTeam = function* (seat: Seat): Generator<Job, Reading, Done> {
-		return (yield { kind: "read", seat, run: readerFor(seat)({ game: byTeamProbe, now, key: keyOf(keys, seat), near: game.date }) }) as Reading;
+	const byTeam = function* (seat: Seat, hints: Game["hints"]): Generator<Job, Reading, Done> {
+		return (yield { kind: "read", seat, run: readerFor(seat)({ game: { ...range, hints }, now, key: keyOf(keys, seat), near: game.date }) }) as Reading;
 	};
-	const r1 = yield* byTeam(1);
-	const r2 = yield* byTeam(2);
-	// The time the board must reach before a hint missing from it fails: the game's own time at seats 1
-	// and 2, the later of the two, when both list it; otherwise the creator's date. Short of the later
-	// one, the board may not yet have posted the game, listed beside its later time.
-	const t1 = r1.kind === "silent" ? null : (r1.record?.time ?? null);
-	const t2 = r2.kind === "silent" ? null : (r2.record?.time ?? null);
-	const horizon = t1 !== null && t2 !== null ? Math.max(t1, t2) : game.date;
+	const r1 = yield* byTeam(1, []);
+	const r2 = yield* byTeam(2, []);
 	let board: BoardCheck;
 	const hint = hintOf(game.hints);
 	if ("none" in hint) board = { kind: "fails", why: hint.none };
-	else board = (yield { kind: "board", run: checkBoard({ game: { ...range, hints: game.hints }, now, key: keyOf(keys, 3), near: horizon }) }) as BoardCheck;
+	else board = (yield { kind: "board", run: checkBoard({ game: { ...range, hints: game.hints }, now, key: keyOf(keys, 3) }) }) as BoardCheck;
 	// The board drops a finished game: before a hint missing from it stands seat 3 down, seat 3's
 	// result for the hint says whether the game is already over (verify.ts).
 	const result =
 		board.kind === "fails" && board.missing === true
 			? ((yield { kind: "read", seat: 3, run: readerFor(3)({ game: { ...range, hints: game.hints }, now, key: keyOf(keys, 3) }) }) as Reading)
 			: undefined;
-	const r4 = yield* byTeam(4);
+	// The spare keeps its id: read by itself where the creator gave one, by its slate otherwise.
+	const r4 = yield* byTeam(4, game.hints.filter((h) => h.seat === 4));
 	const chosen = decideStart({ date: game.date, hints: game.hints }, { 1: r1, 2: r2, 3: board, 4: r4, result });
 	if (chosen.action !== "start") return chosen;
 

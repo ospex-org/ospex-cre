@@ -345,14 +345,16 @@ describe("end to end, on the saved answers", () => {
 	});
 
 	test("a seat that doesn't list the game is silent on the first record; the next run scores on the three finals beside it, the spare's the third", () => {
-		// After n, seat 2's answer lists every NBA game of the night but this one: it answered, without a
-		// final, so beside two finals the run disputes. On the record, a seat that gave no answer about the
-		// game is silent, so it has no vote, and the next run reads two counting finals, the third silent,
-		// and the spare's final the same: three agreeing recorded sources.
+		// After n, seat 2's answer lists a game of the two teams the night before and not this one: it
+		// answered, without a final, so beside two finals the run disputes (an answer with nothing in it
+		// would be silence, src/pick.ts). On the record, a seat that gave no answer about the game is
+		// silent, so it has no vote, and the next run reads two counting finals, the third silent, and the
+		// spare's final the same: three agreeing recorded sources.
 		const unlisted: Derive = (s, p, b) => {
 			if (s !== 2 || !p.startsWith("/games?league=NBA")) return b;
 			const c = copy(b) as { results: Record<string, any>[] };
-			return { ...c, results: c.results.filter((x) => x.gameId !== 340484) };
+			for (const x of c.results) if (x.gameId === 340484) Object.assign(x, { gameId: 9_990_484, schedule: { date: "2026-10-21T23:00:00.000Z", tbaTime: false } });
+			return c;
 		};
 		const after = g.start! + g.n + 60;
 		const first = run(g, unlisted, after);

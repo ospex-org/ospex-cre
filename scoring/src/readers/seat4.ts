@@ -2,7 +2,8 @@
 //
 // Asks for the one game by the feed's own id for it, when the game was created with that hint
 // (eventIds); otherwise once per league for live, upcoming and recently completed games, the slate,
-// which the feed cannot be asked for by team. The feed gives each
+// which the feed cannot be asked for by team, and only where the league's slate fits the size an
+// answer may be (SLATE_FITS); an unusable id falls back to the slate the same way. The feed gives each
 // game's points as a list keyed by team name, not by home or away, so each team takes the one
 // entry carrying its own name, compared the way team names are (case, accents, punctuation and
 // spacing aside). Status: `completed` true is final, the feed's own word for a whole game;
@@ -59,6 +60,14 @@ export function toRecord(e: Record<string, unknown>): FeedRecord | null {
 /** The feed's ids are 32 hex characters; nothing else is ever put in a request. */
 const ID = /^[0-9a-f]{32}$/i;
 
+/**
+ * The leagues whose slate of live, upcoming and recent games fits the platform's size for an answer
+ * (25 KB): as saved, 7,365 bytes in football, 14,770 in basketball, 9,146 in hockey and 19,905 in
+ * college football, and baseball's by its rows' weight. College basketball's in season does not: a
+ * game there is read by its id, which its creator passes, or not at all. Part of the fingerprint.
+ */
+const SLATE_FITS: ReadonlySet<string> = new Set(["nfl", "nba", "mlb", "nhl", "ncaaf"]);
+
 /** The seat 4 id the game was created with, when it was created with exactly one that is one. */
 function hintOf(hints: Ask["game"]["hints"]): string | null {
 	const ids = [...new Set(hints.filter((h) => h.seat === SEAT).map((h) => h.id))];
@@ -86,16 +95,20 @@ export function* read(ask: Ask): ReaderRun {
 		return records;
 	};
 	// One game, one request, when the game was created with the feed's id for it: the hinted record is
-	// read when it is the game's two teams inside the window, as the hint rule reads it from a slate.
-	// Anything else about it (another pair of teams, no time inside the window, a final it can't
-	// score) is weighed against the slate, as it would be without the hint, in one more request.
+	// read when it is the game's two teams inside the window, as the hint rule reads it from a slate. An
+	// id the feed answers nothing for, or whose row is not this game inside the window, is unusable:
+	// the slate then decides as it would without the id, where the league's slate fits the size an
+	// answer may be; where it does not, the seat is silent. An empty answer is never a reading.
 	const hint = hintOf(ask.game.hints);
 	if (hint !== null) {
 		const one = yield* listing(`${slate}&eventIds=${hint}`);
 		if (!Array.isArray(one)) return one;
-		const r = pick(SEAT, ask.game, [one], ask.near);
-		if (r.kind !== "silent" && r.record !== null && r.record.id === hint && r.record.time !== null && inWindow(r.record.time, windowOf(ask.game))) return r;
-	}
+		if (one.length > 0) {
+			const r = pick(SEAT, ask.game, [one], ask.near);
+			if (r.kind !== "silent" && r.record !== null && r.record.id === hint && r.record.time !== null && inWindow(r.record.time, windowOf(ask.game))) return r;
+		}
+		if (!SLATE_FITS.has(ask.game.league)) return silent(SEAT, one.length === 0 ? "nothing for the id, and the slate is past the size" : "the id's row is not the game, and the slate is past the size");
+	} else if (!SLATE_FITS.has(ask.game.league)) return silent(SEAT, "no id, and the slate is past the size");
 	const records = yield* listing(slate);
 	if (!Array.isArray(records)) return records;
 	return pick(SEAT, ask.game, [records], ask.near);

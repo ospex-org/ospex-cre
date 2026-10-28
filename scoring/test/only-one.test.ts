@@ -412,9 +412,11 @@ describe("only one: what can't be the game doesn't stop a reading", () => {
 		// The Lakers' real final, renamed so it resolves to one team only, read with a window that
 		// starts after it: it can't be the game, so the game is absent. Seat 4's answer also lists the
 		// two teams' real game of 31 Oct, outside this window too, so seat 4 names that one.
+		// Seat 2 is asked by each team's spelling: the renamed side's own answer comes back empty, and an
+		// empty answer is silence, never absence.
 		const want = {
 			1: { kind: "no_final", detail: "absent", id: null },
-			2: { kind: "no_final", detail: "absent", id: null },
+			2: { kind: "silent", detail: "empty listing", id: null },
 			4: { kind: "no_final", detail: "outside window", id: "761c15cdefb5a94e34f234e11d6e57ad" },
 		};
 		for (const seat of [1, 2, 4] as const) {
@@ -453,9 +455,9 @@ describe("one answer is one moment: a record on two of the pages an answer is dr
 		expect(read(2, hawaii, MID, tick(done, live))).toMatchObject({ kind: "no_final", detail: "in progress", id: "348655" });
 	});
 
-	test("the record now under other teams is no record of the game; two copies in one answer are silent", () => {
+	test("the record now under other teams leaves the other team's answer empty, silence; two copies in one answer are silent", () => {
 		const other = { ...done, teams: { home: { team: "Hawaii" }, away: { team: "Pacific" } } };
-		expect(read(2, hawaii, MID, tick(live, other))).toMatchObject({ kind: "no_final", detail: "absent" });
+		expect(read(2, hawaii, MID, tick(live, other))).toMatchObject({ kind: "silent", detail: "empty listing" });
 		const twiceInOne: Derive = (seat, path, body) => {
 			const b = tick(live, live)(seat, path, body) as { results: Record<string, unknown>[] };
 			if (seat !== 2 || !path.includes("date=2026-11-03")) return b;
@@ -471,20 +473,20 @@ describe("one answer is one moment: a record on two of the pages an answer is dr
 	});
 });
 
-describe("an empty answer: from a team's own list it is the game's absence, from a slate it is not", () => {
+describe("an empty answer is silence, from a team's own list as from a slate", () => {
 	const iowa = byName("ncaab not final: Memphis at Iowa State").game;
 	// Le Moyne at Nebraska is on the second page of seat 2's real 2 Nov answer.
 	const nebraska = { ...iowa, home: "Nebraska", away: "Le Moyne", start: at("2026-11-03T00:30:00Z"), n: 23 * 3600 };
 
-	test("seat 2, asked for the teams: an answer with none of their games says the game is absent", () => {
+	test("seat 2, asked for the teams: an answer with none of their games is silence, never absence", () => {
 		// The game is on the second page of the real 2 Nov slate; with the first page emptied, the one-game
-		// answer drawn from the slate holds none of the teams' games. Asked for the teams themselves, an
-		// empty answer is the feed's answer: the game is absent, never silence.
+		// answer drawn from the slate holds none of the teams' games. An empty answer cannot tell a team
+		// with no game from a spelling the feed no longer uses or a filter it did not apply: silence.
 		const emptyFirst: Derive = (seat, path, body) => {
 			if (seat !== 2 || !path.endsWith("date=2026-11-02")) return body;
 			return { ...(copy(body) as Record<string, unknown>), results: [], games: 0 };
 		};
-		expect(read(2, nebraska, NOW, emptyFirst)).toMatchObject({ kind: "no_final", detail: "absent", id: null });
+		expect(read(2, nebraska, NOW, emptyFirst)).toMatchObject({ kind: "silent", detail: "empty listing", id: null });
 		// The control: the real two pages read the game.
 		expect(read(2, nebraska, NOW)).toMatchObject({ kind: "no_final", detail: "scheduled", id: "342256" });
 	});
@@ -495,8 +497,9 @@ describe("an empty answer: from a team's own list it is the game's absence, from
 		expect(read(1, byName("ncaaf final, read the next afternoon").game, MID)).toMatchObject({ kind: "final", home: 34, away: 31 });
 	});
 
-	test("seat 4's empty answer before the season: silent", () => {
-		expect(read(4, iowa, NOW)).toMatchObject({ kind: "silent", detail: "empty listing" });
+	test("college basketball at the spare: its slate is past the size an answer may be, so without the game's id the spare asks nothing and is silent", () => {
+		const { reading, asked } = readSaved(4, iowa, NOW);
+		expect([reading.kind, reading.detail, asked.length]).toEqual(["silent", "no id, and the slate is past the size", 0]);
 	});
 });
 
@@ -525,9 +528,11 @@ describe("a team the seat marks outside the league is no team of it", () => {
 	test("the namesake's game is not the University of Georgia's", () => {
 		for (const seat of [1, 2] as const) {
 			expect({ seat, ...read(seat, vsGeorgia, MID, namesake) }).toMatchObject({ seat, kind: "no_final", detail: "absent" });
-			// Kentucky's own game, against the namesake, is not Kentucky against Santa Clara either.
-			expect({ seat, ...read(seat, kentucky.game, MID, namesake) }).toMatchObject({ seat, kind: "no_final", detail: "absent" });
 		}
+		// Kentucky's own game, against the namesake, is not Kentucky against Santa Clara either: absent at
+		// seat 1, asked by the two teams' ids; silent at seat 2, where Santa Clara's own answer comes back empty.
+		expect(read(1, kentucky.game, MID, namesake)).toMatchObject({ kind: "no_final", detail: "absent" });
+		expect(read(2, kentucky.game, MID, namesake)).toMatchObject({ kind: "silent", detail: "empty listing" });
 	});
 
 	test("Colorado College, Rhode Island College and Cornell College: a final of theirs never reads for the Division I school", () => {
@@ -540,9 +545,9 @@ describe("a team the seat marks outside the league is no team of it", () => {
 		// lists stand between it and the final. The control puts the Division I school itself in the
 		// record: the same derived final then reads.
 		const rows = [
-			{ id: 342338, home: "Northern Colorado", away: "Colorado", school: "Colorado", conference: "Big 12", at: "2026-11-03T02:30:00Z", now: NOW, time: null },
-			{ id: 342332, home: "Albany", away: "Rhode Island", school: "Rhode Island", conference: "Atlantic 10", at: "2026-11-03T00:30:00Z", now: NOW, time: "2026-11-03T00:30:00.000Z" },
-			{ id: 346614, home: "Northern Iowa", away: "Cornell", school: "Cornell", conference: "Ivy League", at: "2026-11-04T01:00:00Z", now: MID, time: null },
+			{ id: 342338, home: "Northern Colorado", away: "Colorado", school: "Colorado", conference: "Big 12", at: "2026-11-03T02:30:00Z", now: NOW, time: null, asSaved: { kind: "no_final", detail: "absent" } },
+			{ id: 342332, home: "Albany", away: "Rhode Island", school: "Rhode Island", conference: "Atlantic 10", at: "2026-11-03T00:30:00Z", now: NOW, time: "2026-11-03T00:30:00.000Z", asSaved: { kind: "no_final", detail: "absent" } },
+			{ id: 346614, home: "Northern Iowa", away: "Cornell", school: "Cornell", conference: "Ivy League", at: "2026-11-04T01:00:00Z", now: MID, time: null, asSaved: { kind: "silent", detail: "empty listing" } },
 		] as const;
 		for (const row of rows) {
 			const asked = { ...kentucky.game, home: row.home, away: row.away, start: at(row.at), n: 20 * 3600 };
@@ -558,10 +563,12 @@ describe("a team the seat marks outside the league is no team of it", () => {
 				}
 				return b;
 			};
-			// As saved, the college is no team of the league, so the game is absent. With a conference,
-			// it is a name the lists don't know beside one of the game's teams: it could be the game, so
-			// the seat is silent. Neither reads the 80-60.
-			expect({ row: row.id, ...read(2, asked, row.now, derived("as saved")) }).toMatchObject({ row: row.id, kind: "no_final", detail: "absent" });
+			// As saved, the college is no team of the league: the Division I school's own answer, asked for by
+			// its spelling, lists its other games of the dates and not this one (Colorado's and Rhode Island's:
+			// absent), or nothing at all (Cornell's: silence, never absence). With a conference, the college is
+			// a name the lists don't know beside one of the game's teams: it could be the game, so the seat is
+			// silent. None reads the 80-60.
+			expect({ row: row.id, ...read(2, asked, row.now, derived("as saved")) }).toMatchObject({ row: row.id, ...row.asSaved });
 			expect({ row: row.id, ...read(2, asked, row.now, derived("with a conference")) }).toMatchObject({ row: row.id, kind: "silent", detail: "unresolved team names" });
 			expect({ row: row.id, ...read(2, asked, row.now, derived("the school itself")) }).toMatchObject({ row: row.id, kind: "final", home: 80, away: 60, id: String(row.id) });
 		}

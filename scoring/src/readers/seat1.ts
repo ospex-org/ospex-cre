@@ -190,5 +190,5 @@ export function* read(ask: Ask): ReaderRun {
 		const next = obj(page?.meta)?.next_cursor;
 		cursor = typeof next === "number" || (typeof next === "string" && next !== "") ? String(next) : null;
 	} while (cursor !== null);
-	return pick(SEAT, ask.game, [listing], ask.near, "team");
+	return pick(SEAT, ask.game, [listing], ask.near);
 }

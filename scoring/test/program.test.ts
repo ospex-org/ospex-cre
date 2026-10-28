@@ -11,6 +11,8 @@ import { KEY, at, copy, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, chainOf } from "./rule-helpers";
 
 const KEYS = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
+/** The board's one-game request for the Bears' hint, as the index keys it: the method, the path and the body. */
+const BOARD_ASK = `POST /odds/bygames {"GameIDs":["edcfd41f-1773-4bc9-a349-aa50931a0278"],"Sport":"NFL","OddType":"Game"}`;
 
 function asked(game: ChainGame, now = NOW) {
 	// The saved answers take a clock in unix seconds and refuse a larger one, so a run whose clock is
@@ -169,8 +171,8 @@ describe("one run", () => {
 		expect(o.decision.action).toBe("start");
 		expect(t.misses).toEqual([]);
 		const paths = t.asked.map((q) => locate(q)!);
-		// Seat 3 is asked twice: its board near the date, then its result for the hint as scoring reads it.
-		expect(paths.filter((p) => p.seat === 3).map((p) => p.path)).toEqual(["/odds/NFL?oddType=Game", "/results/edcfd41f-1773-4bc9-a349-aa50931a0278"]);
+		// Seat 3 is asked twice: its board's row for the hint near the date (a POST naming the id), then its result for the hint as scoring reads it.
+		expect(paths.filter((p) => p.seat === 3).map((p) => p.path)).toEqual([BOARD_ASK, "/results/edcfd41f-1773-4bc9-a349-aa50931a0278"]);
 		// The order of the seats asked: the read near the date, then the re-read in seat order.
 		const runs = paths.map((p) => p.seat).filter((s, i, all) => i === 0 || all[i - 1] !== s);
 		expect(runs).toEqual([1, 2, 3, 4, 1, 2, 3, 4]);
@@ -186,8 +188,34 @@ describe("one run", () => {
 		expect(t3.misses).toEqual([]);
 		expect(o3.decision.action).toBe("start");
 		const asked3 = t3.asked.map((q) => locate(q)!);
-		expect(asked3.filter((p) => p.seat === 3).map((p) => p.path)).toEqual(["/odds/NFL?oddType=Game", "/results/edcfd41f-1773-4bc9-a349-aa50931a0278"]);
+		expect(asked3.filter((p) => p.seat === 3).map((p) => p.path)).toEqual([BOARD_ASK, "/results/edcfd41f-1773-4bc9-a349-aa50931a0278"]);
 		expect(asked3.map((p) => p.seat).filter((s, i, all) => i === 0 || all[i - 1] !== s)).toEqual([1, 2, 3, 4, 1, 2, 4]);
+	});
+
+	test("the spare keeps its id at verification: asked by it near the date and again at the re-read, never its slate; an id the feed answers nothing for reads the slate where it fits; college basketball without an id asks nothing", () => {
+		const g: ChainGame = { ...chainOf("nfl not final"), status: "unverified", start: null, startReadings: null };
+		const withId = { ...g, hints: [...g.hints, { seat: 4, id: "ffebea881c1d7b2dfb85b3e590c35985" }] };
+		const t = saved(undefined, NOW);
+		const o = scoreGameSync(withId, KEYS, PAYOUT, NOW, t.send);
+		expect([o.decision.action, t.misses]).toEqual(["start", []]);
+		const spare = t.asked.filter((q) => locate(q)!.seat === 4).map((q) => locate(q)!.path);
+		expect([spare.length, spare.every((p) => p.includes("eventIds=ffebea881c1d7b2dfb85b3e590c35985")), new Set(spare).size]).toEqual([2, true, 1]);
+		// Nothing for the id: the slate behind it, where the league's fits, near the date and at the re-read.
+		const t2 = saved(undefined, NOW);
+		const nothing = scoreGameSync({ ...g, hints: [...g.hints, { seat: 4, id: "0".repeat(32) }] }, KEYS, PAYOUT, NOW, (q) => (q.url.includes("eventIds=") ? { status: 200, body: "[]" } : t2.send(q)));
+		expect([nothing.decision.action, t2.misses]).toEqual(["start", []]);
+		const paths = t2.asked.filter((q) => locate(q)!.seat === 4).map((q) => locate(q)!.path.includes("eventIds=") ? "by id" : "the slate");
+		expect(paths).toEqual(["the slate", "the slate"]);
+		// College basketball without the spare's id: the spare is silent without a request. (The saved answers
+		// at this clock lack the day before the game's, so seats 1 and 2, asked for it among their dates, are
+		// answered with nothing here: empty, so silent, and the run waits on seat 1 first; every seat is read
+		// before it decides, and the spare's reading stands beside.)
+		const iowa: ChainGame = { ...chainOf("ncaab not final: Memphis at Iowa State"), status: "unverified", start: null, startReadings: null, hints: [] };
+		const t3 = saved(undefined, NOW);
+		const college = scoreGameSync(iowa, KEYS, PAYOUT, NOW, (q) => (q.url.includes("2026-11-01") ? { status: 200, body: JSON.stringify(locate(q)!.seat === 1 ? { data: [], meta: {} } : { results: [] }) } : t3.send(q)));
+		expect([t3.misses, t3.asked.filter((q) => locate(q)!.seat === 4)]).toEqual([[], []]);
+		const spareReading = college.decision.readings.find((r) => r.seat === 4);
+		expect([college.decision.action, college.decision.why, spareReading?.kind, spareReading?.detail]).toEqual(["wait", "seat 1 is silent: empty listing", "silent", "no id, and the slate is past the size"]);
 	});
 
 	test("the synchronous and asynchronous runs decide the same, on every real game, verified, unverified and disputed", async () => {

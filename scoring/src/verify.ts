@@ -109,6 +109,14 @@ export const READ_BY_TEAM: readonly (1 | 2 | 4)[] = Object.freeze([1, 2, 4] as c
  */
 const RESULT_ANSWERED: ReadonlySet<string> = new Set(["no result for the hint", "duplicate result", "hint names a part of the game"]);
 
+/**
+ * What the spare says when the feed answered about the game's id without a record of the game and no
+ * slate stands behind it (readers/seat4.ts): silent so at scoring too, so a hinted spare that does not
+ * count holds nothing by it. Any other silence of a hinted spare is a read that failed, and its hint is
+ * unchecked.
+ */
+const SPARE_ANSWERED: ReadonlySet<string> = new Set(["nothing for the id, and the slate is past the size", "the id's row is not the game, and the slate is past the size", "no id, and the slate is past the size"]);
+
 /** True when a time is within START_BOUND of the date, both ends in. */
 function inRange(t: number, g: Verifying): boolean {
 	return t >= g.date - START_BOUND && t <= g.date + START_BOUND;
@@ -157,8 +165,10 @@ export function decideStart(g: Verifying, seen: Seen): Decision {
 		if (over(seen.result)) return wait("seat 3 shows the game final");
 		if (seen.result.kind === "silent" && !RESULT_ANSWERED.has(seen.result.detail)) return wait(`seat 3's result is silent: ${seen.result.detail}`);
 	}
-	// The date names the game. A seat that lists it, and whose hint names another record, waits.
-	for (const seat of READ_BY_TEAM) {
+	// The date names the game. A seat read by team that lists it, and whose hint names another record,
+	// waits. Not the spare: asked by its id, its record is the hint's own, or where the feed has nothing
+	// for the id, the slate's (readers/seat4.ts), and scoring reads it the same way.
+	for (const seat of [1, 2] as const) {
 		const r = seen[seat];
 		const named = hintedIds(g, seat);
 		if (named.length === 0 || listedAt(r, g) === null) continue;
@@ -257,11 +267,14 @@ export function confirmStart(start: Decision, game: Game, again: readonly Readin
 			continue;
 		}
 		// No record of the game inside the window: a counting seat can't be read as scoring will, and a
-		// hinted spare's hint is unchecked, unless its record is the game, just before the window.
+		// hinted spare's hint is unchecked, unless its record is the game, just before the window, or the
+		// feed answered that it has nothing for the id with no slate behind it (SPARE_ANSWERED): silent so
+		// at scoring too, nothing binds it, and the most it can cost is a dispute.
 		const named = [...new Set(game.hints.filter((h) => h.seat === seat).map((h) => h.id))];
 		if (!counts && named.length === 1 && r.kind !== "silent" && was.record?.id === named[0] && was.record.time !== null && Math.abs(was.record.time - game.start) <= START_SPREAD) {
 			continue;
 		}
+		if (!counts && r.kind === "silent" && SPARE_ANSWERED.has(r.detail)) continue;
 		if (counts || named.length > 0) {
 			return wait(r.kind === "silent" ? `seat ${seat} can't read the game as scoring will: ${r.detail}` : `seat ${seat} reads another record, or none, in the game's window: ${r.detail}`);
 		}

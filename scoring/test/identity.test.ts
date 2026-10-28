@@ -88,8 +88,11 @@ describe("the date says which game", () => {
 		const date = at("2026-10-23T00:15:00Z");
 		const only = (hints: ChainGame["hints"]) => run(unverified("nfl not final", { date, hints: [SEAT3, ...FIRST.filter((h) => h.seat === 1), ...hints] }), NOW, dh);
 		expect(only([{ seat: 2, id: "9999002" }, FIRST[2]]).why).toBe("seat 2's hint names another record than the one nearest the date");
-		expect(only([FIRST[1], { seat: 4, id: "dh-second" }]).why).toBe("seat 4's hint names another record than the one nearest the date");
-		expect(only([FIRST[1], FIRST[1], FIRST[2], { seat: 4, id: "dh-second" }]).why).toBe("seat 4's hint names another record than the one nearest the date");
+		// The spare is asked by its id, so a hint naming the second game reads that game's record itself,
+		// which the hour rule then holds: four hours from the counting seats, it is another game.
+		expect(only([FIRST[1], { seat: 4, id: "dh-second" }]).why).toBe("the spare lists the game more than an hour from the counting seats");
+		// Two different ids for the spare: it reads by neither, and the start is held at the re-read, where scoring would read nothing.
+		expect(only([FIRST[1], FIRST[1], FIRST[2], { seat: 4, id: "dh-second" }]).why).toBe("seat 4 can't read the game as scoring will: two hints");
 		// The same hint given twice is one hint.
 		expect(only([FIRST[1], FIRST[1], FIRST[2]]).action).toBe("start");
 	});
@@ -117,8 +120,8 @@ describe("the date says which game", () => {
 		);
 		expect(t.misses).toEqual([]);
 		expect([reread.decision.action, reread.decision.why, spare]).toEqual(["wait", "seat 4 can't read the game as scoring will: http 503", 2]);
-		// The spare answering: held to its hint near the date, as seats 1 and 2 are.
-		expect(go(wrong, false)).toEqual(["wait", "seat 4's hint names another record than the one nearest the date"]);
+		// The spare answering by its id: the second game's record, four hours from the counting seats, is another game.
+		expect(go(wrong, false)).toEqual(["wait", "the spare lists the game more than an hour from the counting seats"]);
 		expect(go(right, false)).toEqual(["start", "seats 1, 2 and 3 list the game within an hour"]);
 		// The control: no spare hint, the spare silent, seat 3 counting: nothing can bind the spare, and the start stands.
 		expect(go([SEAT3, ...FIRST.slice(0, 2)], true)).toEqual(["start", "seats 1, 2 and 3 list the game within an hour"]);
@@ -447,12 +450,13 @@ describe("never a finished game", () => {
 			return c0;
 		};
 		const game = unverified("nfl final, read after the game", { hints });
+		// The spare is asked by its id near the date too, so the copy without a time never reaches it: the
+		// final shows at once, and nothing is written.
 		const v = run(game, LATE, lagging123(true));
-		expect([v.action, v.why, v.report, v.seats[3]]).toEqual(["wait", "seat 4 shows the game final", null, "4:ambiguous"]);
-		// Not final, and still ambiguous near the date: the spare's hint was never checked against the
-		// record nearest the date, so nothing is written either.
+		expect([v.action, v.why, v.report, v.seats[3]]).toEqual(["wait", "seat 4 shows the game final", null, "4:30-24"]);
+		// Not final: the spare's record by its id is the game, in play, and the start is written.
 		const unchecked = run(game, LATE, lagging123(false));
-		expect([unchecked.action, unchecked.why]).toEqual(["wait", "seat 4 reads another record, or none, in the game's window: not completed"]);
+		expect([unchecked.action, unchecked.start]).toEqual(["start", "2026-10-23T00:15:00Z"]);
 		// The control: no copy without a time, so the spare's hint is checked near the date, and every reading
 		// is of a game in play. The start is written.
 		const c = run(game, LATE, lagging123(false, false));

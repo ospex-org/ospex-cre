@@ -74,8 +74,8 @@ export function* read(ask: Ask): ReaderRun {
 	// a hundred to a page, stepping skip should a team's games on those dates ever fill one. Both
 	// teams are asked for, so a spelling the feed no longer uses for one of them still leaves the
 	// other's answer carrying the game, respelt, which the pick reads as a name it can't resolve and
-	// never as the game's absence. A team the seat's list lacks is not asked for; neither on it, and the
-	// seat is silent without asking.
+	// never as the game's absence; an answer that comes back empty is silence, never absence (pick.ts).
+	// A team the seat's list lacks is not asked for; neither on it, and the seat is silent without asking.
 	const names = [...new Set(asks.map((a) => a[2]).filter((n): n is string => n !== null))];
 	if (names.length === 0) return silent(SEAT, "neither team on the seat's list");
 	const dates = filingDates(windowOf(ask.game));
@@ -100,5 +100,5 @@ export function* read(ask: Ask): ReaderRun {
 		}
 		listings.push(listing);
 	}
-	return pick(SEAT, ask.game, listings, ask.near, "team");
+	return pick(SEAT, ask.game, listings, ask.near);
 }

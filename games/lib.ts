@@ -147,24 +147,27 @@ export const REQUESTS_PER_EXECUTION = 15;
  * The most requests one full read may send, from the readers' own reads: each reader asks for the one
  * game, so the count turns on no league. Seat 1 asks once (the two teams' games on the window's filing
  * dates, by its own ids for the teams, one page); seat 2 once per team, two (one where its list lacks
- * a team); seat 3 once (its result by hint, or the board at verification); the spare once (by its id,
- * or its slate). A full read starts only when this fits in the count the tick has left, so the tick's
+ * a team); seat 3 once (its result by hint, or the board's row for the hint at verification); the
+ * spare once (by its id, or its slate where the league's fits; twice behind an id the feed answers
+ * nothing for). A full read starts only when this fits in the count the tick has left, so the tick's
  * own budget never cuts a run short of the seats the program would read: a run cut short would decide
  * on the part it saw (counted, below; the readers raise the cut). The assumption behind each number,
  * written where the claim is made: a team's games on a window's filing dates fit one page of a hundred
  * rows. A feed that pages past it is stopped by the program's own bound on a reader
  * (scoring/src/run.ts, MAX_REQUESTS, 12), and the count cuts the run first, with the cut on the line.
  *
- * A scoring run (a verified game; a disputed one before day 7): 1 + 2 + 1 + 1 = 5. A verification:
- * seats 1 and 2 over the range the games set accepts a start in (1 + 2), the board (1), the spare (1),
- * and seat 3's result where the board no longer lists the hint (1); then every seat read again in the
- * window from the start chosen, whose dates differ from the range's, so memory serves none of it at
- * seats 1 and 2 (1 + 2), seat 3's result where it counts (1: the one the board's miss did not read),
- * the spare from memory: 9. Day 7 asks no seat. budget.test.ts derives each number by running the
+ * A scoring run (a verified game; a disputed one before day 7): 1 + 2 + 1 + 1 = 5, and 6 where the
+ * spare's id is unusable and its slate is read behind it. A verification: seats 1 and 2 over the range
+ * the games set accepts a start in (1 + 2), the board's row for the hint (1), the spare (1, or 2 behind
+ * an unusable id), and seat 3's result where the board no longer lists the hint (1); then every seat
+ * read again in the window from the start chosen, whose dates differ from the range's, so memory
+ * serves none of it at seats 1 and 2 (1 + 2), seat 3's result where it counts (1: the one the board's
+ * miss did not read), the spare from memory: 9, or 10 behind an unusable id. The maxima are what a
+ * full read is admitted on. Day 7 asks no seat. budget.test.ts derives each branch by running the
  * readers and the program against a feed that answers one game at a time, in every league.
  */
-export const SCORING_REQUESTS = 5;
-export const VERIFYING_REQUESTS = 9;
+export const SCORING_REQUESTS = 6;
+export const VERIFYING_REQUESTS = 10;
 
 /** The most requests a full read sends, by what the read is: a verification, day 7, or a scoring run. */
 export function requestsFor(why: "verification" | "day 7" | "scoring"): number {
