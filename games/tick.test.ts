@@ -372,6 +372,41 @@ describe("one tick", () => {
 		expect(changed.names).toEqual(["getOpenGames", "getGameIdentity", "getGameReadings", "getGameReporters", "i_token", "getApprovedReporters", "getReporter"]);
 	});
 
+	test("a waiting or failing head does not keep the hour's read: the clocks take turns, two games with one that waits every time", () => {
+		// Two verified games past their clock's window, read on the hour's second tick; the program waits
+		// on game 1 every time (a feed outage) and scores game 2. Over two hours each has its turn, and the
+		// later game's score is written.
+		const games = [1, 2].map((i) => gameOf(i, { start: START - 3 * 86_400 + i }));
+		const picky = (): { score: TickDeps["score"]; handed: string[] } => {
+			const handed: string[] = [];
+			return {
+				handed,
+				score: ((game: ChainGame): Outcome => {
+					handed.push(game.id);
+					return game.id === "1" ? { decision: { action: "wait", readings: [], why: "a stand-in waits" }, report: null } : { decision: { action: "score", home: 114, away: 106, readings: [], why: "a stand-in scores" }, report: SCORE_REPORT(game.id) };
+				}) as TickDeps["score"],
+			};
+		};
+		const hours = [0, 1].map((h) => tick(games, secondTick(START) + h * 3_600, { program: picky() }));
+		expect(hours.map((f) => f.result.fullRead?.why)).toEqual(["hour 24", "hour 24"]);
+		expect(hours.map((f) => f.handed).flat().sort()).toEqual(["1", "2"]);
+		expect(hours.map((f) => f.written.length).reduce((a, b) => a + b, 0)).toBe(1);
+		expect(hours.map((f) => f.result.waiting)).toEqual(hours.map((f) => [`${f.handed[0] === "1" ? 2 : 1}: hour 24 waits: one full read a tick`]));
+		// A head whose write fails is passed the same way: the write refused for game 1, game 2 scored the next hour.
+		const failing = [0, 1].map((h) => {
+			const chain = fakeChainOf(games, secondTick(START) + h * 3_600);
+			const writer = recordingWriter();
+			const r = runTick({ evm: chain, games: GAMES, payout: PAYOUT, keys: KEYS, send: () => ({ status: 200, body: "[]" }), write: (b) => (decodeReport(b).gameId === "1" ? (() => { throw new Error("writeReport failed: status=2"); })() : writer.write(b)), score: scorer().score, period: PERIOD, shard: { index: 0, count: 1 } });
+			return { r, written: writer.written.length };
+		});
+		expect(failing.map((f) => f.r.fullRead?.gameId).sort()).toEqual(["1", "2"]);
+		expect(failing.map((f) => [f.r.fullRead?.error === null, f.written]).sort()).toEqual([[false, 0], [true, 1]]);
+		// And the clocks in their two-hour window, on consecutive ticks: both games are read within two ticks.
+		const inWindow = [1, 2].map((i) => gameOf(i, { start: START + i }));
+		const ticks = [0, 1].map((k) => tick(inWindow, laterTick(START + inWindow[1].n) + k * PERIOD, { program: picky() }));
+		expect(ticks.map((f) => f.handed).flat().sort()).toEqual(["1", "2"]);
+	});
+
 	test("a disputed game is read in full on the hour's second tick, whatever the probe would say, and probed on the first", () => {
 		const at = START + 7_200;
 		const disputed = gameOf(1, { status: "disputed", dispute: { at, records: [SCORE_REPORT("1").readings] } });

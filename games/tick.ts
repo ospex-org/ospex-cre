@@ -16,9 +16,11 @@
 // that league (lib.ts, scoringRequests and verifyingRequests, from the readers' own pagination), so
 // the count never cuts a run short of the seats the program would read; probes while reads and
 // requests remain; a full read found without room waits for the next tick, where the probes start
-// from another game, so no game is starved and no work is dropped. Should the count still stop a run,
-// the readers raise the cut and the run writes nothing. Nothing here decides a score: the full read is
-// the program's run, and the probe asks only whether the game is over.
+// from another game, so no game is starved and no work is dropped. Each class of work (the
+// verification, the hour's reads, the clocks in their windows, the probes) takes its games in turn by
+// its own count, so a game that waited or failed last turn is not first next turn. Should the count
+// still stop a run, the readers raise the cut and the run writes nothing. Nothing here decides a
+// score: the full read is the program's run, and the probe asks only whether the game is over.
 
 import type { Address } from "viem";
 import type { ChainGame, ReportReading } from "../scoring/src/chain";
@@ -261,32 +263,42 @@ export function runTick(deps: TickDeps): TickResult {
 		}
 	}
 
+	// Each class of work takes its games in turn, begun from the one its own count names, so the game
+	// that waited or failed last turn is not first next turn and no head keeps the rest from theirs: the
+	// verification and the hour's reads by the hour's count, the clocks in their windows and the probes
+	// by the tick's count.
+	const hourTurn = Math.floor(now / 3_600);
+	const tickTurn = Math.floor(now / deps.period);
+	const inTurn = <T>(list: readonly T[], turn: number): T[] => {
+		const shift = list.length === 0 ? 0 : turn % list.length;
+		return [...list.slice(shift), ...list.slice(0, shift)];
+	};
+
 	// The hour's first tick: one verification, the game whose turn it is, with its league's worst case
 	// of requests in hand. The others take their turn on the hours after.
 	const verifies = dues
 		.filter((d): d is { row: OpenGame; due: Extract<Due, { kind: "verify" }> } => d.due.kind === "verify" && d.due.fires)
 		.sort((a, b) => a.row.date - b.row.date || (a.row.gameId < b.row.gameId ? -1 : 1));
 	if (verifies.length > 0) {
-		const pick = verifies[Math.floor(now / 3_600) % verifies.length];
+		const pick = verifies[hourTurn % verifies.length];
 		fullReadOrWait(pick.row, "verification");
 		for (const v of verifies) if (v !== pick) waiting.push(`${v.row.gameId}: verification waits for its hour's turn`);
 	}
 
-	// Then the clocks: day 7 asks no seat, so it costs no request; hour 24 and the hour's read cost a scoring run's.
+	// Then the clocks, in turn: day 7 asks no seat, so it costs no request; hour 24 and the hour's read
+	// cost a scoring run's. On the hour's second tick the turn is the hour's, on the others the tick's.
 	const clocks = dues
 		.filter((d): d is { row: OpenGame; due: Extract<Due, { kind: "clock" }> } => d.due.kind === "clock" && d.due.fires)
 		.sort((a, b) => CLOCK_ORDER[a.due.clock] - CLOCK_ORDER[b.due.clock] || (a.row.start ?? 0) - (b.row.start ?? 0));
-	for (const c of clocks) fullReadOrWait(c.row, c.due.clock);
+	for (const c of inTurn(clocks, tickOfHour(now, deps.period) === HOURLY_TICK ? hourTurn : tickTurn)) fullReadOrWait(c.row, c.due.clock);
 
-	// Then the probes, in start order, begun from a game that turns with the tick, so a run of games not
+	// Then the probes, in start order, begun from the game the tick's count names, so a run of games not
 	// yet final at the front never keeps the ones behind them from their turn. A probe reads the game's
 	// identity (its hints, and its teams for the spare) and its readings (the start report, which says
 	// which seat it asks; a disputed game's votes); it keeps the reads a full read on its final would
 	// need, while this tick has none yet.
 	const due = dues.filter((d): d is { row: OpenGame; due: Extract<Due, { kind: "probe" }> } => d.due.kind === "probe").sort((a, b) => (a.row.start ?? 0) - (b.row.start ?? 0));
-	const shift = due.length === 0 ? 0 : Math.floor(now / deps.period) % due.length;
-	const ordered = [...due.slice(shift), ...due.slice(0, shift)];
-	for (const p of ordered) {
+	for (const p of inTurn(due, tickTurn)) {
 		const row = p.row;
 		if (requests.used() + 1 > requestsLimit) {
 			waiting.push(`${row.gameId}: no request left for its probe`);

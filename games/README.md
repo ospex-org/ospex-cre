@@ -65,8 +65,10 @@ on the hour's second tick; a disputed game is probed for a change against its vo
 in full on the hour's second tick too. On the hour's first tick the full read is a verification: one
 game the creation trigger's run left unverified (the feeds list a game days ahead, a creator may
 create it months ahead), from seven days before its date until two days past it, in turn when there
-are several, so a game is verified when the feeds first carry it. A full read never runs on the tick
-itself.
+are several, so a game is verified when the feeds first carry it. Each class of work (the verification,
+the hour's reads, the clocks in their windows, the probes) takes its games in turn by its own count, so
+a game that waited or failed last turn is not first next turn and no head keeps the rest from theirs. A
+full read never runs on the tick itself.
 
 **The quotas.** The platform allows a run 15 chain reads and 15 feed requests. A tick reads the header
 and up to two pages, probes at two reads each (the identity and the readings), and runs at most one
