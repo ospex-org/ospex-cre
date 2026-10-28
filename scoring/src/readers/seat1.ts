@@ -1,8 +1,10 @@
 // Seat 1's reader.
 //
-// Asks for the league's games one filing date at a time (see filingDates), a hundred to a page,
-// following the feed's cursor. Each league names its fields its own way, so each has a small map
-// below. A team is named by its full name, and in college by its school's name too; never by its
+// Asks for the game's two teams' games, by the feed's own ids for the teams (the team lists carry
+// them), on every filing date the window touches (see filingDates), in one request of a hundred to a
+// page, following the feed's cursor. Never the day's slate: a slate page of college games is past the
+// size a run's answer may be, and one game's read costs one request whatever the league. Each league
+// names its fields its own way, so each has a small map below. A team is named by its full name, and in college by its school's name too; never by its
 // city, which two teams can share.
 //
 // Status: the nine-state `status_state` decides where a record has it: `final` is final,
@@ -23,9 +25,10 @@
 // Division I: such a team is marked outside the league, so it is never a league team whatever
 // its name (src/pick.ts).
 
-import { pick, points, type FeedRecord, type FeedTeam, type Listing } from "../pick";
+import { pick, points, type FeedRecord, type FeedTeam } from "../pick";
 import { silent } from "../run";
 import { leagueRow } from "../table";
+import { asksOf } from "../teams";
 import type { Ask, ReaderRun, Seat } from "../types";
 import { filingDates, parseIsoSeconds, windowOf } from "../window";
 import { jsonOf, obj, request, str } from "./request";
@@ -161,28 +164,31 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 export function* read(ask: Ask): ReaderRun {
 	const row = leagueRow(ask.game.league);
 	if (row === null || !Object.prototype.hasOwnProperty.call(FIELDS, ask.game.league)) return silent(SEAT, "league not offered");
-	const listings: Listing[] = [];
-	for (const date of filingDates(windowOf(ask.game))) {
-		const listing: FeedRecord[] = [];
-		let cursor: string | null = null;
-		do {
-			const q = `?dates[]=${date}&per_page=100${cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`}`;
-			const res = yield request(SEAT, `${row[SEAT]}${q}`, ask.key);
-			const body = jsonOf(res);
-			if (!body.ok) return silent(SEAT, body.detail);
-			const page = obj(body.value);
-			const data = page?.data;
-			if (!Array.isArray(data)) return silent(SEAT, "unreadable");
-			for (const g of data) {
-				const o = obj(g);
-				const r = o === null ? null : toRecord(ask.game.league, o);
-				if (r === null) return silent(SEAT, "unreadable record");
-				listing.push(r);
-			}
-			const next = obj(page?.meta)?.next_cursor;
-			cursor = typeof next === "number" || (typeof next === "string" && next !== "") ? String(next) : null;
-		} while (cursor !== null);
-		listings.push(listing);
-	}
-	return pick(SEAT, ask.game, listings, ask.near);
+	const asks = asksOf(ask.game.league, ask.game.home, ask.game.away);
+	if (asks === null) return silent(SEAT, "game teams unknown");
+	// One request for the game: the two teams' games (team_ids[], the feed's own ids for them) on every
+	// filing date the window touches (dates[]), a hundred to a page, following the feed's cursor should
+	// the teams' games on those dates ever run past one.
+	const dates = filingDates(windowOf(ask.game)).map((d) => `dates[]=${d}`);
+	const teams = asks.map((a) => `team_ids[]=${a[1]}`);
+	const listing: FeedRecord[] = [];
+	let cursor: string | null = null;
+	do {
+		const q = `?${[...dates, ...teams].join("&")}&per_page=100${cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`}`;
+		const res = yield request(SEAT, `${row[SEAT]}${q}`, ask.key);
+		const body = jsonOf(res);
+		if (!body.ok) return silent(SEAT, body.detail);
+		const page = obj(body.value);
+		const data = page?.data;
+		if (!Array.isArray(data)) return silent(SEAT, "unreadable");
+		for (const g of data) {
+			const o = obj(g);
+			const r = o === null ? null : toRecord(ask.game.league, o);
+			if (r === null) return silent(SEAT, "unreadable record");
+			listing.push(r);
+		}
+		const next = obj(page?.meta)?.next_cursor;
+		cursor = typeof next === "number" || (typeof next === "string" && next !== "") ? String(next) : null;
+	} while (cursor !== null);
+	return pick(SEAT, ask.game, [listing], ask.near, "team");
 }

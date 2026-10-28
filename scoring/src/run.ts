@@ -27,12 +27,11 @@ export function isCut(e: unknown): boolean {
 }
 
 /**
- * The most requests one reader may make for one game. Past it, the feed is silent. Seats 1 and 2
- * ask once per filing date and page (a 24-hour window has two or three dates); the most any saved
- * read needed was 4, one date of college basketball's opening night running to two pages. Twelve
- * leaves room for every date of a window to run to four pages, and stops a feed that pages for ever.
- * It also bounds the window: a window of ten days or less asks at most 12 dates, and a longer one can
- * ask more than this allows, so seats 1 and 2 would read it silent.
+ * The most requests one reader may make for one game. Past it, the feed is silent. Each reader asks
+ * for the one game: seat 1 once, the two teams' games on the window's dates in one page; seat 2 once
+ * per team; seats 3 and 4 once. Twelve is reached only by a feed that pages past what one game's answer
+ * should hold (a team's games on a window's dates fit one page of a hundred rows), and stops a feed
+ * that pages for ever; a caller's own count of requests may cut the run before it (Cut, below).
  */
 export const MAX_REQUESTS = 12;
 

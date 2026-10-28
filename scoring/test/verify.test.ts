@@ -534,13 +534,13 @@ describe("the start's time", () => {
 		const v = verify(long);
 		expect([v.action, v.start]).toEqual(["start", "2026-10-23T00:15:00Z"]);
 		// The date a day and a minute before the real 00:15: inside this game's n, outside the games set's day.
-		// Seat 1's answers for the other days in that range list no NFL game, and a date that answers
-		// with nothing leaves a seat silent rather than saying the game is absent (src/pick.ts). Either
-		// way nothing is written; the range's own edges are the test above.
+		// Asked for the two teams over that range, seat 1's answer holds no game of theirs within a day of
+		// the date (src/pick.ts: a team's own answer with nothing in it is the game's absence). Nothing is
+		// written; the range's own edges are the test above.
 		const t = saved(undefined, NOW);
 		const far = scoreGameSync({ ...long, date: at("2026-10-23T00:15:00Z") - START_BOUND - 60, hints: [] }, KEYS, PAYOUT, NOW, t.send);
 		expect(t.misses).toEqual([]);
-		expect([far.decision.action, far.decision.why]).toEqual(["wait", "seat 1 is silent: empty listing"]);
+		expect([far.decision.action, far.decision.why]).toEqual(["wait", "seat 1 does not list the game within a day of its date"]);
 	});
 
 	test("a start report carries the zero address as its payout, whatever payout is handed in: a start pays nothing", () => {
@@ -688,9 +688,9 @@ describe("finding the game near the creator's date", () => {
 	test("the saved 2 Nov college basketball answers: two schools the lists can't place at 23:00 no longer keep seats 1 and 2 from the games after them", () => {
 		// West Florida against Southeastern Baptist at 23:00 on 2 Nov (seat 1 id 10882497, seat 2 id 342404),
 		// neither school on the lists, is a day before Memphis at Iowa State and Morehead State at Western
-		// Kentucky, inside the range verification reads near each date. Read near the date, each seat now
-		// reads the game. 1 Nov was never saved: every range here asks it and 4 Nov too, so its requests
-		// are answered with 4 Nov's body at the same seat, which only repeats records already read.
+		// Kentucky, inside the range verification reads near each date. Asked for each game's own two
+		// teams, neither seat's answer carries the two schools' record at all, and each reads the game. 1 Nov
+		// was never saved: every range here asks it, so it is dropped from the dates asked.
 		const games: [string, string, string, string, Record<1 | 2, string>][] = [
 			["Memphis at Iowa State", "Iowa State", "Memphis", "2026-11-03T00:00:00Z", { 1: "10882536", 2: "341752" }],
 			["Morehead State at Western Kentucky", "Western Kentucky", "Morehead State", "2026-11-03T00:30:00Z", { 1: "10882439", 2: "342166" }],
@@ -698,12 +698,16 @@ describe("finding the game near the creator's date", () => {
 		const read = (seat: 1 | 2, home: string, away: string, date: number) => {
 			const t = saved(undefined, MID);
 			const probe: Game = { league: "ncaab", home, away, start: date - START_BOUND, n: 2 * START_BOUND + 1, hints: [] };
-			const r = runSync(seat, readerFor(seat)({ game: probe, now: MID, key: KEY, near: date }), (q) => t.send(q.url.includes("2026-11-01") ? { ...q, url: q.url.replace("2026-11-01", "2026-11-04") } : q));
+			const r = runSync(seat, readerFor(seat)({ game: probe, now: MID, key: KEY, near: date }), (q) => t.send({ ...q, url: q.url.replace("dates[]=2026-11-01&", "").replace("date=2026-11-01,", "date=2026-11-02,") }));
 			expect(t.misses).toEqual([]);
-			// The setup: the record of the two schools is in this seat's answer, at 23:00, inside the range.
+			// The setup: the two schools' record is on the 2 Nov slate the answers are drawn from, and in none of
+			// the answers, which hold the two teams' games alone.
 			const asked = t.asked.map((q) => JSON.parse(t.send(q).body) as Record<string, Record<string, any>[]>);
-			const other = asked.flatMap((b) => b[seat === 1 ? "data" : "results"] ?? []).find((g) => (seat === 1 ? g.id === 10882497 : g.gameId === 342404));
-			expect({ seat, other: seat === 1 ? other?.date : other?.schedule?.date }).toEqual({ seat, other: "2026-11-02T23:00:00.000Z" });
+			const records = asked.flatMap((b) => b[seat === 1 ? "data" : "results"] ?? []);
+			const slate = JSON.parse(saved(undefined, MID).send(request(seat, seat === 1 ? "/ncaab/v1/games?dates[]=2026-11-02&per_page=100" : "/games?league=NCAAB&date=2026-11-02", KEY)).body) as Record<string, Record<string, any>[]>;
+			const onSlate = (slate[seat === 1 ? "data" : "results"] ?? []).some((g) => (seat === 1 ? g.id === 10882497 : g.gameId === 342404));
+			const inAnswers = records.some((g) => (seat === 1 ? g.id === 10882497 : g.gameId === 342404));
+			expect({ seat, onSlate, inAnswers, records: records.length > 0 }).toEqual({ seat, onSlate: true, inAnswers: false, records: true });
 			return r;
 		};
 		for (const [what, home, away, date, own] of games) {
@@ -732,9 +736,10 @@ describe("finding the game near the creator's date", () => {
 		};
 		const t = saved(marked, MID);
 		const probe: Game = { league: "ncaab", home: iowa.home, away: iowa.away, start: iowa.date - START_BOUND, n: 2 * START_BOUND + 1, hints: [] };
-		const r = runSync(2, readerFor(2)({ game: probe, now: MID, key: KEY, near: iowa.date }), (q) => t.send(q.url.includes("2026-11-01") ? { ...q, url: q.url.replace("2026-11-01", "2026-11-04") } : q));
+		const r = runSync(2, readerFor(2)({ game: probe, now: MID, key: KEY, near: iowa.date }), (q) => t.send({ ...q, url: q.url.replace("date=2026-11-01,", "date=2026-11-02,") }));
 		expect(t.misses).toEqual([]);
-		// The setup: the copy is in the answer, marked, inside the range and earlier than the game.
+		// The setup: the copy is in the answer (Iowa State's own, asked for by its name), marked, inside the
+		// range and earlier than the game.
 		const asked = t.asked.map((q) => (JSON.parse(t.send(q).body) as { results: Record<string, any>[] }).results ?? []).flat();
 		const copyOf = asked.find((g) => g.gameId === 9_999_201);
 		expect([copyOf?.schedule?.date, copyOf?.teams?.home?.conference]).toEqual(["2026-11-02T23:30:00.000Z", undefined]);

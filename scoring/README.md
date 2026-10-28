@@ -29,7 +29,13 @@ seats are asked.
 
 ## How a game is read
 
-Seats 1, 2 and 4 are read by team and window. Seat 3 is read by its creation hint: its results
+Seats 1, 2 and 4 are read by team and window, each asked for the one game: seat 1 for the two
+teams' games on the window's filing dates by its own ids for the teams, seat 2 for each team's
+games over those dates by its own spelling of the team, the spare for the game by its own id when
+the creation hints carry one and for its slate of live, upcoming and recent games otherwise (it
+cannot be asked by team). Neither seat 1 nor seat 2 is ever asked for a day's slate: one game's
+read costs one request at seat 1 and two at seat 2 whatever the league, and a slate page of
+college games is past the size a run's answer may be. Seat 3 is read by its creation hint: its results
 carry points and status but no team names and no game time, and its board, which has both, drops
 a game once the game is final, so the hint is the only thing that ties a result to a game.
 
@@ -44,7 +50,10 @@ a game once the game is final, so the hint is the only thing that ties a result 
   an alias only when a seat's own list carries it (the team lists of seats 1, 2 and 4, and seat 3's
   board) and one reviewed identity joins it to exactly one team: the team's own name on seat 1's
   list, or a hand join in `capture/joins.json`, grouped by seat and league with the reason each
-  group's spellings are that team. Nothing shortens a name to make it match: "Colorado College" is
+  group's spellings are that team. Each team also carries how seats 1 and 2 are asked for its
+  games (`ask`): seat 1's own id for it, and seat 2's own spelling, taken from those lists and
+  never typed in; a team seat 2's list lacks (most college football schools) is not asked for
+  there, and a game of two such teams leaves seat 2 silent without a request. Nothing shortens a name to make it match: "Colorado College" is
   not the Colorado Buffaloes. A name that matches no team, or two, joins nothing, and so does a name
   a school outside the league's teams also carries on seat 1's list, with one reviewed exception
   (Georgia, whose namesake there is not a school). College football and basketball share each
@@ -77,7 +86,9 @@ a game once the game is final, so the hint is the only thing that ties a result 
   while anything inside the window could be the game, and otherwise is dropped too. Two different
   hints for one seat leave it silent. In a doubleheader or a series, a hint is what lets a seat
   choose between the games inside the window; verification holds each hint to the record nearest
-  the creator's date (The start, below).
+  the creator's date (The start, below). The spare asked by its hint reads the hinted record when it
+  is the game's two teams inside the window, and weighs anything else against its slate, as it
+  would without the hint, in one more request.
 * **Seat 3, by hint.** One request: the feed's result for the game's seat 3 id. The hint rides in
   the creation event on chain, so anyone can re-run the match while the feed answers for that id:
   in the answers saved on 22 Oct, a result about four days old answered, and ids 78 to 156 days
@@ -99,9 +110,13 @@ a game once the game is final, so the hint is the only thing that ties a result 
   request (a 401 from a league the seat's plan does not cover reads `http 401`, so the reason
   travels with the reading), an answer that doesn't parse, a record with no game time, a final
   without points or short of a whole game, more than one record that could be the game, two
-  different hints, a date whose answer came back empty when the game was not found, a closed seat
-  (below), a clock that isn't a number, and, at seat 3, no usable hint, no result for it,
-  or a hint naming a row for part of the game. Silent is never turned into "no
+  different hints, a slate (the spare's) that came back empty when the game was not found, a closed
+  seat (below), a clock that isn't a number, and, at seat 3, no usable hint, no result for it,
+  or a hint naming a row for part of the game. A team's own answer that holds none of its games is
+  not silence: asked for the teams, an empty answer is the feed's answer, and the game is absent;
+  so a spelling seat 2 no longer uses for a team leaves that team's game absent there until the
+  lists are regenerated, while one team respelt still reaches the seat through the other team's
+  answer and reads as a name the lists don't know. Silent is never turned into "no
   final". A final without points, or one short of a whole game, is silent and marked as the feed
   saying the game is over: scoring never counts it, and verification writes no start on it.
 
@@ -126,13 +141,17 @@ is asked.
 
 ## Requests per game
 
-One read of one game, measured over every saved case: seats 1 and 2 ask once per filing date and
-page, 2 to 4 requests (three dates for most windows; four when one date's answer runs to two
-pages); seat 3 asks once, or not at all without a hint or past five days; seat 4 asks once (two credits on
-its plan), or not at all past 66 hours. A disputed game's day-7 run asks nothing. The cap is 12 requests per seat per game (`MAX_REQUESTS` in
-`src/run.ts`); a window of ten days or less always fits in it at one page a date, and a longer
-one can leave seats 1 and 2 silent for want of requests.
-Each game is read on its own: a slate of games costs the sum.
+One read of one game, whatever the league: seat 1 asks once (the two teams' games on the window's
+filing dates, one page); seat 2 once per team, two (one where its list lacks a team); seat 3 once,
+or not at all without a hint or past five days; seat 4 once (two credits on its plan; by its hint
+when it has one, else the slate), or not at all past 66 hours: 5 for a scoring run. A verification
+reads seats 1, 2 and 4 by team over the range (1 + 2 + 1), seat 3's board (1), its result where the
+board no longer lists the hint (1), then every seat again in the window from the start chosen,
+whose dates differ (1 + 2 more at seats 1 and 2, seat 3's result where it counts, the spare from
+memory): 9 at most. A disputed game's day-7 run asks nothing. The cap is 12 requests per seat per
+game (`MAX_REQUESTS` in `src/run.ts`), reached only by a feed that pages past what one game's
+answer should hold; the readers assume a team's games on a window's dates fit one page of a
+hundred rows. Each game is read on its own: a slate of games costs the sum.
 
 ## What the readings decide
 

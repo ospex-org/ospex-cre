@@ -206,7 +206,11 @@ describe("only one: a record the lists can't place, earlier in the window, keeps
 	const LATER_ID = { 1: "99000001", 2: "99000001", 4: "derived-later" };
 
 	test("both names unknown: the Lakers' final respelt, an hour before a later final of the two teams", () => {
-		for (const seat of [1, 2, 4] as const) {
+		// Seat 1 is asked by the teams' ids and the spare reads the slate, so the respelt record reaches
+		// them. Seat 2 is asked by the teams' spellings, and a record the feed files under neither is not in
+		// its answer: it holds the later final alone, and reads it. A feed that respells a team respells it
+		// in every record, which the next block reads.
+		for (const seat of [1, 4] as const) {
 			const derive = withLater(seat, respellBoth(seat));
 			expect({ seat, ...read(seat, lakers.game, NOW, derive) }).toMatchObject({ seat, kind: "silent", detail: "ambiguous" });
 			// Hinted to its own record, which now names neither team: the hint is dropped, and the seat
@@ -217,6 +221,7 @@ describe("only one: a record the lists can't place, earlier in the window, keeps
 			const later = { ...lakers.game, hints: [{ seat, id: LATER_ID[seat] }] };
 			expect({ seat, ...read(seat, later, NOW, derive) }).toMatchObject({ seat, kind: "final", home: 81, away: 79, id: LATER_ID[seat] });
 		}
+		expect(read(2, lakers.game, NOW, withLater(2, respellBoth(2)))).toMatchObject({ kind: "final", home: 81, away: 79, id: LATER_ID[2] });
 	});
 
 	test("both names unknown: the series' night game, before the next afternoon's final", () => {
@@ -239,13 +244,15 @@ describe("only one: a record the lists can't place, earlier in the window, keeps
 			}
 			return b;
 		};
-		for (const seat of [1, 2] as const) {
-			for (const how of ["respelt", "no names"] as const) {
-				for (const hints of [[], [{ seat, id: ids[seat] }]]) {
-					const hinted = hints.length > 0;
-					expect({ seat, how, hinted, ...read(seat, { ...night, hints }, MID, unnamed(seat, how)) }).toMatchObject({ seat, how, hinted, kind: "silent", detail: "ambiguous" });
-				}
+		// Seat 1, asked by the teams' ids, sees the unnamed record and is silent. Seat 2, asked by the
+		// teams' spellings, is not handed a record filed under neither, so its answer holds the afternoon's
+		// final alone and reads it; a team the feed respells everywhere is the next block's case.
+		for (const how of ["respelt", "no names"] as const) {
+			for (const hints of [[], [{ seat: 1, id: ids[1] }]]) {
+				const hinted = hints.length > 0;
+				expect({ how, hinted, ...read(1, { ...night, hints }, MID, unnamed(1, how)) }).toMatchObject({ how, hinted, kind: "silent", detail: "ambiguous" });
 			}
+			expect({ how, ...read(2, night, MID, unnamed(2, how)) }).toMatchObject({ how, kind: "final", home: 0, away: 3 });
 		}
 	});
 
@@ -424,7 +431,7 @@ describe("only one: what can't be the game doesn't stop a reading", () => {
 	});
 });
 
-describe("one game under two dates", () => {
+describe("one answer is one moment: a record on two of the pages an answer is drawn from", () => {
 	// Seat 2 lists Seattle at Hawaii's 348655 under both 2 Nov and 3 Nov. Derived: the stale copy at
 	// 04:59 removed, and 348655's two copies told apart, as a feed's answers are when a score changes
 	// between the two requests.
@@ -439,14 +446,16 @@ describe("one game under two dates", () => {
 	const live = { status: "in progress", scoreboard: { currentPeriod: 2, score: { home: 70, away: 68 } } };
 	const done = { status: "final", scoreboard: { currentPeriod: 2, score: { home: 75, away: 70 } } };
 
-	test("a game that finished between the two requests reads the later answer", () => {
+	test("a game that finished between the two pages' captures reads as the later page has it", () => {
+		// Asked for the team over both dates in one request, the feed answers once, with the record as it
+		// stands: the later page's copy, whichever way the copies differ.
 		expect(read(2, hawaii, MID, tick(live, done))).toMatchObject({ kind: "final", home: 75, away: 70, id: "348655" });
+		expect(read(2, hawaii, MID, tick(done, live))).toMatchObject({ kind: "no_final", detail: "in progress", id: "348655" });
 	});
 
-	test("a final that changes, two copies under other teams, or two copies in one date's answer: silent", () => {
-		expect(read(2, hawaii, MID, tick(done, live))).toMatchObject({ kind: "silent", detail: "inconsistent records" });
+	test("the record now under other teams is no record of the game; two copies in one answer are silent", () => {
 		const other = { ...done, teams: { home: { team: "Hawaii" }, away: { team: "Pacific" } } };
-		expect(read(2, hawaii, MID, tick(live, other))).toMatchObject({ kind: "silent", detail: "inconsistent records" });
+		expect(read(2, hawaii, MID, tick(live, other))).toMatchObject({ kind: "no_final", detail: "absent" });
 		const twiceInOne: Derive = (seat, path, body) => {
 			const b = tick(live, live)(seat, path, body) as { results: Record<string, unknown>[] };
 			if (seat !== 2 || !path.includes("date=2026-11-03")) return b;
@@ -462,17 +471,20 @@ describe("one game under two dates", () => {
 	});
 });
 
-describe("an empty answer for a date is not proof the game is absent", () => {
+describe("an empty answer: from a team's own list it is the game's absence, from a slate it is not", () => {
 	const iowa = byName("ncaab not final: Memphis at Iowa State").game;
 	// Le Moyne at Nebraska is on the second page of seat 2's real 2 Nov answer.
 	const nebraska = { ...iowa, home: "Nebraska", away: "Le Moyne", start: at("2026-11-03T00:30:00Z"), n: 23 * 3600 };
 
-	test("a first page that comes back empty leaves the seat silent, not absent", () => {
+	test("seat 2, asked for the teams: an answer with none of their games says the game is absent", () => {
+		// The game is on the second page of the real 2 Nov slate; with the first page emptied, the one-game
+		// answer drawn from the slate holds none of the teams' games. Asked for the teams themselves, an
+		// empty answer is the feed's answer: the game is absent, never silence.
 		const emptyFirst: Derive = (seat, path, body) => {
 			if (seat !== 2 || !path.endsWith("date=2026-11-02")) return body;
 			return { ...(copy(body) as Record<string, unknown>), results: [], games: 0 };
 		};
-		expect(read(2, nebraska, NOW, emptyFirst)).toMatchObject({ kind: "silent", detail: "empty listing" });
+		expect(read(2, nebraska, NOW, emptyFirst)).toMatchObject({ kind: "no_final", detail: "absent", id: null });
 		// The control: the real two pages read the game.
 		expect(read(2, nebraska, NOW)).toMatchObject({ kind: "no_final", detail: "scheduled", id: "342256" });
 	});
@@ -572,14 +584,14 @@ describe("hints and dates that disagree with the answer", () => {
 	// game before it (00:05 UTC the same date) is outside its window, the game itself inside.
 	const afternoon = byName("mlb series, the next afternoon's game without hints").game;
 
-	test("an empty answer for the game's own date, beside the series' other games: silent, not outside the window", () => {
+	test("the game's own date emptied, beside the series' other games: the teams' records are all outside the window, and the seat says so", () => {
 		const emptyDay: Derive = (seat, path, body) => {
 			if (seat === 1 && path.includes("dates[]=2026-08-19")) return { ...(copy(body) as Record<string, unknown>), data: [] };
 			if (seat === 2 && path.includes("date=2026-08-19")) return { ...(copy(body) as Record<string, unknown>), results: [] };
 			return body;
 		};
 		for (const seat of [1, 2] as const) {
-			expect({ seat, ...read(seat, afternoon, MID, emptyDay) }).toMatchObject({ seat, kind: "silent", detail: "empty listing" });
+			expect({ seat, ...read(seat, afternoon, MID, emptyDay) }).toMatchObject({ seat, kind: "no_final", detail: "outside window" });
 			expect({ seat, ...read(seat, afternoon, MID) }).toMatchObject({ seat, kind: "final", home: 0, away: 3 });
 		}
 	});
@@ -610,8 +622,12 @@ describe("hints and dates that disagree with the answer", () => {
 describe("a game the seat respells is not absent", () => {
 	// The Lakers' real final with both teams' names respelt at each seat, as a feed that changed
 	// how it writes names would list it: no name resolves, so the record can't be read as the game,
-	// but it could be the game, so the seat can't say the game is absent.
-	test("both names unknown, inside the window: silent", () => {
+	// but it could be the game, so the seat can't say the game is absent. Seat 1 is asked by the
+	// teams' ids and the spare reads the slate, so the respelt record reaches them. Seat 2 is asked by
+	// each team's spelling: a record filed under neither spelling is not in its answer, so a feed that
+	// respells both teams leaves the game absent there until the lists are regenerated; one team
+	// respelt still reaches it through the other team's answer, and reads as a name it can't resolve.
+	test("both names unknown, inside the window: silent at seat 1 and the spare; at seat 2 one unknown name is silent, two are absence", () => {
 		const respell: Derive = (seat, _p, body) => {
 			const b = copy(body);
 			if (seat === 4) {
@@ -631,12 +647,22 @@ describe("a game the seat respells is not absent", () => {
 			}
 			return b;
 		};
-		for (const seat of [1, 2, 4] as const) {
+		for (const seat of [1, 4] as const) {
 			expect({ seat, ...read(seat, lakers.game, NOW, respell) }).toMatchObject({ seat, kind: "silent", detail: "unresolved team names" });
 		}
+		expect(read(2, lakers.game, NOW, respell)).toMatchObject({ kind: "no_final", detail: "absent" });
+		// One team respelt: the other team's answer carries the record, respelt on one side.
+		const respellHome: Derive = (seat, _p, body) => {
+			if (seat !== 2) return body;
+			const b = copy(body);
+			for (const r of LAKERS[2].find(b)) if (idOf(2, r) === LAKERS[2].id) ((r.teams as Record<string, Record<string, unknown>>).home).team = "L.A. Lakerz";
+			return b;
+		};
+		expect(read(2, lakers.game, NOW, respellHome)).toMatchObject({ kind: "silent", detail: "unresolved team names" });
 	});
-	test("both names unknown, and no time to place it: silent", () => {
-		// Seat 2's real Memphis at Iowa State, both names respelt and its time marked to be announced.
+	test("one name unknown, and no time to place it: silent", () => {
+		// Seat 2's real Memphis at Iowa State, the home name respelt (so the record reaches the seat through
+		// Memphis's answer) and its time marked to be announced.
 		const iowa = byName("ncaab not final: Memphis at Iowa State").game;
 		const tba: Derive = (seat, _p, body) => {
 			if (seat !== 2) return body;
@@ -644,7 +670,6 @@ describe("a game the seat respells is not absent", () => {
 			for (const g of b.results) {
 				if ((g.gameId as unknown) !== 341752) continue;
 				(g.teams.home as Record<string, unknown>).team = "Iowa St Cyclonez";
-				(g.teams.away as Record<string, unknown>).team = "Memphis Tigerz";
 				g.schedule = { ...g.schedule, tbaTime: true };
 			}
 			return b;

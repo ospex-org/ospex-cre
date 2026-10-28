@@ -78,17 +78,18 @@ describe("hints", () => {
 		});
 
 		test(`seat ${seat}: a hinted record outside the window decides nothing by itself`, () => {
-			// This game's record taken out and the next date's answer emptied. Unhinted, the empty date
-			// leaves the seat silent, since the game could be on it. A hint naming the day before's game
-			// doesn't make the seat say "no final" in its place.
+			// This game's record taken out and the next date's answer emptied. Asked for the two teams, the
+			// seat's answer then holds their other records, every one outside the window, and the seat says
+			// so. A hint naming the day before's game changes nothing: the hinted record is outside the
+			// window, nothing inside it could be the game, and the hint is dropped.
 			const emptied: Derive = (s, path, body) => {
 				const b = moved(s, path, body);
 				if (s !== seat || !path.includes("2026-06-12")) return b;
 				return seat === 1 ? { ...(b as Record<string, unknown>), data: [], meta: {} } : { ...(b as Record<string, unknown>), results: [] };
 			};
-			const silentEmpty = { kind: "silent", home: null, away: null, detail: "empty listing", id: null };
-			expect(read(seat, marlins, emptied)).toEqual(silentEmpty);
-			expect(read(seat, hinted(ids[seat].dayBefore), emptied)).toEqual(silentEmpty);
+			const unhinted = read(seat, marlins, emptied);
+			expect(unhinted).toMatchObject({ kind: "no_final", home: null, away: null, detail: "outside window" });
+			expect(read(seat, hinted(ids[seat].dayBefore), emptied)).toEqual(unhinted);
 		});
 	}
 

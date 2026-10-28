@@ -6,6 +6,12 @@
 //
 // Cases name feeds by seat only, as every record of the program does. The public cases record
 // lives in ospex-artifacts; its entries' payloads are saved here, under fixtures/, and replayed here.
+//
+// The readers ask for one game at a time (seats 1 and 2 by team, the spare by its id), and a case's
+// payloads are the days' slate pages those answers are drawn from: a one-game request is answered
+// from the listed pages, filtered as fixtures.ts filters them, and each page an answer draws on counts
+// as asked. A case records the pages the run's answers rest on, until the record is captured again
+// with the one-game requests themselves.
 
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
@@ -13,7 +19,7 @@ import { join } from "node:path";
 import type { ChainGame, ReportReading } from "../src/chain";
 import { scoreGameSync } from "../src/program";
 import type { HttpRequest, HttpResponse, Seat } from "../src/types";
-import { INDEX, KEY, ROOT, at, bytesOf, locate } from "./fixtures";
+import { INDEX, KEY, ROOT, at, bytesOf, fromPages, locate, oneGameOf } from "./fixtures";
 import { PAYOUT, PAYOUT_REFUSED } from "./rule-helpers";
 
 export const CASES_DIR = join(import.meta.dir, "..", "cases");
@@ -100,17 +106,25 @@ export function replay(c: CaseFile): Replay {
 	}
 	const unlisted: string[] = [];
 	const asked = new Set<string>();
-	const send = (req: HttpRequest): HttpResponse => {
-		const l = locate(req);
-		const k = l === null ? "a host outside the table" : `${l.seat} ${l.path}`;
+	const listed = (seat: Seat, path: string): HttpResponse => {
+		const k = `${seat} ${path}`;
 		asked.add(k);
 		const bytes = served.get(k);
 		if (bytes === undefined) {
-			unlisted.push(l === null ? k : `seat ${l.seat} ${l.path}`);
+			unlisted.push(`seat ${seat} ${path}`);
 			throw new Error("not in the case");
 		}
 		const entry = INDEX.find((e) => `${e.seat} ${e.path}` === k && e.sha256 === c.payloads.find((p) => `${p.seat} ${p.path}` === k)!.sha256)!;
 		return { status: entry.status, body: new TextDecoder().decode(bytes) };
+	};
+	const send = (req: HttpRequest): HttpResponse => {
+		const l = locate(req);
+		if (l === null) {
+			unlisted.push("a host outside the table");
+			throw new Error("not in the case");
+		}
+		const one = oneGameOf(l.seat, l.path);
+		return one === null ? listed(l.seat, l.path) : fromPages(one, (path) => listed(l.seat, path));
 	};
 	const keys = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
 	const o = scoreGameSync(chainGameOf(c), keys, PAYOUT, at(c.run), send);

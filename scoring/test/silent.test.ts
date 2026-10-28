@@ -63,12 +63,15 @@ describe("silent", () => {
 	});
 
 	test("an answer of the wrong shape, or a record the reader cannot read", () => {
-		const wrongShape: Derive = () => ({ unexpected: true });
-		for (const seat of SEATS) expect({ seat, ...detailOf(seat, gameFor(seat), wrongShape) }).toEqual({ seat, kind: "silent", detail: "unreadable" });
+		for (const seat of SEATS) {
+			const r = readWith(seat, gameFor(seat), () => ({ status: 200, body: JSON.stringify({ unexpected: true }) }));
+			expect({ seat, kind: r.kind, detail: r.detail }).toEqual({ seat, kind: "silent", detail: "unreadable" });
+		}
+		// Every record's id gone, so the game's own (whichever the one-game answer draws) is unreadable.
 		const badRecord: Derive = (seat, _p, body) => {
 			const b = copy(body) as Record<string, unknown> | unknown[];
-			if (seat === 1) ((b as { data: unknown[] }).data[0] as Record<string, unknown>).id = null;
-			if (seat === 2) ((b as { results: unknown[] }).results[0] as Record<string, unknown>).gameId = null;
+			if (seat === 1) for (const g of (b as { data: Record<string, unknown>[] }).data) g.id = null;
+			if (seat === 2) for (const g of (b as { results: Record<string, unknown>[] }).results) g.gameId = null;
 			if (seat === 4) ((b as unknown[])[0] as Record<string, unknown>).id = null;
 			if (seat === 3) (b as unknown[])[0] = 5;
 			return b;
@@ -91,10 +94,11 @@ describe("silent", () => {
 		});
 		expect(r).toMatchObject({ kind: "silent", detail: "request bound" });
 		expect(asked).toBe(MAX_REQUESTS);
-		// The control: the real two-page answer for 2 Nov is read through to its second page.
+		// The control: a game on the second page of the real 2 Nov slate is in the teams' own answer, drawn
+		// from both pages, in one request per team and no page past the first.
 		const page2 = readSaved(2, { ...iowa, home: "Nebraska", away: "Le Moyne", start: Date.UTC(2026, 10, 3, 0, 30) / 1000, n: 23 * 3600 }, NOW);
 		expect(page2.misses).toEqual([]);
-		expect(page2.asked.some((q) => q.url.includes("skip=100"))).toBe(true);
+		expect([page2.asked.length, page2.asked.some((q) => q.url.includes("skip="))]).toEqual([2, false]);
 		expect(page2.reading).toMatchObject({ kind: "no_final", detail: "scheduled", record: { id: "342256" } });
 	});
 

@@ -32,10 +32,12 @@
 //             the read.
 //
 // "Absent" (answered, no record of the game) is said only when the answer rules the game out:
-// every date asked answered with at least one record, nothing in the window could be the game (a
-// record whose two names the program can't resolve could be, if the feed has respelt them), and no
-// record of the two teams sits outside it. An empty answer for a date is not proof the date is
-// empty, so it leaves the feed silent instead.
+// nothing in the window could be the game (a record whose two names the program can't resolve
+// could be, if the feed has respelt them), and no record of the two teams sits outside it. A seat
+// asked for the day's slate (`listed` "slate": the spare) must have answered every date asked with
+// at least one record: an empty answer for a date is not proof the date is empty, so it leaves the
+// feed silent. A seat asked for the game's own teams (`listed` "team": seats 1 and 2) answers
+// empty for a team with no game on the dates asked, so an empty answer there is an answer: absent.
 
 import { resolveTeam } from "./teams";
 import { silent } from "./run";
@@ -109,7 +111,7 @@ export function resolveFeedTeam(league: string, team: FeedTeam): string | null {
  * `near`, exactly as scoring will: the window `near` reads is a day either side of the date, and a
  * record a day before the game says nothing about it at scoring.
  */
-export function pick(seat: Seat, game: Game, listings: readonly Listing[], near?: number): Reading {
+export function pick(seat: Seat, game: Game, listings: readonly Listing[], near?: number, listed: "slate" | "team" = "slate"): Reading {
 	const home = resolveTeam(game.league, game.home);
 	const away = resolveTeam(game.league, game.away);
 	if (home === null || away === null || home === away) return silent(seat, "game teams unknown");
@@ -198,7 +200,7 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[], near?
 	if (chosen.length > 0) return silent(seat, "ambiguous");
 	if (records.some((r) => (isGame(r) || mayBe(r) || respelt(r)) && r.time === null)) return silent(seat, "no game time");
 	if (records.some((r) => (mayBe(r) || respelt(r)) && inside(r))) return silent(seat, "unresolved team names");
-	if (listings.some((l) => l.length === 0)) return silent(seat, "empty listing");
+	if (listed === "slate" && listings.some((l) => l.length === 0)) return silent(seat, "empty listing");
 	if (games.length > 0) return noFinal(seat, "outside window", games[0]);
 	return noFinal(seat, "absent", null);
 }
