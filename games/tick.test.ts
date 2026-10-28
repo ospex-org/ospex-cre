@@ -158,7 +158,7 @@ function tick(
 	return { result, written: writer.written, asked: t.asked, handed: program?.handed ?? [], names: chain.names() };
 }
 
-const row = (g: ChainGame): OpenGame => ({ gameId: BigInt(g.id), status: g.status, start: g.start, window: g.n, day7Clock: g.day7, disputedAt: g.dispute?.at ?? null, date: g.date, league: g.league });
+const row = (g: ChainGame): OpenGame => ({ gameId: BigInt(g.id), status: g.status, start: g.start, window: g.n, day7Clock: g.day7, disputedAt: g.dispute?.at ?? null, league: g.league, date: g.date });
 
 describe("what a game is due for", () => {
 	test("a verified game: nothing before the start plus the league's duration, the probe from it, hour 24 from the start plus n", () => {
@@ -283,7 +283,7 @@ describe("one tick", () => {
 		expect(next.result.fullRead?.gameId).not.toBe(read);
 	});
 
-	test("the budgets hold whatever the list holds: never past 15 reads or 15 requests, one full read, the rest waiting", () => {
+	test("the budgets on open lists of 0, 1, 5, 14, 15, 16, 40 and 130 games, all final or none: never past 15 reads or 15 requests, one full read, the rest waiting", () => {
 		for (const count of [0, 1, 5, 14, 15, 16, 40, 130]) {
 			for (const says of ["live", "final"] as const) {
 				const games = Array.from({ length: count }, (_, i) => gameOf(i + 1, { start: START + i }));

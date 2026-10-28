@@ -179,8 +179,8 @@ export const HOURLY_TICK = 1;
 
 /**
  * How long after a clock runs out the tick keeps running the full read for the game on every tick, in
- * seconds, before it falls back to the hour's first tick. A clock read that keeps deciding to wait (a
- * game the feeds dropped) would otherwise take every tick's one full read for days.
+ * seconds, before it falls back to the hour's second tick (HOURLY_TICK). A clock read that keeps
+ * deciding to wait (a game the feeds dropped) would otherwise take every tick's one full read for days.
  */
 export const CLOCK_WINDOW = 2 * 3_600;
 
