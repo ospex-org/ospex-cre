@@ -6,9 +6,11 @@
 // read from a log past the trigger's own.
 
 import { describe, expect, test } from "bun:test";
+import { encodeAbiParameters, type AbiParameter } from "viem";
 import type { ChainGame } from "../scoring/src/chain";
 import { lastRecorded } from "../scoring/src/rule";
 import { chainOf } from "../scoring/test/rule-helpers";
+import INTERFACE from "./abi/IOspexGames.json";
 import { gameOfCreation, gameOfState, readIdentity, readOpenGames, readReadings, readReporters, recordOfVotes, type Evm, type OpenGame } from "./chain";
 import { GAMES, REPORTER, RETIRED, creationOf, fakeChain, fakeChainOf } from "./test-helpers";
 
@@ -29,8 +31,8 @@ function rowOf(g: ChainGame): OpenGame {
 		window: g.n,
 		day7Clock: g.day7,
 		disputedAt: g.dispute?.at ?? null,
-		date: g.date,
 		league: g.league,
+		date: g.date,
 	};
 }
 
@@ -48,10 +50,23 @@ describe("the chain reads, from state", () => {
 			[9n, "disputed", a.start, a.start! + 7_200],
 			[42n, "verified", a.start, null],
 		]);
-		expect(rows[0]).toEqual({ gameId: 7n, status: "unverified", start: null, window: b.n, day7Clock: b.day7, disputedAt: null, date: b.date, league: b.league });
-		expect(rows[2]).toEqual({ gameId: 42n, status: "verified", start: a.start, window: a.n, day7Clock: a.day7, disputedAt: null, date: a.date, league: a.league });
+		expect(rows[0]).toEqual({ gameId: 7n, status: "unverified", start: null, window: b.n, day7Clock: b.day7, disputedAt: null, league: b.league, date: b.date });
+		expect(rows[2]).toEqual({ gameId: 42n, status: "verified", start: a.start, window: a.n, day7Clock: a.day7, disputedAt: null, league: a.league, date: a.date });
 		expect(chain.names()).toEqual(["getOpenGames", "getOpenGames"]);
 		expect(chain.calls.map((c) => c.args)).toEqual([[0n, 2n], [2n, 2n]]);
+	});
+
+	test("a page encoded by the games set's own interface decodes to the row's fields by name, in its order", () => {
+		// The answer is built from the interface's ABI file, not from lib.ts, with every field a value of
+		// its own (the date two hours from the start, the clocks apart), so a field read from another's
+		// slot shows.
+		const getOpenGames = INTERFACE.abi.find((e) => e.type === "function" && e.name === "getOpenGames") as { outputs: readonly AbiParameter[] };
+		const row = { gameId: 77n, status: 2, start: 1_700_000_000n, window: 86_400n, day7Clock: 604_800n, disputedAt: 1_700_010_000n, league: "nhl", date: 1_700_007_200n };
+		const answer = encodeAbiParameters(getOpenGames.outputs, [[row], 1n]);
+		const evm: Evm = { call: () => answer, latest: () => ({ number: 1n, timestamp: 1 }) };
+		const { rows, total } = readOpenGames(evm, GAMES);
+		expect(total).toBe(1);
+		expect(rows).toEqual([{ gameId: 77n, status: "verified", start: 1_700_000_000, window: 86_400, day7Clock: 604_800, disputedAt: 1_700_010_000, league: "nhl", date: 1_700_007_200 }]);
 	});
 
 	test("an empty open list is one read, and a list that fits a page is one read", () => {

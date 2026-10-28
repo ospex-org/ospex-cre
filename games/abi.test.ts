@@ -6,11 +6,13 @@
 import { describe, expect, test } from "bun:test";
 import { encodeAbiParameters, encodeEventTopics, type Hex } from "viem";
 import type { Report } from "../scoring/src/chain";
+import INTERFACE from "./abi/IOspexGames.json";
 import {
 	GAME_CREATED,
 	GAME_CREATED_TOPIC,
 	GAME_REPORTED,
 	GAME_REPORTED_TOPIC,
+	GAMES_READS,
 	decodeGameCreated,
 	decodeGameReported,
 	decodeReport,
@@ -19,6 +21,18 @@ import {
 	readCall,
 	topicOf,
 } from "./lib";
+
+/** A parameter as both the interface's ABI and lib.ts state it: its name (empty where unnamed), its type, its components in order, and whether indexed. */
+interface Param {
+	readonly name?: string;
+	readonly type: string;
+	readonly indexed?: boolean;
+	readonly components?: readonly Param[];
+}
+function shape(p: Param): unknown {
+	return { name: p.name ?? "", type: p.type, indexed: p.indexed ?? false, components: (p.components ?? []).map(shape) };
+}
+const entry = (type: string, name: string) => INTERFACE.abi.find((e) => e.type === type && e.name === name) as { inputs: Param[]; outputs?: Param[]; stateMutability?: string } | undefined;
 
 // cast abi-encode "f((uint256,uint8,uint64,uint32,uint32,(uint8,uint8,uint32,uint32)[],address))" ...
 const SCORE_GOLDEN =
@@ -118,6 +132,34 @@ describe("the one report shape", () => {
 		expect(() => encodeReport({ ...SCORE, gameId: "07" })).toThrow("uint256");
 		expect(() => encodeReport({ ...SCORE, payout: "0x11" })).toThrow("address");
 		expect(() => encodeReport({ ...SCORE, start: -1 })).toThrow("uint64");
+	});
+});
+
+describe("the games set's interface, pinned to its ABI file", () => {
+	test("every read the workflow makes is the interface's, inputs and outputs field for field in its order; the coin is the games set's own", () => {
+		for (const fn of GAMES_READS) {
+			if (fn.name === "i_token") {
+				// A public immutable of the games set, not in its interface: its selector is pinned below.
+				expect(entry("function", "i_token")).toBeUndefined();
+				continue;
+			}
+			const theirs = entry("function", fn.name);
+			expect(theirs, fn.name).toBeDefined();
+			expect([fn.name, fn.inputs.map(shape), fn.outputs.map(shape), fn.stateMutability]).toEqual([fn.name, theirs!.inputs.map(shape), theirs!.outputs!.map(shape), theirs!.stateMutability]);
+		}
+	});
+
+	test("the open list's row is OpenGame in the games set's order: gameId, status, start, window, day7Clock, disputedAt, league, date", () => {
+		const theirs = entry("function", "getOpenGames")!.outputs![0] as Param;
+		const ours = GAMES_READS.find((f) => f.name === "getOpenGames")!.outputs[0] as unknown as Param;
+		const order = ["gameId", "status", "start", "window", "day7Clock", "disputedAt", "league", "date"];
+		expect(theirs.components!.map((c) => c.name)).toEqual(order);
+		expect(ours.components!.map((c) => [c.name, c.type])).toEqual(theirs.components!.map((c) => [c.name, c.type]));
+	});
+
+	test("the two events are the interface's, field for field", () => {
+		expect(GAME_CREATED.inputs.map(shape)).toEqual(entry("event", "GameCreated")!.inputs.map(shape));
+		expect(GAME_REPORTED.inputs.map(shape)).toEqual(entry("event", "GameReported")!.inputs.map(shape));
 	});
 });
 

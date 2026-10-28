@@ -259,11 +259,11 @@ export const GAME_REPORTED_TOPIC: Hex = toEventSelector(GAME_REPORTED);
 
 /**
  * One game on the games set's open list, as the tick reads it: the game's own words that say whether
- * it is due, and its league. The hints are not here: the row's size is fixed with the league bounded,
- * and the tick reads the identity of the few games it probes. The `date` is this workflow's one
- * addition to the row as the games set's change settled it, asked of its writer: an unverified game
- * is verified from seven days before its date, and its start is 0 until written. The games set's
- * final row replaces this tuple, in this file only; the fields are read by name.
+ * it is due, its league, and the creator's date, which an unverified game is verified from (its start
+ * is 0 until written). The hints are not here: the row's size is fixed with the league bounded, and
+ * the tick reads the identity of the few games it probes. The tuple is decoded in the games set's
+ * order, `OpenGame` in its interface, and abi.test.ts pins it field for field against that interface's
+ * ABI (abi/IOspexGames.json), so a row the games set changed fails the suite, never the tick.
  */
 const OPEN_GAME = {
 	type: "tuple",
@@ -274,25 +274,25 @@ const OPEN_GAME = {
 		{ name: "window", type: "uint64" },
 		{ name: "day7Clock", type: "uint64" },
 		{ name: "disputedAt", type: "uint64" },
-		{ name: "date", type: "uint64" },
 		{ name: "league", type: "string" },
+		{ name: "date", type: "uint64" },
 	],
 } as const;
 
 /**
- * The games set's reads the workflow takes. The first seven are IOspexGames at contracts-v2 main;
- * `getGameIdentity`, `getGameReadings` and `getOpenGames` are as the games set's change names them
- * (the readings read gives the start report's readings whole and each seat's last vote in the order
- * the seats first voted, with the dispute clock; the open list gives rows, the tuple above).
+ * The games set's reads the workflow takes, each as IOspexGames gives it (abi/IOspexGames.json, pinned
+ * by abi.test.ts): `getGameReadings` gives the start report's readings whole and each seat's last vote
+ * in the order the seats first voted, with the dispute clock; `getOpenGames` gives rows, the tuple
+ * above, and the list's total. `i_token` is the games set's own public coin, not in the interface.
  */
 export const GAMES_READS = [
 	{ type: "function", name: "getGameStatus", stateMutability: "view", inputs: [{ name: "gameId", type: "uint256" }], outputs: [{ type: "uint8" }] },
 	{ type: "function", name: "getGameStart", stateMutability: "view", inputs: [{ name: "gameId", type: "uint256" }], outputs: [{ type: "uint64" }] },
 	{ type: "function", name: "getGameDisputedAt", stateMutability: "view", inputs: [{ name: "gameId", type: "uint256" }], outputs: [{ type: "uint64" }] },
-	{ type: "function", name: "getApprovedReporters", stateMutability: "view", inputs: [], outputs: [{ type: "address[]" }, { type: "uint8[]" }] },
-	{ type: "function", name: "getReporter", stateMutability: "view", inputs: [{ name: "reporter", type: "address" }], outputs: [{ type: "uint8" }, { type: "bool" }, { type: "bytes32" }] },
+	{ type: "function", name: "getApprovedReporters", stateMutability: "view", inputs: [], outputs: [{ name: "reporters", type: "address[]" }, { name: "kinds", type: "uint8[]" }] },
+	{ type: "function", name: "getReporter", stateMutability: "view", inputs: [{ name: "reporter", type: "address" }], outputs: [{ name: "kind", type: "uint8" }, { name: "retired", type: "bool" }, { name: "codeHash", type: "bytes32" }] },
 	{ type: "function", name: "i_token", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-	{ type: "function", name: "getGameReporters", stateMutability: "view", inputs: [{ name: "gameId", type: "uint256" }], outputs: [{ type: "address[]" }, { type: "uint8[]" }] },
+	{ type: "function", name: "getGameReporters", stateMutability: "view", inputs: [{ name: "gameId", type: "uint256" }], outputs: [{ name: "reporters", type: "address[]" }, { name: "kinds", type: "uint8[]" }] },
 	{
 		type: "function",
 		name: "getOpenGames",
@@ -317,9 +317,9 @@ export const GAMES_READS = [
 ] as const;
 
 /**
- * The rows of the open list one read asks for. The games set measures its row at 320 bytes and pins
- * 77 rows a page under the 25,000 bytes an answer may be; with the date the row is 352 bytes and 70
- * rows fit. 64 rows are 22,624 bytes, under the bound either way.
+ * The rows of the open list one read asks for. The games set measures its row at 352 bytes encoded and
+ * pins 70 rows a page under the 25,000 bytes an answer may be (71 are 25,088). 64 rows are 22,624
+ * bytes with the answer's own two words, under 25,000 and under 25 KB read as 25,600.
  */
 export const OPEN_PAGE = 64;
 

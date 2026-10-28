@@ -89,8 +89,8 @@ export function fakeChainOf(games: readonly ChainGame[], now: number, opts: Fake
 		window: BigInt(g.n),
 		day7Clock: BigInt(g.day7),
 		disputedAt: BigInt(g.dispute?.at ?? 0),
-		date: BigInt(g.date),
 		league: g.league,
+		date: BigInt(g.date),
 	});
 	return {
 		calls,

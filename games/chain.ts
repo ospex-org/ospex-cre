@@ -31,9 +31,9 @@ export interface OpenGame {
 	readonly day7Clock: number;
 	/** When the dispute record was written, or null without one. */
 	readonly disputedAt: number | null;
+	readonly league: string;
 	/** The creator's date, which an unverified game is verified from. */
 	readonly date: number;
-	readonly league: string;
 }
 
 /** Which of the open list's pages a tick reads: shard `index` of `count` reads the pages index, index + count, index + 2 count, ... */
@@ -137,8 +137,9 @@ export function readOpenGames(evm: Evm, games: Address, shard: Shard = { index: 
 	let reads = 0;
 	const page = (m: number): { readonly rows: OpenGame[]; readonly total: number } => {
 		const offset = BigInt(shard.index + m * shard.count) * BigInt(pageSize);
+		// The row in the games set's order (lib.ts, OPEN_GAME), each field taken by its name from the decoded tuple.
 		const [answer, total] = readAnswer("getOpenGames", evm.call(games, readCall("getOpenGames", [offset, BigInt(pageSize)]))) as [
-			readonly { gameId: bigint; status: number; start: bigint; window: bigint; day7Clock: bigint; disputedAt: bigint; date: bigint; league: string }[],
+			readonly { gameId: bigint; status: number; start: bigint; window: bigint; day7Clock: bigint; disputedAt: bigint; league: string; date: bigint }[],
 			bigint,
 		];
 		reads++;
@@ -151,8 +152,8 @@ export function readOpenGames(evm: Evm, games: Address, shard: Shard = { index: 
 				window: seconds(r.window, "n"),
 				day7Clock: seconds(r.day7Clock, "the day-7 clock"),
 				disputedAt: r.disputedAt === 0n ? null : seconds(r.disputedAt, "the dispute clock"),
-				date: seconds(r.date, "the date"),
 				league: r.league,
+				date: seconds(r.date, "the date"),
 			})),
 		};
 	};

@@ -1,0 +1,1110 @@
+{
+ "source": "ospex-contracts-v2 src/games/IOspexGames.sol at 190c306aee9867158dc24f0072b28882c84155f4, as forge 0.8.26 builds it (out/IOspexGames.sol/IOspexGames.json, the abi field)",
+ "abi": [
+  {
+   "type": "function",
+   "name": "approveReporter",
+   "inputs": [
+    {
+     "name": "reporter",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "kind",
+     "type": "uint8",
+     "internalType": "enum ReporterKind"
+    },
+    {
+     "name": "codeHash",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "type": "function",
+   "name": "createGame",
+   "inputs": [
+    {
+     "name": "league",
+     "type": "string",
+     "internalType": "string"
+    },
+    {
+     "name": "homeTeam",
+     "type": "string",
+     "internalType": "string"
+    },
+    {
+     "name": "awayTeam",
+     "type": "string",
+     "internalType": "string"
+    },
+    {
+     "name": "date",
+     "type": "uint64",
+     "internalType": "uint64"
+    },
+    {
+     "name": "hints",
+     "type": "tuple[]",
+     "internalType": "struct Hint[]",
+     "components": [
+      {
+       "name": "seat",
+       "type": "uint8",
+       "internalType": "uint8"
+      },
+      {
+       "name": "id",
+       "type": "string",
+       "internalType": "string"
+      }
+     ]
+    },
+    {
+     "name": "maxFee",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "type": "function",
+   "name": "gameCount",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getApprovedReporters",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "reporters",
+     "type": "address[]",
+     "internalType": "address[]"
+    },
+    {
+     "name": "kinds",
+     "type": "uint8[]",
+     "internalType": "uint8[]"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getCredit",
+   "inputs": [
+    {
+     "name": "account",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getGameDisputedAt",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint64",
+     "internalType": "uint64"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getGameFee",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "held",
+     "type": "uint96",
+     "internalType": "uint96"
+    },
+    {
+     "name": "creator",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getGameIdentity",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "league",
+     "type": "string",
+     "internalType": "string"
+    },
+    {
+     "name": "homeTeam",
+     "type": "string",
+     "internalType": "string"
+    },
+    {
+     "name": "awayTeam",
+     "type": "string",
+     "internalType": "string"
+    },
+    {
+     "name": "date",
+     "type": "uint64",
+     "internalType": "uint64"
+    },
+    {
+     "name": "hints",
+     "type": "tuple[]",
+     "internalType": "struct Hint[]",
+     "components": [
+      {
+       "name": "seat",
+       "type": "uint8",
+       "internalType": "uint8"
+      },
+      {
+       "name": "id",
+       "type": "string",
+       "internalType": "string"
+      }
+     ]
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getGameReadings",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "startReadings",
+     "type": "tuple[]",
+     "internalType": "struct Reading[]",
+     "components": [
+      {
+       "name": "seat",
+       "type": "uint8",
+       "internalType": "uint8"
+      },
+      {
+       "name": "kind",
+       "type": "uint8",
+       "internalType": "enum ReadingKind"
+      },
+      {
+       "name": "homeScore",
+       "type": "uint32",
+       "internalType": "uint32"
+      },
+      {
+       "name": "awayScore",
+       "type": "uint32",
+       "internalType": "uint32"
+      }
+     ]
+    },
+    {
+     "name": "votes",
+     "type": "tuple[]",
+     "internalType": "struct Reading[]",
+     "components": [
+      {
+       "name": "seat",
+       "type": "uint8",
+       "internalType": "uint8"
+      },
+      {
+       "name": "kind",
+       "type": "uint8",
+       "internalType": "enum ReadingKind"
+      },
+      {
+       "name": "homeScore",
+       "type": "uint32",
+       "internalType": "uint32"
+      },
+      {
+       "name": "awayScore",
+       "type": "uint32",
+       "internalType": "uint32"
+      }
+     ]
+    },
+    {
+     "name": "disputedAt",
+     "type": "uint64",
+     "internalType": "uint64"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getGameReporters",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "reporters",
+     "type": "address[]",
+     "internalType": "address[]"
+    },
+    {
+     "name": "kinds",
+     "type": "uint8[]",
+     "internalType": "uint8[]"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getGameScores",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "homeScore",
+     "type": "uint32",
+     "internalType": "uint32"
+    },
+    {
+     "name": "awayScore",
+     "type": "uint32",
+     "internalType": "uint32"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getGameStart",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint64",
+     "internalType": "uint64"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getGameStatus",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "enum GameStatus"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getGameTerms",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "tuple",
+     "internalType": "struct Terms",
+     "components": [
+      {
+       "name": "window",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "day7Clock",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "day30Clock",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "fee",
+       "type": "uint96",
+       "internalType": "uint96"
+      }
+     ]
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getGameWindow",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint64",
+     "internalType": "uint64"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getOpenGames",
+   "inputs": [
+    {
+     "name": "offset",
+     "type": "uint256",
+     "internalType": "uint256"
+    },
+    {
+     "name": "count",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "rows",
+     "type": "tuple[]",
+     "internalType": "struct OpenGame[]",
+     "components": [
+      {
+       "name": "gameId",
+       "type": "uint256",
+       "internalType": "uint256"
+      },
+      {
+       "name": "status",
+       "type": "uint8",
+       "internalType": "enum GameStatus"
+      },
+      {
+       "name": "start",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "window",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "day7Clock",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "disputedAt",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "league",
+       "type": "string",
+       "internalType": "string"
+      },
+      {
+       "name": "date",
+       "type": "uint64",
+       "internalType": "uint64"
+      }
+     ]
+    },
+    {
+     "name": "total",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getReporter",
+   "inputs": [
+    {
+     "name": "reporter",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "kind",
+     "type": "uint8",
+     "internalType": "enum ReporterKind"
+    },
+    {
+     "name": "retired",
+     "type": "bool",
+     "internalType": "bool"
+    },
+    {
+     "name": "codeHash",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "getTerms",
+   "inputs": [
+    {
+     "name": "league",
+     "type": "string",
+     "internalType": "string"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "tuple",
+     "internalType": "struct Terms",
+     "components": [
+      {
+       "name": "window",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "day7Clock",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "day30Clock",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "fee",
+       "type": "uint96",
+       "internalType": "uint96"
+      }
+     ]
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "isEveryReporterRetired",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "bool",
+     "internalType": "bool"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "type": "function",
+   "name": "release",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "type": "function",
+   "name": "report",
+   "inputs": [
+    {
+     "name": "r",
+     "type": "tuple",
+     "internalType": "struct Report",
+     "components": [
+      {
+       "name": "gameId",
+       "type": "uint256",
+       "internalType": "uint256"
+      },
+      {
+       "name": "kind",
+       "type": "uint8",
+       "internalType": "enum ReportKind"
+      },
+      {
+       "name": "start",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "homeScore",
+       "type": "uint32",
+       "internalType": "uint32"
+      },
+      {
+       "name": "awayScore",
+       "type": "uint32",
+       "internalType": "uint32"
+      },
+      {
+       "name": "readings",
+       "type": "tuple[]",
+       "internalType": "struct Reading[]",
+       "components": [
+        {
+         "name": "seat",
+         "type": "uint8",
+         "internalType": "uint8"
+        },
+        {
+         "name": "kind",
+         "type": "uint8",
+         "internalType": "enum ReadingKind"
+        },
+        {
+         "name": "homeScore",
+         "type": "uint32",
+         "internalType": "uint32"
+        },
+        {
+         "name": "awayScore",
+         "type": "uint32",
+         "internalType": "uint32"
+        }
+       ]
+      },
+      {
+       "name": "payout",
+       "type": "address",
+       "internalType": "address"
+      }
+     ]
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "type": "function",
+   "name": "retireReporter",
+   "inputs": [
+    {
+     "name": "reporter",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "type": "function",
+   "name": "setTerms",
+   "inputs": [
+    {
+     "name": "league",
+     "type": "string",
+     "internalType": "string"
+    },
+    {
+     "name": "terms",
+     "type": "tuple",
+     "internalType": "struct Terms",
+     "components": [
+      {
+       "name": "window",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "day7Clock",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "day30Clock",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "fee",
+       "type": "uint96",
+       "internalType": "uint96"
+      }
+     ]
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "type": "function",
+   "name": "withdraw",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "amount",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "type": "event",
+   "name": "FeeCredited",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "indexed": true,
+     "internalType": "uint256"
+    },
+    {
+     "name": "account",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "amount",
+     "type": "uint256",
+     "indexed": false,
+     "internalType": "uint256"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "type": "event",
+   "name": "GameCreated",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "indexed": true,
+     "internalType": "uint256"
+    },
+    {
+     "name": "creator",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "league",
+     "type": "string",
+     "indexed": false,
+     "internalType": "string"
+    },
+    {
+     "name": "homeTeam",
+     "type": "string",
+     "indexed": false,
+     "internalType": "string"
+    },
+    {
+     "name": "awayTeam",
+     "type": "string",
+     "indexed": false,
+     "internalType": "string"
+    },
+    {
+     "name": "date",
+     "type": "uint64",
+     "indexed": false,
+     "internalType": "uint64"
+    },
+    {
+     "name": "hints",
+     "type": "tuple[]",
+     "indexed": false,
+     "internalType": "struct Hint[]",
+     "components": [
+      {
+       "name": "seat",
+       "type": "uint8",
+       "internalType": "uint8"
+      },
+      {
+       "name": "id",
+       "type": "string",
+       "internalType": "string"
+      }
+     ]
+    },
+    {
+     "name": "terms",
+     "type": "tuple",
+     "indexed": false,
+     "internalType": "struct Terms",
+     "components": [
+      {
+       "name": "window",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "day7Clock",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "day30Clock",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "fee",
+       "type": "uint96",
+       "internalType": "uint96"
+      }
+     ]
+    },
+    {
+     "name": "reporters",
+     "type": "address[]",
+     "indexed": false,
+     "internalType": "address[]"
+    },
+    {
+     "name": "kinds",
+     "type": "uint8[]",
+     "indexed": false,
+     "internalType": "uint8[]"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "type": "event",
+   "name": "GameReleased",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "indexed": true,
+     "internalType": "uint256"
+    },
+    {
+     "name": "caller",
+     "type": "address",
+     "indexed": false,
+     "internalType": "address"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "type": "event",
+   "name": "GameReported",
+   "inputs": [
+    {
+     "name": "gameId",
+     "type": "uint256",
+     "indexed": true,
+     "internalType": "uint256"
+    },
+    {
+     "name": "reporter",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "kind",
+     "type": "uint8",
+     "indexed": true,
+     "internalType": "enum ReportKind"
+    },
+    {
+     "name": "start",
+     "type": "uint64",
+     "indexed": false,
+     "internalType": "uint64"
+    },
+    {
+     "name": "homeScore",
+     "type": "uint32",
+     "indexed": false,
+     "internalType": "uint32"
+    },
+    {
+     "name": "awayScore",
+     "type": "uint32",
+     "indexed": false,
+     "internalType": "uint32"
+    },
+    {
+     "name": "readings",
+     "type": "tuple[]",
+     "indexed": false,
+     "internalType": "struct Reading[]",
+     "components": [
+      {
+       "name": "seat",
+       "type": "uint8",
+       "internalType": "uint8"
+      },
+      {
+       "name": "kind",
+       "type": "uint8",
+       "internalType": "enum ReadingKind"
+      },
+      {
+       "name": "homeScore",
+       "type": "uint32",
+       "internalType": "uint32"
+      },
+      {
+       "name": "awayScore",
+       "type": "uint32",
+       "internalType": "uint32"
+      }
+     ]
+    },
+    {
+     "name": "payout",
+     "type": "address",
+     "indexed": false,
+     "internalType": "address"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "type": "event",
+   "name": "ReporterApproved",
+   "inputs": [
+    {
+     "name": "reporter",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "kind",
+     "type": "uint8",
+     "indexed": false,
+     "internalType": "enum ReporterKind"
+    },
+    {
+     "name": "codeHash",
+     "type": "bytes32",
+     "indexed": false,
+     "internalType": "bytes32"
+    },
+    {
+     "name": "fixedValues",
+     "type": "bytes",
+     "indexed": false,
+     "internalType": "bytes"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "type": "event",
+   "name": "ReporterRetired",
+   "inputs": [
+    {
+     "name": "reporter",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "type": "event",
+   "name": "TermsSet",
+   "inputs": [
+    {
+     "name": "league",
+     "type": "string",
+     "indexed": false,
+     "internalType": "string"
+    },
+    {
+     "name": "terms",
+     "type": "tuple",
+     "indexed": false,
+     "internalType": "struct Terms",
+     "components": [
+      {
+       "name": "window",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "day7Clock",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "day30Clock",
+       "type": "uint64",
+       "internalType": "uint64"
+      },
+      {
+       "name": "fee",
+       "type": "uint96",
+       "internalType": "uint96"
+      }
+     ]
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "type": "event",
+   "name": "TimelockSet",
+   "inputs": [
+    {
+     "name": "timelock",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "type": "event",
+   "name": "TokenSet",
+   "inputs": [
+    {
+     "name": "token",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "type": "event",
+   "name": "Withdrawn",
+   "inputs": [
+    {
+     "name": "account",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "amount",
+     "type": "uint256",
+     "indexed": false,
+     "internalType": "uint256"
+    }
+   ],
+   "anonymous": false
+  }
+ ]
+}

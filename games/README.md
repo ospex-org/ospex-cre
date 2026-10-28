@@ -16,6 +16,7 @@ is in it, since those live in the program, inside the fingerprint.
 | `chain.ts` | what the workflow reads about a game, from state: a shard's pages of the games set's open list, each game's clocks, date and league; a game's identity, its start readings and each seat's last vote, its reporters; and what the games set refuses as a payout |
 | `run.ts` | one run for one game: decide, write; written against interfaces so a test runs it with a fake chain and saved feed answers |
 | `tick.ts` | one cron fire for one shard of the open list: the clocks, the probe at seat 3, the full read on a final or a clock, the verification on the hour's first tick, under the platform's quotas |
+| `abi/IOspexGames.json` | the games set's interface ABI as forge builds it at the commit the reads are coded to; `abi.test.ts` pins every read and the open list's row to it |
 | `*.test.ts` | `bun test`: the ABI pins, the four never-lines' wrapper halves, the chain reads, the tick |
 | `config.production.example.json` | the config template the reproducible build writes from; every address a placeholder |
 | `secrets.yaml` | the four seat keys' names in the vault |
@@ -73,11 +74,12 @@ it asks. Throughput: one full read per tick per shard, so twelve finals an hour 
 verification an hour per shard.
 
 **Waiting.** The games set's change that stores a game's identity, its readings and the open list is
-in review. Its reads are coded to as its branch names them, the open list's row with one word more,
-the game's date, asked of its writer for the verification's window; the names and the row move in
-`lib.ts` only, read by field name. The rehearsal still reads the games set at contracts-v2 main from
-its events, on a fork (`rehearsal/logs.ts`), until it is re-run against that games set. The first
-simulation on a college slate, with the platform's limits enforced, is the next proof after the merge.
+in review. Its reads are coded as its branch gives them: the interface's ABI at that branch's head is
+committed as `abi/IOspexGames.json`, and `abi.test.ts` pins every read and the open list's row to it,
+field for field in its order, so a row the games set changes fails the suite, never the tick. The
+rehearsal still reads the games set at contracts-v2 main from its events, on a fork
+(`rehearsal/logs.ts`), until it is re-run against that games set. The first simulation on a college
+slate, with the platform's limits enforced, is the next proof after the merge.
 
 ## Build and test
 
