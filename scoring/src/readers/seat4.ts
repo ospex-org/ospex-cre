@@ -6,8 +6,10 @@
 // answer may be (SLATE_FITS); an unusable id falls back to the slate the same way. The feed gives each
 // game's points as a list keyed by team name, not by home or away, so each team takes the one
 // entry carrying its own name, compared the way team names are (case, accents, punctuation and
-// spacing aside). Status: `completed` true is final, the feed's own word for a whole game;
-// anything else is not final. The feed records no postponed or cancelled state. Its game time is
+// spacing aside). Status: `completed` true is final, the feed's own word for a whole game; false is
+// not final, and never a word that the game will not play, so the spare's row is never a void's
+// vote; a row without the flag is a partial row and reads silent. The feed records no postponed or
+// cancelled state. Its game time is
 // the scheduled start until the game begins and the actual start after; it serves only this
 // seat's own window check, never the game's start.
 //
@@ -52,8 +54,8 @@ export function toRecord(e: Record<string, unknown>): FeedRecord | null {
 		id,
 		time: parseIsoSeconds(e.commence_time),
 		teams: [team(home, e.scores), team(away, e.scores)],
-		state: e.completed === true ? "final" : "not_final",
-		status: e.completed === true ? "completed" : "not completed",
+		state: e.completed === true ? "final" : e.completed === false ? "in_progress" : "no_status",
+		status: e.completed === true ? "completed" : e.completed === false ? "not completed" : "no completed flag",
 	};
 }
 

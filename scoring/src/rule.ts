@@ -16,10 +16,15 @@
 //   After n    Two counting seats answer with the same final and the third is silent. A seat that
 //              answered without a final is not silent, so two finals beside an
 //              answer without one are not enough.
-//   Void       Only from start + n. No seat that answers shows a final, and the counting seats
-//              answer as a score's would: "the same proof as a score: three feeds inside the
-//              window and two after". A void is never taken inside the window, so its count is
-//              always the after-n count: at least two counting seats answer, each without a final.
+//   Void       Only from start + n, and held to the finals' count: two counting seats answer
+//              affirmatively that the game will not or did not play (a row of the game, bound by
+//              its ids or names and time, whose status in the feed's own words is postponed,
+//              cancelled or not started: affirmsNoFinal), the rest of the counting seats silent, and
+//              no seat that answers shows a final. A row that says the game is in play is an answer,
+//              not a void's vote, and beside two affirmative answers it holds the void as it would
+//              hold a score; absence, a
+//              listing without the game, and a row without a status are silence (pick.ts). Fewer
+//              than two affirmative answers: the run waits, its line saying what each seat gave.
 //   Disagree   Any two finals that differ, from any seat asked, the spare's included, inside n or
 //              after; and from start + n, finals beside answers without one, with at least two
 //              counting seats answering: neither a score nor a void. The first run that sees either
@@ -99,8 +104,25 @@ export function countingFor(down: Seat | null): readonly Seat[] {
 }
 
 /**
+ * An affirmative no-final answer: the game's own row, bound by its ids or names and time, whose
+ * status in the feed's own words says the game will not or did not play: postponed, cancelled or
+ * not started (the reading's `recorded`). The only answer without a final a void may rest on. A row
+ * in play is an answer, not a void's vote.
+ */
+export function affirmsNoFinal(r: Reading): boolean {
+	return r.kind === "no_final" && r.recorded !== null;
+}
+
+/** What each seat gave, for the line of a run that waits on the void's count. */
+function gave(readings: readonly Reading[]): string {
+	return readings.map((r) => `seat ${r.seat} ${r.kind === "final" ? "a final" : r.kind === "silent" ? `silence (${r.detail})` : (r.recorded ?? r.detail)}`).join(", ");
+}
+
+/**
  * What a run's readings decide for a game whose start is written and that has no dispute record.
- * `inside` is whether the run's clock is before start + n.
+ * `inside` is whether the run's clock is before start + n. Every reading here is silent or an answer
+ * about the game (decideVerified reads non-answers silent; votesOf gives only answers): a final, or
+ * the game's own row without one.
  */
 export function decide(readings: readonly Reading[], counting: readonly Seat[], inside: boolean): Decision {
 	const of = (seat: Seat): Reading => readings.find((r) => r.seat === seat) ?? silent(seat, "not read");
@@ -114,6 +136,8 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 	const finalsCounted = counted.filter((r) => r.kind === "final").length;
 	const answeredCounted = counted.filter((r) => r.kind !== "silent").length;
 	const withoutFinal = answeredCounted - finalsCounted;
+	// The void's votes: the answers that say the game will not or did not play.
+	const affirmed = counted.filter(affirmsNoFinal).length;
 
 	if (inside) {
 		if (finalsCounted === AGREE.insideN) {
@@ -127,7 +151,12 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 	if (finalsCounted >= AGREE.afterN && withoutFinal === 0) {
 		return { action: "score", home: first.home as number, away: first.away as number, readings, why: "after n: two counting seats or more, the same final, the rest silent" };
 	}
-	if (finals.length === 0) return { action: "void", readings, why: "after n: every seat that answers shows no final" };
+	if (finals.length === 0) {
+		// As a score after n: two or more affirm, and the rest of the counting seats are silent. A counting seat
+		// that answers the game is in play is not silent, so two affirmative answers beside it are not enough.
+		if (affirmed >= AGREE.afterN && answeredCounted === affirmed) return { action: "void", readings, why: "after n: two counting seats or more say the game will not or did not play, the rest silent, and no seat shows a final" };
+		return { action: "wait", readings, why: `after n: ${affirmed} counting seat${affirmed === 1 ? " says" : "s say"} the game will not or did not play, two needed; ${gave(readings)}` };
+	}
 	return { action: "dispute", readings, why: "after n: finals beside answers without a final" };
 }
 
@@ -138,7 +167,10 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
  * the game is silent on it.
  */
 export function decideVerified(readings: readonly Reading[], counting: readonly Seat[], inside: boolean, seats: readonly Seat[], w: Window): Decision {
-	const d = decide(readings, counting, inside);
+	// A reading that is not an answer about the game (a listing without it, its record outside the
+	// window) is silence to the rule, with its reason: absence is silence everywhere.
+	const seen = readings.map((r) => (r.kind === "silent" || answers(r, w) ? r : silent(r.seat, r.detail)));
+	const d = decide(seen, counting, inside);
 	return d.action === "dispute" ? { ...d, readings: answersOf(readings, seats, w) } : d;
 }
 

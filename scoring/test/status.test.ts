@@ -1,5 +1,6 @@
-// Each seat's status, mapped to final or not final. Postponed and cancelled are recorded and
-// decide nothing: they never make a final.
+// Each seat's status, mapped. Postponed, cancelled and not started, in the feed's own words, ride on
+// the reading's `recorded`, and after n a void may rest on two of them (rule.ts); they never make a
+// final. Any other word short of a final is an answer in play; no word is no status, which reads silent.
 
 import { describe, expect, test } from "bun:test";
 import { resolveFeedTeam } from "../src/pick";
@@ -18,14 +19,14 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 		["final", "final"],
 		["postponed", "postponed"],
 		["canceled", "canceled"],
-		["scheduled", "not_final"],
-		["in_progress", "not_final"],
-		["delayed", "not_final"],
-		["suspended", "not_final"],
-		["abandoned", "not_final"],
-		["unknown", "not_final"],
-		["cancelled", "not_final"], // not one of the nine: not final
-		["FINAL", "not_final"],
+		["scheduled", "not_started"],
+		["in_progress", "in_progress"],
+		["delayed", "in_progress"],
+		["suspended", "in_progress"],
+		["abandoned", "in_progress"],
+		["unknown", "no_status"],
+		["cancelled", "in_progress"], // not one of the nine: a word short of a final
+		["FINAL", "in_progress"],
 	];
 	test("each state, over a real record whose older field says Final", () => {
 		const derive = (state: string): Derive => (seat, _p, body) => {
@@ -35,8 +36,10 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 		};
 		for (const [state, want] of states) {
 			const r = readSaved(1, lakers.game, NOW, derive(state)).reading;
-			const kind = want === "final" ? "final" : "no_final";
-			const recorded = want === "postponed" || want === "canceled" ? want : null;
+			// A final is a final; postponed, canceled and not started ride on `recorded`; any other word short
+			// of a final is an answer in play; no status is silence.
+			const kind = want === "final" ? "final" : want === "no_status" ? "silent" : "no_final";
+			const recorded = want === "postponed" || want === "canceled" || want === "not_started" ? want : null;
 			expect({ state, kind: r.kind, recorded: r.recorded }).toEqual({ state, kind, recorded });
 		}
 	});
@@ -186,12 +189,12 @@ describe("seat 2: final is final once its period count shows a whole game; cance
 			["final", "final"],
 			["canceled", "canceled"],
 			["postponed", "postponed"],
-			["scheduled", "not_final"],
-			["in progress", "not_final"],
-			["delayed", "not_final"],
-			["suspended", "not_final"],
-			["Final", "not_final"],
-			["", "not_final"],
+			["scheduled", "not_started"],
+			["in progress", "in_progress"],
+			["delayed", "in_progress"],
+			["suspended", "in_progress"],
+			["Final", "in_progress"],
+			["", "no_status"],
 		]) {
 			expect({ status, state: seat2("nba", { ...base, status })?.state }).toEqual({ status, state });
 		}
@@ -271,10 +274,10 @@ describe("seat 4: completed is final; it records no postponed or cancelled state
 		const base = { id: "x", commence_time: "2026-10-22T02:00:00Z", home_team: "a", away_team: "b", scores: [{ name: "a", score: "1" }, { name: "b", score: "0" }] };
 		for (const [completed, state] of [
 			[true, "final"],
-			[false, "not_final"],
-			["true", "not_final"],
-			[null, "not_final"],
-			[undefined, "not_final"],
+			[false, "in_progress"],
+			["true", "no_status"],
+			[null, "no_status"],
+			[undefined, "no_status"],
 		] as const) {
 			expect({ completed, state: seat4({ ...base, completed })?.state }).toEqual({ completed, state });
 		}

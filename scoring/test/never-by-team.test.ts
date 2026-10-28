@@ -114,7 +114,7 @@ describe("never: read by the home or away slot", () => {
 		for (const seat of [1, 2, 4] as Seat[]) {
 			const { reading, misses } = readSaved(seat, other, NOW);
 			expect(misses).toEqual([]);
-			expect({ seat, kind: reading.kind, detail: reading.detail }).toEqual({ seat, kind: "no_final", detail: "absent" });
+			expect({ seat, kind: reading.kind, detail: reading.detail }).toEqual({ seat, kind: "silent", detail: "absent" });
 		}
 	});
 

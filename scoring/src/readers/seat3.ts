@@ -19,8 +19,9 @@
 // Status: final only when `Final` is true and `FinalType` is "Finished"; the feed sets `Final` true
 // on postponed and cancelled games too, so `Final` alone never makes a final; a finished result
 // without points reads silent, marked as the feed saying the game is over (types.ts). "Postponed"
-// and "Canceled" are recorded; everything else is not final. Only the game's own "Game" row is read,
-// never its rows for halves or innings.
+// and "Canceled" are the feed's own words that the game will not play, and a void may rest on them
+// (rule.ts); any other `FinalType` is not final; a row without one is a partial row and reads
+// silent. Only the game's own "Game" row is read, never its rows for halves or innings.
 
 import { points } from "../pick";
 import { silent } from "../run";
@@ -78,6 +79,8 @@ function readingOf(r: Record<string, unknown>, id: string): Reading {
 		if (home === null || away === null) return { ...silent(SEAT, "final without points"), saysFinal: true };
 		return { seat: SEAT, kind: "final", home, away, recorded: null, detail: "final", record };
 	}
+	// A row with no status word is a partial row: it says nothing about the game's end.
+	if (type.trim() === "") return silent(SEAT, "no status");
 	const recorded = type === "Postponed" ? "postponed" : type === "Canceled" ? "canceled" : null;
 	return { seat: SEAT, kind: "no_final", home, away, recorded, detail: recorded ?? type, record };
 }

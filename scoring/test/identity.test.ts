@@ -195,7 +195,7 @@ describe("verify the way you'll score", () => {
 				: b;
 		const game = unverified("nba not final", { hints: [] });
 		const v = run(game, NOW, early);
-		expect([v.action, v.why, v.report]).toEqual(["wait", "seat 4 reads another record, or none, in the game's window: outside window", null]);
+		expect([v.action, v.why, v.report]).toEqual(["wait", "seat 4 can't read the game as scoring will: outside window", null]);
 		// The control: the spare's real time, the scheduled 23:00.
 		const real = run(game, NOW);
 		expect([real.action, real.start, real.seats[3]]).toEqual(["start", "2026-10-22T23:00:00Z", "4:not completed"]);
@@ -250,7 +250,7 @@ describe("the spare, read again whether it counts or not", () => {
 		// The control: the spare standing in for seat 3 (no seat 3 hint) counts, so it must read the record
 		// inside the window, hint or not: a second early, nothing is written.
 		const counting = run(unverified("nfl not final", { hints: [{ seat: 4, id: "ffebea881c1d7b2dfb85b3e590c35985" }] }), NOW, early);
-		expect([counting.action, counting.why]).toEqual(["wait", "seat 4 reads another record, or none, in the game's window: outside window"]);
+		expect([counting.action, counting.why]).toEqual(["wait", "seat 4 can't read the game as scoring will: outside window"]);
 	});
 
 	test("with seat 3 counting, the spare's record more than an hour from the start is another game, near the date or in the window", () => {
@@ -272,7 +272,7 @@ describe("the spare, read again whether it counts or not", () => {
 			s === 4 && p.includes("americanfootball_nfl") ? (copy(b) as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, commence_time: "2026-10-22T21:59:59Z" } : g)) : b;
 		const late = unverified("nfl not final", { date: at("2026-10-23T22:00:00Z"), hints: [SEAT3, { seat: 4, id: "ffebea881c1d7b2dfb85b3e590c35985" }] });
 		const h = run(late, NOW, before);
-		expect([h.action, h.why]).toEqual(["wait", "seat 4 reads another record, or none, in the game's window: outside window"]);
+		expect([h.action, h.why]).toEqual(["wait", "seat 4 can't read the game as scoring will: outside window"]);
 		// The control: the spare's record a second before the start, from the same date: the game.
 		const second: Derive = (s, p, b) =>
 			s === 4 && p.includes("americanfootball_nfl") ? (copy(b) as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, commence_time: "2026-10-23T00:14:59Z" } : g)) : b;
@@ -318,7 +318,7 @@ describe("never a finished game", () => {
 				return c;
 			}
 			if (s === 4 && p.includes("americanfootball_nfl")) return (copy(b) as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, completed: false } : g));
-			if (alsoSeat3 && s === 3 && p === `/results/${BEARS}`) return (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, Final: false, FinalType: "" }));
+			if (alsoSeat3 && s === 3 && p === `/results/${BEARS}`) return (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, Final: false, FinalType: "NotFinished" }));
 			return b;
 		};
 		const game = unverified("nfl final, read after the game", { hints: [SEAT3] });
@@ -385,7 +385,7 @@ describe("never a finished game", () => {
 				for (const g of c.results) if (g.gameId === 340175) g.status = "in progress";
 				return c;
 			}
-			if (s === 3 && p === `/results/${BEARS}`) return (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, Final: false, FinalType: "" }));
+			if (s === 3 && p === `/results/${BEARS}`) return (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, Final: false, FinalType: "NotFinished" }));
 			if (s === 4 && p.includes("americanfootball_nfl")) return (copy(b) as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, completed: false } : g));
 			return b;
 		};
@@ -445,7 +445,7 @@ describe("never a finished game", () => {
 				for (const g of c.results) if (g.gameId === 340175) g.status = "in progress";
 				return c;
 			}
-			if (s === 3 && p === `/results/${BEARS}`) return (copy(c0) as Record<string, unknown>[]).map((r) => ({ ...r, Final: false, FinalType: "" }));
+			if (s === 3 && p === `/results/${BEARS}`) return (copy(c0) as Record<string, unknown>[]).map((r) => ({ ...r, Final: false, FinalType: "NotFinished" }));
 			if (s === 4 && !spareFinal && p.includes("americanfootball_nfl")) return (c0 as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, completed: false } : g));
 			return c0;
 		};
@@ -485,7 +485,7 @@ describe("never a finished game", () => {
 				for (const g of c.results) if (g.gameId === 340175) g.status = "in progress";
 				return c;
 			}
-			if (s === 3 && p === `/results/${BEARS}`) return (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, Final: false, FinalType: "" }));
+			if (s === 3 && p === `/results/${BEARS}`) return (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, Final: false, FinalType: "NotFinished" }));
 			if (s === 4 && p.includes("americanfootball_nfl")) return (copy(b) as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, commence_time: "2026-10-23T00:14:59Z" } : g));
 			return b;
 		};

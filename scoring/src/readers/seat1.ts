@@ -7,12 +7,15 @@
 // names its fields its own way, so each has a small map below. A team is named by its full name, and in college by its school's name too; never by its
 // city, which two teams can share.
 //
-// Status: the nine-state `status_state` decides where a record has it: `final` is final,
-// `postponed` and `canceled` are recorded, everything else is not final. Where a record lacks
-// `status_state`, the reader falls back to the league's older field, and only that field's own
-// unambiguous final word makes a final (see `older`). College has no such word: its older field
-// says "post" for a final, a postponed and a cancelled game alike, so a college record without
-// `status_state` is not final.
+// Status: the nine-state `status_state` decides where a record has it: `final` is final;
+// `postponed`, `canceled` and `scheduled` (not started) are the feed's own words that the game will
+// not or did not play, and a void may rest on them (rule.ts); `in_progress`, `delayed`, `suspended`
+// and `abandoned` are not final, in play or held; `unknown`, or no word at all, is no status, a
+// partial row that reads silent. Where a record lacks `status_state`, the reader falls back to the
+// league's older field: only that field's own unambiguous words count (see `older`: its final,
+// postponed, cancelled and not-started words), any other word is not final, and none is no status.
+// College's older field says "post" for a final, a postponed and a cancelled game alike, so a
+// college record without `status_state` is never final; its "pre" is not started.
 //
 // A final also needs the feed's own count of the game's parts to show a whole game: the period
 // reached, at least the league's regulation (four quarters, four in basketball, three in hockey,
@@ -21,9 +24,8 @@
 // A record that says final short of that reads silent: it is neither a final the reader can take
 // nor a game the feed says is unfinished. Its detail says why.
 //
-// In college basketball the feed gives every team its conference, and none to a team outside
-// Division I: such a team is marked outside the league, so it is never a league team whatever
-// its name (src/pick.ts).
+// A conference id missing or null on a college team says nothing about the team: the record binds
+// by its names and time (src/pick.ts).
 
 import { pick, points, type FeedRecord, type FeedTeam } from "../pick";
 import { silent } from "../run";
@@ -44,14 +46,14 @@ interface Fields {
 	readonly short: (g: Record<string, unknown>) => string | null;
 }
 
-function team(t: unknown, nameKeys: readonly string[], pts: unknown, marksOutside = false): FeedTeam {
+function team(t: unknown, nameKeys: readonly string[], pts: unknown): FeedTeam {
 	const o = obj(t) ?? {};
 	const names: string[] = [];
 	for (const k of nameKeys) {
 		const s = str(o[k]);
 		if (s !== null) names.push(s);
 	}
-	return marksOutside && o.conference_id === null ? { names, points: points(pts), outside: true } : { names, points: points(pts) };
+	return { names, points: points(pts) };
 }
 
 /** Short of `least` periods by the record's own `period`, or null when it reached them. */
@@ -95,28 +97,30 @@ const FIELDS: Readonly<Record<string, Fields>> = {
 					? "postponed"
 					: g.status === "STATUS_CANCELED"
 						? "canceled"
-						: null,
+						: g.status === "STATUS_SCHEDULED"
+							? "not_started"
+							: null,
 		short: periods(9),
 	},
 	nhl: {
 		time: (g) => g.start_time_utc,
 		home: (g) => team(g.home_team, ["full_name"], g.home_score),
 		away: (g) => team(g.away_team, ["full_name"], g.away_score),
-		older: (g) => (g.game_state === "OFF" ? "final" : null),
+		older: (g) => (g.game_state === "OFF" ? "final" : g.game_state === "FUT" ? "not_started" : null),
 		short: periods(3),
 	},
 	ncaaf: {
 		time: (g) => g.date,
 		home: (g) => team(g.home_team, ["full_name", "college"], g.home_score),
 		away: (g) => team(g.visitor_team, ["full_name", "college"], g.away_score),
-		older: () => null,
+		older: (g) => (g.status === "pre" ? "not_started" : null),
 		short: quarters(["home_score_q1", "home_score_q2", "home_score_q3", "home_score_q4", "away_score_q1", "away_score_q2", "away_score_q3", "away_score_q4"]),
 	},
 	ncaab: {
 		time: (g) => g.date,
-		home: (g) => team(g.home_team, ["full_name", "college"], g.home_score, true),
-		away: (g) => team(g.visitor_team, ["full_name", "college"], g.away_score, true),
-		older: () => null,
+		home: (g) => team(g.home_team, ["full_name", "college"], g.home_score),
+		away: (g) => team(g.visitor_team, ["full_name", "college"], g.away_score),
+		older: (g) => (g.status === "pre" ? "not_started" : null),
 		short: periods(2),
 	},
 };
@@ -125,12 +129,12 @@ const STATE: Readonly<Record<string, FeedRecord["state"]>> = {
 	final: "final",
 	postponed: "postponed",
 	canceled: "canceled",
-	scheduled: "not_final",
-	in_progress: "not_final",
-	delayed: "not_final",
-	suspended: "not_final",
-	abandoned: "not_final",
-	unknown: "not_final",
+	scheduled: "not_started",
+	in_progress: "in_progress",
+	delayed: "in_progress",
+	suspended: "in_progress",
+	abandoned: "in_progress",
+	unknown: "no_status",
 };
 
 export function toRecord(league: string, g: Record<string, unknown>): FeedRecord | null {
@@ -140,11 +144,13 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 	let state: FeedRecord["state"];
 	let status: string;
 	if (typeof raw === "string") {
-		state = Object.prototype.hasOwnProperty.call(STATE, raw) ? STATE[raw] : "not_final";
+		// A word the nine states don't name is the feed saying something short of a final; no word is no status.
+		state = Object.prototype.hasOwnProperty.call(STATE, raw) ? STATE[raw] : raw.trim() === "" ? "no_status" : "in_progress";
 		status = raw;
 	} else {
-		state = f.older(g) ?? "not_final";
-		status = `no status_state; ${String(g.status ?? g.game_state ?? "")}`.trim();
+		const word = String(g.status ?? g.game_state ?? "").trim();
+		state = f.older(g) ?? (word === "" ? "no_status" : "in_progress");
+		status = `no status_state; ${word}`.trim();
 	}
 	if (state === "final") {
 		const short = f.short(g);

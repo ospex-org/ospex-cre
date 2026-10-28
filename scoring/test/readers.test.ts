@@ -83,7 +83,8 @@ describe("coverage: every seat, every league, a final and a game not final, or t
 		const gaps: string[] = [];
 		for (const seat of SEATS) {
 			for (const league of leagues) {
-				const covered = has(seat, league, (k, recorded) => k === "no_final" && recorded === null);
+				// An answer without a final: the game in play, or not started (recorded), either way not final.
+				const covered = has(seat, league, (k, recorded) => k === "no_final" && (recorded === null || recorded === "not_started"));
 				if (!covered && PENDING[seat][league] === undefined) gaps.push(`seat ${seat} ${league}`);
 			}
 		}

@@ -303,7 +303,7 @@ describe("only one: a record the lists can't place, earlier in the window, keeps
 		return b;
 	};
 
-	test("a team marked outside the league: Kentucky against Georgia three hours before a final of the two", () => {
+	test("a Georgia listed without a conference beside Kentucky, three hours before a final of the two: a second record of the two teams, and the seat is silent", () => {
 		const shapes: readonly [string, readonly [Side, Side]][] = [
 			["Georgia marked", ["listed", "marked"]],
 			["Kentucky marked", ["marked", "listed"]],
@@ -317,10 +317,11 @@ describe("only one: a record the lists can't place, earlier in the window, keeps
 					expect({ seat, what, finalFirst, ...reading }).toMatchObject({ seat, what, finalFirst, kind: "silent", detail: "ambiguous" });
 				}
 			}
-			// Hinted to Kentucky's own record with Georgia marked: the hint names no record of the two
-			// teams and is dropped, and the seat is silent all the same.
+			// Hinted to Kentucky's own record, Georgia without a conference: a missing conference is unknown,
+			// never a mark, so the hint names a record of the two teams inside the window, and it is read, as
+			// a hint is among two records of the two teams.
 			const hinted = { ...vsGeorgia, hints: [{ seat, id: String(KENTUCKY[seat]) }] };
-			expect({ seat, ...read(seat, hinted, MID, withGeorgia(seat, ["listed", "marked"], AT_16, AT_19)) }).toMatchObject({ seat, kind: "silent", detail: "ambiguous" });
+			expect({ seat, ...read(seat, hinted, MID, withGeorgia(seat, ["listed", "marked"], AT_16, AT_19)) }).toMatchObject({ seat, kind: "final", home: 89, away: 84 });
 		}
 	});
 
@@ -346,13 +347,13 @@ describe("only one: a record the lists can't place, earlier in the window, keeps
 			for (const iso of ["2026-11-03T00:00:00.000Z", "2026-11-03T00:30:00.000Z"]) {
 				expect({ seat, iso, ...read(seat, iowa, MID, moved(seat, iso)) }).toMatchObject({ seat, iso, kind: "no_final", detail: "scheduled", id: ids[seat].own });
 			}
-			// Kentucky against Georgia with Georgia marked, three hours after the final of the two
-			// teams rather than before it: the final reads.
+			// Kentucky against Georgia without a conference, three hours after the final of the two teams
+			// rather than before it: a second record of the two teams inside the window all the same, and
+			// the seat is silent.
 			const after = withGeorgia(seat, ["listed", "marked"], AT_19, AT_16);
-			expect({ seat, ...read(seat, vsGeorgia, MID, after) }).toMatchObject({ seat, kind: "final", home: 80, away: 70, id: "99000001" });
-			// A team marked outside beside Santa Clara, a league team that is not in the game, three
-			// hours before the final, whichever side is marked: no record of the game, and the final
-			// reads.
+			expect({ seat, ...read(seat, vsGeorgia, MID, after) }).toMatchObject({ seat, kind: "silent", detail: "ambiguous" });
+			// Georgia without a conference beside Santa Clara, a league team that is not in the game, three
+			// hours before the final, on either side: no record of the game, and the final reads.
 			for (const sides of [["marked", "santa clara"], ["santa clara", "marked"]] as const) {
 				expect({ seat, sides, ...read(seat, vsGeorgia, MID, withGeorgia(seat, sides, AT_16, AT_19)) }).toMatchObject({ seat, sides, kind: "final", home: 80, away: 70, id: "99000001" });
 			}
@@ -384,8 +385,8 @@ describe("only one: what can't be the game doesn't stop a reading", () => {
 		// outside Division I. Memphis at Iowa State read with its window moved a second past the
 		// record, and a game the answer doesn't hold, are said to be outside the window and absent.
 		const iowa = byName("ncaab not final: Memphis at Iowa State").game;
-		expect(read(2, { ...iowa, start: iowa.start + 1, n: 3600 }, NOW)).toMatchObject({ kind: "no_final", detail: "outside window", id: "341752" });
-		expect(read(2, { ...iowa, home: "Duke", away: "North Carolina" }, NOW)).toMatchObject({ kind: "no_final", detail: "absent" });
+		expect(read(2, { ...iowa, start: iowa.start + 1, n: 3600 }, NOW)).toMatchObject({ kind: "silent", detail: "outside window", id: "341752" });
+		expect(read(2, { ...iowa, home: "Duke", away: "North Carolina" }, NOW)).toMatchObject({ kind: "silent", detail: "absent" });
 		// That record is at 23:00 on 2 Nov, before both windows. Derived: moved to 00:30 on 3 Nov, inside
 		// them and after Iowa State's record. It still names neither team: Iowa State reads, and the
 		// game the answer lacks is absent.
@@ -396,7 +397,7 @@ describe("only one: what can't be the game doesn't stop a reading", () => {
 			return b;
 		};
 		expect(read(2, iowa, NOW, inside)).toMatchObject({ kind: "no_final", detail: "scheduled", id: "341752" });
-		expect(read(2, { ...iowa, home: "Duke", away: "North Carolina" }, NOW, inside)).toMatchObject({ kind: "no_final", detail: "absent" });
+		expect(read(2, { ...iowa, home: "Duke", away: "North Carolina" }, NOW, inside)).toMatchObject({ kind: "silent", detail: "absent" });
 		// The control: one of the game's teams beside a name the program can't resolve, inside the
 		// window, may be the game.
 		const renamed: Derive = (seat, _p, body) => {
@@ -415,9 +416,9 @@ describe("only one: what can't be the game doesn't stop a reading", () => {
 		// Seat 2 is asked by each team's spelling: the renamed side's own answer comes back empty, and an
 		// empty answer is silence, never absence.
 		const want = {
-			1: { kind: "no_final", detail: "absent", id: null },
+			1: { kind: "silent", detail: "absent", id: null },
 			2: { kind: "silent", detail: "empty listing", id: null },
-			4: { kind: "no_final", detail: "outside window", id: "761c15cdefb5a94e34f234e11d6e57ad" },
+			4: { kind: "silent", detail: "outside window", id: "761c15cdefb5a94e34f234e11d6e57ad" },
 		};
 		for (const seat of [1, 2, 4] as const) {
 			const renamed: Derive = (s, _p, body) => {
@@ -503,12 +504,13 @@ describe("an empty answer is silence, from a team's own list as from a slate", (
 	});
 });
 
-describe("a team the seat marks outside the league is no team of it", () => {
+describe("a conference missing on a college team is unknown, never a mark against it: the row binds by its names", () => {
 	// Seat 1's college basketball list has an entry named only "Georgia" (abbreviation GEO), with no
-	// school name and no conference: not the University of Georgia, whose name it shares. Derived:
-	// that entry put in place of Santa Clara in Kentucky's real 20 Mar final, at seats 1 and 2 (seat
-	// 2's record giving it no conference, as it gives teams outside Division I). Asked for Kentucky
-	// against Georgia, neither seat reads that final: the record is Kentucky against no league team.
+	// school name and no conference: the University of Georgia's namesake. Derived: that entry put in
+	// place of Santa Clara in Kentucky's real 20 Mar final, at seats 1 and 2 (seat 2's record giving it
+	// no conference). Asked for Kentucky against Georgia, each seat binds the row by its names, and the
+	// namesake's final reads as that seat's: one seat's final, which the other seats' finals dispute
+	// and no end rests on alone. A missing conference never makes the game absent.
 	const kentucky = byName("ncaab final, read with seat 1 answering: Santa Clara at Kentucky");
 	const vsGeorgia = { ...kentucky.game, away: "Georgia" };
 	const namesake: Derive = (seat, _p, body) => {
@@ -525,13 +527,13 @@ describe("a team the seat marks outside the league is no team of it", () => {
 		return body;
 	};
 
-	test("the namesake's game is not the University of Georgia's", () => {
+	test("the namesake's row, without a conference, binds by its name: one seat's final, never absence", () => {
 		for (const seat of [1, 2] as const) {
-			expect({ seat, ...read(seat, vsGeorgia, MID, namesake) }).toMatchObject({ seat, kind: "no_final", detail: "absent" });
+			expect({ seat, ...read(seat, vsGeorgia, MID, namesake) }).toMatchObject({ seat, kind: "final", home: 89, away: 84 });
 		}
-		// Kentucky's own game, against the namesake, is not Kentucky against Santa Clara either: absent at
-		// seat 1, asked by the two teams' ids; silent at seat 2, where Santa Clara's own answer comes back empty.
-		expect(read(1, kentucky.game, MID, namesake)).toMatchObject({ kind: "no_final", detail: "absent" });
+		// Kentucky's own game, against the namesake, is not Kentucky against Santa Clara: silence at seat 1
+		// (absent), asked by the two teams' ids, and at seat 2, where Santa Clara's own answer comes back empty.
+		expect(read(1, kentucky.game, MID, namesake)).toMatchObject({ kind: "silent", detail: "absent" });
 		expect(read(2, kentucky.game, MID, namesake)).toMatchObject({ kind: "silent", detail: "empty listing" });
 	});
 
@@ -539,15 +541,15 @@ describe("a team the seat marks outside the league is no team of it", () => {
 		// Seat 2's real scheduled records of the three, each against a Division I school, made final
 		// 80-60 (derived), and read for the Division I school whose name each begins with. Rhode
 		// Island College's record is also moved from 23:30 to 00:30 UTC, and each window is 20 hours,
-		// so every date asked is one the saved answers hold. Two things turn each record away: the
-		// team lists, which join no spelling of these colleges to a Division I school, and seat 2
-		// giving them no conference. The second read gives each college a conference, so only the
-		// lists stand between it and the final. The control puts the Division I school itself in the
-		// record: the same derived final then reads.
+		// so every date asked is one the saved answers hold. The team lists join no spelling of these
+		// colleges to a Division I school, so each record is one of the game's teams beside a name the
+		// lists don't know: it could be the game, and the seat is silent, with a conference or without
+		// one (a conference missing is unknown, never a mark against the college). The control puts the
+		// Division I school itself in the record: the same derived final then reads.
 		const rows = [
-			{ id: 342338, home: "Northern Colorado", away: "Colorado", school: "Colorado", conference: "Big 12", at: "2026-11-03T02:30:00Z", now: NOW, time: null, asSaved: { kind: "no_final", detail: "absent" } },
-			{ id: 342332, home: "Albany", away: "Rhode Island", school: "Rhode Island", conference: "Atlantic 10", at: "2026-11-03T00:30:00Z", now: NOW, time: "2026-11-03T00:30:00.000Z", asSaved: { kind: "no_final", detail: "absent" } },
-			{ id: 346614, home: "Northern Iowa", away: "Cornell", school: "Cornell", conference: "Ivy League", at: "2026-11-04T01:00:00Z", now: MID, time: null, asSaved: { kind: "silent", detail: "empty listing" } },
+			{ id: 342338, home: "Northern Colorado", away: "Colorado", school: "Colorado", conference: "Big 12", at: "2026-11-03T02:30:00Z", now: NOW, time: null, asSaved: { kind: "silent", detail: "unresolved team names" } },
+			{ id: 342332, home: "Albany", away: "Rhode Island", school: "Rhode Island", conference: "Atlantic 10", at: "2026-11-03T00:30:00Z", now: NOW, time: "2026-11-03T00:30:00.000Z", asSaved: { kind: "silent", detail: "unresolved team names" } },
+			{ id: 346614, home: "Northern Iowa", away: "Cornell", school: "Cornell", conference: "Ivy League", at: "2026-11-04T01:00:00Z", now: MID, time: null, asSaved: { kind: "silent", detail: "unresolved team names" } },
 		] as const;
 		for (const row of rows) {
 			const asked = { ...kentucky.game, home: row.home, away: row.away, start: at(row.at), n: 20 * 3600 };
@@ -563,23 +565,20 @@ describe("a team the seat marks outside the league is no team of it", () => {
 				}
 				return b;
 			};
-			// As saved, the college is no team of the league: the Division I school's own answer, asked for by
-			// its spelling, lists its other games of the dates and not this one (Colorado's and Rhode Island's:
-			// absent), or nothing at all (Cornell's: silence, never absence). With a conference, the college is
-			// a name the lists don't know beside one of the game's teams: it could be the game, so the seat is
-			// silent. None reads the 80-60.
+			// As saved and with a conference alike, the college is a name the lists don't know beside one of
+			// the game's teams: it could be the game, so the seat is silent. None reads the 80-60.
 			expect({ row: row.id, ...read(2, asked, row.now, derived("as saved")) }).toMatchObject({ row: row.id, ...row.asSaved });
 			expect({ row: row.id, ...read(2, asked, row.now, derived("with a conference")) }).toMatchObject({ row: row.id, kind: "silent", detail: "unresolved team names" });
 			expect({ row: row.id, ...read(2, asked, row.now, derived("the school itself")) }).toMatchObject({ row: row.id, kind: "final", home: 80, away: 60, id: String(row.id) });
 		}
 	});
 
-	test("the control: the same name with a conference is the University of Georgia", () => {
+	test("the control: the name resolves with a conference and without one; professional leagues have no conference either", () => {
 		const base = { gameId: 1, status: "scheduled", schedule: { date: "2026-03-20T16:15:00.000Z", tbaTime: false } };
 		const withConference = seat2Record("ncaab", { ...base, teams: { home: { team: "Kentucky", conference: "SEC" }, away: { team: "Georgia", conference: "SEC" } } })!;
 		const without = seat2Record("ncaab", { ...base, teams: { home: { team: "Kentucky", conference: "SEC" }, away: { team: "Georgia" } } })!;
 		expect(resolveFeedTeam("ncaab", withConference.teams[1])).toBe("georgia-bulldogs");
-		expect(resolveFeedTeam("ncaab", without.teams[1])).toBeNull();
+		expect(resolveFeedTeam("ncaab", without.teams[1])).toBe("georgia-bulldogs");
 		// Professional leagues have no such mark: a seat 2 team there is read by its name alone.
 		const pro = seat2Record("nba", { ...base, teams: { home: { team: "Los Angeles Lakers" }, away: { team: "Golden State Warriors" } } })!;
 		expect(pro.teams.map((t) => resolveFeedTeam("nba", t))).toEqual(["los-angeles-lakers", "golden-state-warriors"]);
@@ -598,7 +597,7 @@ describe("hints and dates that disagree with the answer", () => {
 			return body;
 		};
 		for (const seat of [1, 2] as const) {
-			expect({ seat, ...read(seat, afternoon, MID, emptyDay) }).toMatchObject({ seat, kind: "no_final", detail: "outside window" });
+			expect({ seat, ...read(seat, afternoon, MID, emptyDay) }).toMatchObject({ seat, kind: "silent", detail: "outside window" });
 			expect({ seat, ...read(seat, afternoon, MID) }).toMatchObject({ seat, kind: "final", home: 0, away: 3 });
 		}
 	});
@@ -657,7 +656,7 @@ describe("a game the seat respells is not absent", () => {
 		for (const seat of [1, 4] as const) {
 			expect({ seat, ...read(seat, lakers.game, NOW, respell) }).toMatchObject({ seat, kind: "silent", detail: "unresolved team names" });
 		}
-		expect(read(2, lakers.game, NOW, respell)).toMatchObject({ kind: "no_final", detail: "absent" });
+		expect(read(2, lakers.game, NOW, respell)).toMatchObject({ kind: "silent", detail: "absent" });
 		// One team respelt: the other team's answer carries the record, respelt on one side.
 		const respellHome: Derive = (seat, _p, body) => {
 			if (seat !== 2) return body;

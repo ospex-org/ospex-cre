@@ -344,12 +344,11 @@ describe("end to end, on the saved answers", () => {
 		expect([o.decision.action, o.decision.readings[2].detail]).toEqual(["wait", "silent for the game"]);
 	});
 
-	test("a seat that doesn't list the game is silent on the first record; the next run scores on the three finals beside it, the spare's the third", () => {
-		// After n, seat 2's answer lists a game of the two teams the night before and not this one: it
-		// answered, without a final, so beside two finals the run disputes (an answer with nothing in it
-		// would be silence, src/pick.ts). On the record, a seat that gave no answer about the game is
-		// silent, so it has no vote, and the next run reads two counting finals, the third silent, and the
-		// spare's final the same: three agreeing recorded sources.
+	test("a seat that doesn't list the game is silent: after n the two counting finals beside it score at once; a seat that answers the game in play holds them to the record", () => {
+		// After n, seat 2's answer lists a game of the two teams the night before and not this one. Absence is
+		// silence (src/pick.ts): the run reads two counting finals, the third silent, and the spare's final the
+		// same, and scores, seat 2 written silent. The spare still showing the game on changes nothing: its
+		// answer without a final never blocks a score.
 		const unlisted: Derive = (s, p, b) => {
 			if (s !== 2 || !p.startsWith("/games?league=NBA")) return b;
 			const c = copy(b) as { results: Record<string, any>[] };
@@ -357,27 +356,32 @@ describe("end to end, on the saved answers", () => {
 			return c;
 		};
 		const after = g.start! + g.n + 60;
-		const first = run(g, unlisted, after);
-		expect(first.got).toEqual(["dispute", "after n: finals beside answers without a final", 4]);
-		expect(first.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 0], [3, 2], [4, 2]]);
-		const disputed = { ...g, status: "disputed" as const, dispute: { at: after, records: [first.report!.readings] } };
-		const scored = run(disputed, unlisted, after + 60);
-		expect(scored.got).toEqual(["score", "after the dispute record, every seat's vote: after n: two counting seats or more, the same final, the rest silent", 2]);
+		const scored = run(g, unlisted, after);
+		expect(scored.got).toEqual(["score", "after n: two counting seats or more, the same final, the rest silent", 2]);
 		expect(scored.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 0], [3, 2], [4, 2]]);
-		// The control: the spare still shows the game without a final. Two counting finals beside a silent
-		// vote are fewer than three agreeing recorded sources, so nothing is written, and day 7, asking no
-		// seat, voids on the silent vote.
 		const spareOn: Derive = (s, p, b) => {
 			if (s === 4 && p.includes("basketball_nba")) return (copy(b) as Record<string, any>[]).map((x) => (x.id === "110e33c79c5ec8c0377702aff685f83b" ? { ...x, completed: false } : x));
 			return unlisted(s, p, b);
 		};
-		const firstOn = run(g, spareOn, after);
-		expect(firstOn.got).toEqual(["dispute", "after n: finals beside answers without a final", 4]);
-		expect(firstOn.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 0], [3, 2], [4, 1]]);
-		const disputedOn = { ...g, status: "disputed" as const, dispute: { at: after, records: [firstOn.report!.readings] } };
-		expect(run(disputedOn, spareOn, after + 60).got).toEqual(["wait", "disputed: no seat's vote has changed since the record", null]);
-		const day7 = run(disputedOn, spareOn, after + g.day7);
-		expect([...day7.got, day7.asked]).toEqual(["void", "day 7: a source is silent", 3, 0]);
+		const on = run(g, spareOn, after);
+		expect(on.got).toEqual(["score", "after n: two counting seats or more, the same final, the rest silent", 2]);
+		expect(on.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 0], [3, 2], [4, 1]]);
+		// The control: seat 2 answering the game in play is not silent, and two finals beside it are the
+		// first record, with seat 2's vote of no final. The next run, nothing moved, writes nothing; day 7,
+		// asking no seat, reads the record's votes, three of them the same final, and scores.
+		const inPlay: Derive = (s, p, b) => {
+			if (s !== 2 || !p.startsWith("/games?league=NBA")) return b;
+			const c = copy(b) as { results: Record<string, any>[] };
+			for (const x of c.results) if (x.gameId === 340484) Object.assign(x, { status: "in progress", scoreboard: { currentPeriod: 3, score: { home: 80, away: 77 } } });
+			return c;
+		};
+		const first = run(g, inPlay, after);
+		expect(first.got).toEqual(["dispute", "after n: finals beside answers without a final", 4]);
+		expect(first.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 1], [3, 2], [4, 2]]);
+		const disputed = { ...g, status: "disputed" as const, dispute: { at: after, records: [first.report!.readings] } };
+		expect(run(disputed, inPlay, after + 60).got).toEqual(["wait", "disputed: no seat's vote has changed since the record", null]);
+		const day7 = run(disputed, inPlay, after + g.day7);
+		expect([...day7.got, day7.asked]).toEqual(["score", "day 7: three sources or more, the same final", 2, 0]);
 	});
 
 	test("the day-7 clock runs from the first record, an update never moves it, and the day-7 run asks no seat", () => {

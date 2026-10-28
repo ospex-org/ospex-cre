@@ -73,7 +73,7 @@ describe("hints", () => {
 			const unhinted = readSaved(seat, marlins, NOW, moved);
 			const withHint = readSaved(seat, hinted(ids[seat].dayBefore), NOW, moved);
 			expect([unhinted.misses, withHint.misses]).toEqual([[], []]);
-			expect({ kind: unhinted.reading.kind, detail: unhinted.reading.detail, id: unhinted.reading.record?.id }).toEqual({ kind: "no_final", detail: "outside window", id: ids[seat].dayBefore });
+			expect({ kind: unhinted.reading.kind, detail: unhinted.reading.detail, id: unhinted.reading.record?.id }).toEqual({ kind: "silent", detail: "outside window", id: ids[seat].dayBefore });
 			expect(withHint.reading).toEqual(unhinted.reading);
 		});
 
@@ -88,7 +88,7 @@ describe("hints", () => {
 				return seat === 1 ? { ...(b as Record<string, unknown>), data: [], meta: {} } : { ...(b as Record<string, unknown>), results: [] };
 			};
 			const unhinted = read(seat, marlins, emptied);
-			expect(unhinted).toMatchObject({ kind: "no_final", home: null, away: null, detail: "outside window" });
+			expect(unhinted).toMatchObject({ kind: "silent", home: null, away: null, detail: "outside window" });
 			expect(read(seat, hinted(ids[seat].dayBefore), emptied)).toEqual(unhinted);
 		});
 	}
@@ -116,7 +116,7 @@ describe("hints", () => {
 			expect(read(4, hinted(october31))).toEqual({ kind: "silent", home: null, away: null, detail: "ambiguous", id: null });
 			const moved: Derive = (s, _p, body) => (s === 4 ? (copy(body) as Record<string, unknown>[]).filter((g) => g.id !== final.id) : body);
 			const unhinted = read(4, lakers, moved);
-			expect(unhinted).toEqual({ kind: "no_final", home: null, away: null, detail: "outside window", id: october31 });
+			expect(unhinted).toEqual({ kind: "silent", home: null, away: null, detail: "outside window", id: october31 });
 			expect(read(4, hinted(october31), moved)).toEqual(unhinted);
 		});
 	});

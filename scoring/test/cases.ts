@@ -32,7 +32,7 @@ export interface Expected {
 	readonly kind: "silent" | "no_final" | "final";
 	readonly home: number | null;
 	readonly away: number | null;
-	readonly recorded: "postponed" | "canceled" | null;
+	readonly recorded: "postponed" | "canceled" | "not_started" | null;
 	readonly detail: string;
 	readonly id: string | null;
 }
@@ -62,7 +62,7 @@ const noFinal = (detail: string, id: string | null, home: number | null = null, 
 	kind: "no_final",
 	home,
 	away,
-	recorded: detail === "postponed" || detail === "canceled" ? detail : null,
+	recorded: detail === "postponed" || detail === "canceled" ? detail : detail === "scheduled" ? "not_started" : null,
 	detail,
 	id,
 });
@@ -418,7 +418,9 @@ export const CASES: readonly Case[] = [
 		game: g("ncaab", "Western Kentucky", "Morehead State", "2026-11-03T00:30:00Z"),
 		expect: {
 			1: noFinal("scheduled", "10882439", 0, 0),
-			2: noFinal("scheduled", "342166"),
+			// Western Kentucky's game to be announced, against a school the lists don't know, has no time to
+			// place it: it could be the game, and seat 2 is silent (a conference missing is unknown, never a mark).
+			2: silent("ambiguous"),
 			3: NO_HINT,
 			4: silent("no id, and the slate is past the size"),
 		},

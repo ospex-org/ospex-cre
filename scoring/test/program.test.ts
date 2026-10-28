@@ -339,8 +339,10 @@ describe("one run", () => {
 		expect(answered.at(-1)).toBe(4);
 		expect(o.decision.readings.map((r) => [r.seat, r.kind])).toEqual([[1, "no_final"], [2, "no_final"], [3, "silent"], [4, "final"]]);
 		expect([o.decision.action, o.decision.why, o.report?.kind]).toEqual(["dispute", "after n: finals beside answers without a final", 4]);
-		// The control: without the spare's final, the same run is the hour-24 void.
+		// The control: without the spare's final, two answers that the game is still on are no void's votes
+		// (a void needs two counting seats saying the game will not or did not play), and the run waits, its
+		// line saying what each seat gave.
 		const none = (await go(false)).o;
-		expect([none.decision.action, none.report?.kind]).toEqual(["void", 3]);
+		expect([none.decision.action, none.report?.kind ?? null, none.decision.why.startsWith("after n: 0 counting seats say the game will not or did not play, two needed; seat 1 ")]).toEqual(["wait", null, true]);
 	});
 });

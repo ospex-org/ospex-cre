@@ -4,12 +4,13 @@
 // lists carry it), over the filing dates the window touches as one range (the feed files a game under its US Eastern date
 // and takes two dates as a range), a hundred to a page, stepping `skip` while a page comes back full.
 // Never the day's slate: a slate page of college games is past the size a run's answer may be, and
-// one game's read costs one request whatever the league. Status:
-// `final` is final, `canceled` and `postponed` are recorded, everything else is not final. A
-// final also needs the feed's own period count to have reached the league's regulation (four
-// quarters, three periods, nine innings, two halves in college basketball): a record that says
-// final short of it reads silent. In college the feed gives every team its conference, and none to
-// a team outside Division I: such a team is marked outside the league (src/pick.ts). A game whose
+// one game's read costs one request whatever the league. Status, in the feed's own words: `final`
+// is final; `canceled`, `postponed` and `scheduled` (not started) say the game will not or did not
+// play, and a void may rest on them (rule.ts); any other word is not final; no word is no status, a
+// partial row that reads silent. A final also needs the feed's own period count to have reached the
+// league's regulation (four quarters, three periods, nine innings, two halves in college basketball):
+// a record that says final short of it reads silent. A conference missing or null on a college team
+// says nothing about the team: the record binds by its names and time (src/pick.ts). A game whose
 // start the feed marks "to be announced" carries a placeholder time, so it has no game time the
 // window can hold it to.
 
@@ -26,14 +27,11 @@ const PAGE = 100;
 
 /** The periods a whole game reaches, by league: overtime only adds to them. */
 const REGULATION: Readonly<Record<string, number>> = { nfl: 4, nba: 4, nhl: 3, mlb: 9, ncaaf: 4, ncaab: 2 };
-const COLLEGE = new Set(["ncaaf", "ncaab"]);
 
-function team(t: unknown, pts: unknown, college: boolean): FeedTeam {
+function team(t: unknown, pts: unknown): FeedTeam {
 	const o = obj(t);
 	const name = str(o?.team);
-	const names = name === null ? [] : [name];
-	const outside = college && o !== null && (o.conference === undefined || o.conference === null);
-	return outside ? { names, points: points(pts), outside: true } : { names, points: points(pts) };
+	return { names: name === null ? [] : [name], points: points(pts) };
 }
 
 export function toRecord(league: string, g: Record<string, unknown>): FeedRecord | null {
@@ -44,7 +42,17 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 	const score = obj(board?.score);
 	let status = typeof g.status === "string" ? g.status : "";
 	let state: FeedRecord["state"] =
-		status === "final" ? "final" : status === "canceled" ? "canceled" : status === "postponed" ? "postponed" : "not_final";
+		status === "final"
+			? "final"
+			: status === "canceled"
+				? "canceled"
+				: status === "postponed"
+					? "postponed"
+					: status === "scheduled"
+						? "not_started"
+						: status.trim() === ""
+							? "no_status"
+							: "in_progress";
 	if (state === "final") {
 		const least = Object.prototype.hasOwnProperty.call(REGULATION, league) ? REGULATION[league] : null;
 		const p = board?.currentPeriod;
@@ -58,7 +66,7 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 	return {
 		id: String(g.gameId),
 		time: schedule?.tbaTime === true ? null : parseIsoSeconds(schedule?.date),
-		teams: [team(teams?.home, score?.home, COLLEGE.has(league)), team(teams?.away, score?.away, COLLEGE.has(league))],
+		teams: [team(teams?.home, score?.home), team(teams?.away, score?.away)],
 		state,
 		status,
 	};

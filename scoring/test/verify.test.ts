@@ -119,7 +119,8 @@ describe("the start's rule, on the real saved answers", () => {
 			return c;
 		};
 		const v = verify(sixers, unlisted);
-		expect([v.action, v.why, v.seats[1]]).toEqual(["wait", "seat 2 does not list the game within a day of its date", "2:2026-10-24T10:00:00Z"]);
+		// Absence is silence: the two teams' record outside the range is silence, with its reason, and no start is written on it.
+		expect([v.action, v.why, v.seats[1]]).toEqual(["wait", "seat 2 is silent: outside window", "2:outside window"]);
 	});
 });
 
@@ -484,7 +485,7 @@ describe("the start's time", () => {
 		const t = saved(undefined, NOW);
 		const far = scoreGameSync({ ...long, date: at("2026-10-23T00:15:00Z") - START_BOUND - 60, hints: [] }, KEYS, PAYOUT, NOW, t.send);
 		expect(t.misses).toEqual([]);
-		expect([far.decision.action, far.decision.why]).toEqual(["wait", "seat 1 does not list the game within a day of its date"]);
+		expect([far.decision.action, far.decision.why]).toEqual(["wait", "seat 1 is silent: outside window"]);
 	});
 
 	test("a start report carries the zero address as its payout, whatever payout is handed in: a start pays nothing", () => {

@@ -182,7 +182,7 @@ describe("silent", () => {
 			return b;
 		};
 		expect(detailOf(2, lakers.game, renamed)).toEqual({ kind: "silent", detail: "unresolved team names" });
-		// The control: a game whose teams are known to the program and absent from the answer.
-		expect(detailOf(2, { ...lakers.game, away: "Boston Celtics" })).toEqual({ kind: "no_final", detail: "absent" });
+		// The control: a game whose teams are known to the program and absent from the answer: silence too, with its own reason.
+		expect(detailOf(2, { ...lakers.game, away: "Boston Celtics" })).toEqual({ kind: "silent", detail: "absent" });
 	});
 });

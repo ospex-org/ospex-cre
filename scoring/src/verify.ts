@@ -267,11 +267,13 @@ export function confirmStart(start: Decision, game: Game, again: readonly Readin
 			continue;
 		}
 		// No record of the game inside the window: a counting seat can't be read as scoring will, and a
-		// hinted spare's hint is unchecked, unless its record is the game, just before the window, or the
+		// hinted spare's hint is unchecked, unless its record is the game, just before the window (seen
+		// again now, as a reading or as the record outside the window; not a read that failed), or the
 		// feed answered that it has nothing for the id with no slate behind it (SPARE_ANSWERED): silent so
 		// at scoring too, nothing binds it, and the most it can cost is a dispute.
 		const named = [...new Set(game.hints.filter((h) => h.seat === seat).map((h) => h.id))];
-		if (!counts && named.length === 1 && r.kind !== "silent" && was.record?.id === named[0] && was.record.time !== null && Math.abs(was.record.time - game.start) <= START_SPREAD) {
+		const seen = r.kind !== "silent" || r.record !== null;
+		if (!counts && named.length === 1 && seen && was.record?.id === named[0] && was.record.time !== null && Math.abs(was.record.time - game.start) <= START_SPREAD) {
 			continue;
 		}
 		if (!counts && r.kind === "silent" && SPARE_ANSWERED.has(r.detail)) continue;
