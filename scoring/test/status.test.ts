@@ -58,6 +58,25 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 		expect(readSaved(1, bears.game, NOW, drop).reading).toMatchObject({ kind: "no_final", detail: "no status_state; 10/22 - 8:15 PM EDT" });
 	});
 
+	test("the feed's postponed flag, as a boolean and as the word: either is postponed, beside a status that says Final", () => {
+		// A real record with status_state removed, its older field saying Final and period 4: postponed by
+		// the flag alone, written true or "true"; "false" and false are not postponed, and the final stands.
+		const flagged = (postponed: unknown): Derive => (seat, _p, body) => {
+			if (seat !== 1) return body;
+			const b = copy(body) as { data: Record<string, unknown>[] };
+			for (const g of b.data) if (g.id === 21717859) Object.assign(g, { status_state: undefined, status: "Final", period: 4, postponed });
+			return b;
+		};
+		for (const postponed of [true, "true", "True"]) {
+			const r = readSaved(1, lakers.game, NOW, flagged(postponed)).reading;
+			expect({ postponed, kind: r.kind, recorded: r.recorded }).toEqual({ postponed, kind: "no_final", recorded: "postponed" });
+		}
+		for (const postponed of [false, "false", null, undefined]) {
+			const r = readSaved(1, lakers.game, NOW, flagged(postponed)).reading;
+			expect({ postponed, kind: r.kind, home: r.home, away: r.away }).toEqual({ postponed, kind: "final", home: 127, away: 105 });
+		}
+	});
+
 	test("the fallback in hockey and college, on the seat's real records", () => {
 		const drop: Derive = (seat, _p, body) => {
 			const b = copy(body) as { data: Record<string, unknown>[] };

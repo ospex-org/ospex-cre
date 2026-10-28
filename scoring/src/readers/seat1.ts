@@ -73,7 +73,8 @@ const FIELDS: Readonly<Record<string, Fields>> = {
 		time: (g) => g.datetime,
 		home: (g) => team(g.home_team, ["full_name"], g.home_team_score),
 		away: (g) => team(g.visitor_team, ["full_name"], g.visitor_team_score),
-		older: (g) => (g.postponed === true ? "postponed" : typeof g.status === "string" && FINAL_WORD.test(g.status) ? "final" : null),
+		// The feed writes its postponed flag as a boolean, and has written it as the word: either is postponed.
+		older: (g) => (g.postponed === true || g.postponed === "true" || g.postponed === "True" ? "postponed" : typeof g.status === "string" && FINAL_WORD.test(g.status) ? "final" : null),
 		short: periods(4),
 	},
 	nfl: {
