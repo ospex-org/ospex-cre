@@ -221,11 +221,15 @@ export const READS_PER_FULL_READ = 6;
 export const READS_PER_PROBE = 2;
 
 /**
- * The open list's pages one shard reads in a tick: its first page every tick, and one other of its
- * pages in turn, so a list longer than its pages is covered over ticks and the reads for the probes
- * and the full read stay in hand (1 for the header, 2 here, 6 for a full read, the rest for probes).
+ * The most of the open list's pages one shard reads in a tick: its first page every tick; its page by
+ * the tick's count every tick, the turn of the probes and the clocks' windows, which run on every
+ * tick; and on the hour's first two ticks its page by the hour's count, the turn of the verification
+ * (the first tick) and the hour's reads (the second). Each class of work so reaches every page of its
+ * shard within own - 1 of its own ticks, hours for the hour's classes (tick.ts, pageTurnsOf), and the
+ * reads for the probes and the full read stay in hand: 1 for the header, up to 3 here, 6 for a full
+ * read, the rest for probes.
  */
-export const PAGES_PER_TICK = 2;
+export const MOST_PAGES_PER_TICK = 3;
 
 /**
  * When the tick verifies a game the creation trigger's run left unverified (the feeds list a game

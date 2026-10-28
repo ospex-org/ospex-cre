@@ -11,7 +11,7 @@
 
 import type { Address, Hex } from "viem";
 import type { ChainGame, PayoutRefused, ReportReading } from "../scoring/src/chain";
-import { GAME_STATUS, OPEN_PAGE, PAGES_PER_TICK, readAnswer, readCall, type Creation } from "./lib";
+import { GAME_STATUS, OPEN_PAGE, readAnswer, readCall, type Creation } from "./lib";
 
 /** The chain, as the reads need it. main.ts binds it to the EVM capability; tests bind a fake. */
 export interface Evm {
@@ -126,13 +126,14 @@ export function readPayoutRefused(evm: Evm, games: Address, gameReporters: reado
 /**
  * The shard's pages of the games set's open list, one read each. The shard's first page is read every
  * tick (its answer carries the list's total, which says how many pages the shard owns); of its other
- * pages, `pagesPerTick - 1` are read in turn, so a list longer than a tick's pages is covered over
- * ticks and no tick reads past its budget. A page is one block's snapshot, and an end moves the last
- * open game into the ended one's place, so a game can be missed on one tick and seen on the next.
+ * pages, one is read per turn handed in, the page the turn's count names, so a list longer than a
+ * tick's pages is covered over the turns of each class of work and no tick reads past its budget. Two
+ * turns naming one page read it once. A page is one block's snapshot, and an end moves the last open
+ * game into the ended one's place, so a game can be missed on one tick and seen on the next.
  */
-export function readOpenGames(evm: Evm, games: Address, shard: Shard = { index: 0, count: 1 }, turn = 0, pageSize = OPEN_PAGE, pagesPerTick = PAGES_PER_TICK): OpenList {
+export function readOpenGames(evm: Evm, games: Address, shard: Shard = { index: 0, count: 1 }, turns: readonly number[] = [0], pageSize = OPEN_PAGE): OpenList {
 	if (!Number.isInteger(shard.index) || !Number.isInteger(shard.count) || shard.count < 1 || shard.index < 0 || shard.index >= shard.count) throw new Error(`shard ${shard.index} of ${shard.count}`);
-	if (!Number.isInteger(pagesPerTick) || pagesPerTick < 2) throw new Error("a shard reads its first page and at least one other in turn");
+	if (turns.length < 1 || turns.some((t) => !Number.isInteger(t))) throw new Error("a shard reads its first page and one other per turn");
 	if (!Number.isInteger(pageSize) || pageSize < 1) throw new Error(`a page of ${pageSize}`);
 	let reads = 0;
 	const page = (m: number): { readonly rows: OpenGame[]; readonly total: number } => {
@@ -163,10 +164,9 @@ export function readOpenGames(evm: Evm, games: Address, shard: Shard = { index: 
 	const rows = [...first.rows];
 	if (own <= 1) return { rows, reads, total: first.total, pages: { own, read: own } };
 	const rest = own - 1;
-	const slots = Math.min(rest, pagesPerTick - 1);
-	const from = ((Math.floor(turn) % rest) + rest) % rest;
-	for (let i = 0; i < slots; i++) rows.push(...page(1 + ((from + i) % rest)).rows);
-	return { rows, reads, total: first.total, pages: { own, read: 1 + slots } };
+	const named = [...new Set(turns.map((turn) => 1 + (((turn % rest) + rest) % rest)))];
+	for (const m of named) rows.push(...page(m).rows);
+	return { rows, reads, total: first.total, pages: { own, read: 1 + named.length } };
 }
 
 /** A game's identity, from state. */

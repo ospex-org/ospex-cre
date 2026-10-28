@@ -50,8 +50,11 @@ games set, with the game's state as the receipt.
 
 **The tick.** Every five minutes (the schedule is config, inside the fingerprint) each shard reads its
 own pages of the games set's open list: pages of 64 rows, shard k of n reading pages k, k + n, k + 2n
-and so on, its first every tick and one other in turn, so no shard reads the whole list and a list
-longer than a tick's pages is covered over ticks. A game past its written start plus the league's
+and so on, its first every tick, its page by the tick's count every tick, and on the hour's first two
+ticks its page by the hour's count too, so no shard reads the whole list and each class of work (the
+verification on the hour's first tick, the hour's reads on its second, the probes and the clocks'
+windows on every tick) reaches every page of its shard within own − 1 of its own ticks, hours for the
+hour's classes, whatever factor the schedule shares with the hour. A game past its written start plus the league's
 expected duration (a table in `lib.ts`) is probed: its identity and its readings read, two chain reads,
 then one request at the seat the start report shows readable: seat 3 by its hint, or the spare where
 the start marked seat 3 silent for the game (no usable hint, or a hint that failed the board check),

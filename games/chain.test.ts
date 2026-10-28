@@ -43,7 +43,7 @@ describe("the chain reads, from state", () => {
 		const c: ChainGame = { ...a, id: "9", status: "disputed", dispute: { at: a.start! + 7_200, records: [RECORD_A] } };
 		const ended: ChainGame = { ...a, id: "11", status: "scored" };
 		const chain = fakeChainOf([a, b, c, ended], 1);
-		const { rows, reads, total, pages } = readOpenGames(chain, GAMES, { index: 0, count: 1 }, 0, 2);
+		const { rows, reads, total, pages } = readOpenGames(chain, GAMES, { index: 0, count: 1 }, [0], 2);
 		expect([reads, total, pages]).toEqual([2, 3, { own: 2, read: 2 }]);
 		expect(rows.map((r) => [r.gameId, r.status, r.start, r.disputedAt])).toEqual([
 			[7n, "unverified", null, null],
@@ -75,34 +75,36 @@ describe("the chain reads, from state", () => {
 		expect(readOpenGames(fakeChainOf([a], 1), GAMES)).toMatchObject({ reads: 1, total: 1, pages: { own: 1, read: 1 } });
 	});
 
-	test("a shard reads its own pages only: its first every tick, and of the rest one in turn, so every page is read over the turns", () => {
+	test("a shard reads its own pages only: its first every tick, and of the rest the page each turn names, so every page is read over the turns", () => {
 		const a = chainOf("nba final, read after the game");
 		const games = Array.from({ length: 11 }, (_, i) => ({ ...a, id: String(i + 1) }));
 		// Pages of 2: six pages (the last of one row). Shard 1 of 3 owns pages 1 and 4 (rows 3,4 and 9,10); shard 2 owns 2 and 5 (rows 5,6 and 11); shard 0 owns 0 and 3.
-		const one = readOpenGames(fakeChainOf(games, 1), GAMES, { index: 1, count: 3 }, 0, 2);
+		const one = readOpenGames(fakeChainOf(games, 1), GAMES, { index: 1, count: 3 }, [0], 2);
 		expect([one.reads, one.total, one.pages, one.rows.map((r) => r.gameId)]).toEqual([2, 11, { own: 2, read: 2 }, [3n, 4n, 9n, 10n]]);
-		const two = readOpenGames(fakeChainOf(games, 1), GAMES, { index: 2, count: 3 }, 0, 2);
+		const two = readOpenGames(fakeChainOf(games, 1), GAMES, { index: 2, count: 3 }, [0], 2);
 		expect([two.reads, two.pages, two.rows.map((r) => r.gameId)]).toEqual([2, { own: 2, read: 2 }, [5n, 6n, 11n]]);
 		// A shard past the list's pages: one read, nothing.
-		const past = readOpenGames(fakeChainOf(games.slice(0, 2), 1), GAMES, { index: 2, count: 3 }, 0, 2);
+		const past = readOpenGames(fakeChainOf(games.slice(0, 2), 1), GAMES, { index: 2, count: 3 }, [0], 2);
 		expect([past.reads, past.total, past.pages, past.rows]).toEqual([1, 2, { own: 0, read: 0 }, []]);
-		// One shard owning six pages reads its first and one other each turn: over five turns, every other page once, in order.
+		// One shard owning six pages reads its first and the page the turn names: over five turns, every other page once, in order.
 		const seen: bigint[][] = [];
 		for (let turn = 0; turn < 5; turn++) {
 			const chain = fakeChainOf(games, 1);
-			const t = readOpenGames(chain, GAMES, { index: 0, count: 1 }, turn, 2);
+			const t = readOpenGames(chain, GAMES, { index: 0, count: 1 }, [turn], 2);
 			expect([t.reads, t.pages]).toEqual([2, { own: 6, read: 2 }]);
 			expect(t.rows.slice(0, 2).map((r) => r.gameId)).toEqual([1n, 2n]);
 			expect(chain.calls.map((c) => c.args)).toEqual([[0n, 2n], [BigInt(2 * (1 + turn)), 2n]]);
 			seen.push(t.rows.slice(2).map((r) => r.gameId));
 		}
 		expect(seen).toEqual([[3n, 4n], [5n, 6n], [7n, 8n], [9n, 10n], [11n]]);
-		// Three pages a tick reads two of the other five in turn, wrapping.
+		// Two turns read the two pages they name, wrapping; two turns naming one page read it once.
 		const chain = fakeChainOf(games, 1);
-		const three = readOpenGames(chain, GAMES, { index: 0, count: 1 }, 4, 2, 3);
+		const three = readOpenGames(chain, GAMES, { index: 0, count: 1 }, [4, 5], 2);
 		expect([three.reads, three.pages, chain.calls.map((c) => c.args)]).toEqual([3, { own: 6, read: 3 }, [[0n, 2n], [10n, 2n], [2n, 2n]]]);
-		expect(() => readOpenGames(fakeChainOf(games, 1), GAMES, { index: 0, count: 1 }, 0, 2, 1)).toThrow();
-		expect(() => readOpenGames(fakeChainOf(games, 1), GAMES, { index: 3, count: 3 }, 0, 2)).toThrow();
+		const same = readOpenGames(fakeChainOf(games, 1), GAMES, { index: 0, count: 1 }, [7, 2], 2);
+		expect([same.reads, same.pages, same.rows.slice(2).map((r) => r.gameId)]).toEqual([2, { own: 6, read: 2 }, [7n, 8n]]);
+		expect(() => readOpenGames(fakeChainOf(games, 1), GAMES, { index: 0, count: 1 }, [], 2)).toThrow();
+		expect(() => readOpenGames(fakeChainOf(games, 1), GAMES, { index: 3, count: 3 }, [0], 2)).toThrow();
 	});
 
 	test("the identity, the readings and the reporters: one read each, lowercase addresses, the last vote per seat", () => {

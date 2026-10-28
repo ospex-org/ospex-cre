@@ -23,7 +23,7 @@ import type { HttpRequest, HttpResponse } from "../scoring/src/types";
 import type { OpenGame } from "./chain";
 import { CLOCK_WINDOW, EXPECTED_DURATION, HOURLY_TICK, READS_PER_EXECUTION, REQUESTS_PER_EXECUTION, VERIFY_AFTER, VERIFY_BEFORE, decodeReport, keysFor } from "./lib";
 import { GAMES, fakeChainOf, recordingWriter } from "./test-helpers";
-import { dueOf, onTheHour, runTick, sameVote, tickOfHour, type TickDeps, type TickResult } from "./tick";
+import { dueOf, onTheHour, pageTurnsOf, runTick, sameVote, tickOfHour, type TickDeps, type TickResult } from "./tick";
 
 const KEYS = keysFor({ 4: KEY });
 const PERIOD = 300;
@@ -175,6 +175,14 @@ describe("what a game is due for", () => {
 		expect([tickOfHour(firstTick(START), PERIOD), tickOfHour(secondTick(START), PERIOD), tickOfHour(laterTick(START), PERIOD)]).toEqual([0, 1, 4]);
 		expect([onTheHour(firstTick(START), PERIOD), onTheHour(secondTick(START), PERIOD)]).toEqual([true, false]);
 		expect(HOURLY_TICK).toBe(1);
+	});
+
+	test("the pages' turns: the tick's count every tick, and the hour's count too on the hour's first two ticks", () => {
+		const hour = Math.floor(firstTick(START) / 3_600);
+		expect(pageTurnsOf(firstTick(START), PERIOD)).toEqual([hour, hour * 12]);
+		expect(pageTurnsOf(secondTick(START), PERIOD)).toEqual([hour, hour * 12 + 1]);
+		expect(pageTurnsOf(laterTick(START), PERIOD)).toEqual([hour * 12 + 4]);
+		expect(pageTurnsOf(hourAfter(START) + 11 * PERIOD + 10, PERIOD)).toEqual([hour * 12 + 11]);
 	});
 
 	test("a clock fires on every tick in its window, then on the hour's second tick only", () => {

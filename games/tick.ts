@@ -52,9 +52,8 @@ export interface TickDeps extends Deps {
 	/** The quotas, for a test that lowers them; the workflow takes the platform's. */
 	readonly readsLimit?: number;
 	readonly requestsLimit?: number;
-	/** The open list's page and the pages a tick reads, for a test that shortens them; the workflow takes lib.ts's. */
+	/** The open list's page, for a test that shortens it; the workflow takes lib.ts's. */
 	readonly pageSize?: number;
-	readonly pagesPerTick?: number;
 }
 
 export type Clock = "day 7" | "hour 24" | "the hour";
@@ -110,6 +109,20 @@ export function tickOfHour(now: number, period: number): number {
 /** Whether this tick is the hour's first: the chain's clock within a period of the hour. */
 export function onTheHour(now: number, period: number): boolean {
 	return tickOfHour(now, period) === 0;
+}
+
+/**
+ * The turns a tick reads its shard's other pages by, one page each (chain.ts, readOpenGames): the
+ * tick's count on every tick, the turn of the probes and the clocks' windows, which run on every tick;
+ * and on the hour's first two ticks the hour's count too, the turn of the verification (the first) and
+ * the hour's reads (the second). A five-minute schedule has twelve ticks an hour, so a shard whose
+ * other pages share a factor with twelve would meet the hour's ticks on the same pages for ever if
+ * those ticks turned by the tick's count. With its own count, each class of work reaches every page
+ * of its shard within own - 1 of its own ticks: hours for the hour's classes, ticks for the rest.
+ */
+export function pageTurnsOf(now: number, period: number): number[] {
+	const tick = Math.floor(now / period);
+	return tickOfHour(now, period) <= HOURLY_TICK ? [Math.floor(now / 3_600), tick] : [tick];
 }
 
 /** What a game on the open list is due for at the chain's clock. */
@@ -176,7 +189,7 @@ export function runTick(deps: TickDeps): TickResult {
 	const runDeps: Deps = { ...deps, evm, send };
 
 	const now = evm.latest().timestamp;
-	const open = readOpenGames(evm, deps.games, deps.shard, Math.floor(now / deps.period), deps.pageSize, deps.pagesPerTick);
+	const open = readOpenGames(evm, deps.games, deps.shard, pageTurnsOf(now, deps.period), deps.pageSize);
 	const dues = open.rows.map((row) => ({ row, due: dueOf(row, now, deps.period) }));
 	const probes: Probe[] = [];
 	const waiting: string[] = [];

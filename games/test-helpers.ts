@@ -46,6 +46,8 @@ export interface FakeOpts {
 	readonly reporters?: Readonly<Record<string, readonly Address[]>>;
 	/** Which games the open list shows: every game not ended, by default. */
 	readonly open?: readonly string[];
+	/** The chain's clock, read at each `latest()`, for a test that runs many ticks on one chain; `now` otherwise. */
+	readonly clock?: () => number;
 }
 
 export interface FakeCall {
@@ -77,6 +79,9 @@ export function fakeChainOf(games: readonly ChainGame[], now: number, opts: Fake
 	const coin = opts.coin ?? COIN;
 	const byId = new Map(games.map((g) => [g.id, g] as const));
 	const calls: FakeCall[] = [];
+	// The open list in id order, and each page's answer, built once: the games a fake holds never change.
+	let openList: ChainGame[] | null = null;
+	const pages = new Map<string, Hex>();
 	const gameOf = (id: bigint): ChainGame => {
 		const g = byId.get(id.toString());
 		if (g === undefined) throw new Error(`revert: unknown game ${id}`);
@@ -130,9 +135,15 @@ export function fakeChainOf(games: readonly ChainGame[], now: number, opts: Fake
 				case "getOpenGames": {
 					// As the games set answers: the page from the offset, at most `count` long, clipped at the end.
 					const [offset, count] = args as [bigint, bigint];
-					const open = games.filter((g) => (opts.open === undefined ? !ENDED.has(g.status) : opts.open.includes(g.id))).sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
-					const page = open.slice(Number(offset), Number(offset) + Number(count)).map(rowOf);
-					return answerOf("getOpenGames", [page, BigInt(open.length)]);
+					const key = `${offset}:${count}`;
+					let answer = pages.get(key);
+					if (answer === undefined) {
+						openList ??= games.filter((g) => (opts.open === undefined ? !ENDED.has(g.status) : opts.open.includes(g.id))).sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
+						const page = openList.slice(Number(offset), Number(offset) + Number(count)).map(rowOf);
+						answer = answerOf("getOpenGames", [page, BigInt(openList.length)]);
+						pages.set(key, answer);
+					}
+					return answer;
 				}
 				case "getGameIdentity": {
 					const g = gameOf((args as [bigint])[0]);
@@ -158,7 +169,7 @@ export function fakeChainOf(games: readonly ChainGame[], now: number, opts: Fake
 			}
 		},
 		latest() {
-			return { number: latestBlock, timestamp: now };
+			return { number: latestBlock, timestamp: opts.clock?.() ?? now };
 		},
 	};
 }
