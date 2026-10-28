@@ -27,13 +27,13 @@
 // five days), so it adds no shape. The program's tests pin both (never-day7.test.ts, dispute.test.ts).
 //
 // The states a seat can read: the sweep's four, and one more.
-//   silent   the feed gives no answer about the game
+//   silent   the feed gives no answer about the game: nothing, a listing without the game, the
+//            game's record outside the window, or a row without a status (all silence, pick.ts)
 //   none     an answer without a final: the game's own record, still on, at 27-20, final A's points,
 //            as a game still on can carry them (the program never compares them)
-//   absent   a listing that doesn't give the game: absent from it, or its record outside the window.
-//            Seats 1, 2 and 4, which list by team; seat 3 reads its result by the hint. 0-0, since
-//            the reader gives no points. A score or a void of a game with no record carries it as
-//            read; every other report writes it silent.
+//   off      an answer without a final that says the game will not play: the game's own record,
+//            postponed, 0-0, since the feed gives it no points. The one answer a void may rest on
+//            (rule.ts). Seats 1, 2 and 3; the spare's feed has no such word.
 //   A, B     the two finals, 27-20 and 20-27: the same points, swapped
 // Two finals are the same exactly when both teams' points are, so two values stand for any two
 // finals. A report with three or four different finals (only a dispute record, an update or a day-7
@@ -148,17 +148,17 @@ function order(a: Shape, b: Shape): number {
 
 // ── A game with a start: no record, then disputed ──
 
-type Fresh = State | "absent";
+type Fresh = State | "off";
 
 function freshReading(seat: Seat, s: Fresh): Reading {
-	if (s === "absent") return { seat, kind: "no_final", home: null, away: null, recorded: null, detail: "absent", record: null };
+	if (s === "off") return { seat, kind: "no_final", home: null, away: null, recorded: "postponed", detail: "postponed", record: { id: `r${seat}`, time: null } };
 	return reading(seat, s);
 }
 
-/** What a seat can read on a run, as readAll asks it. */
+/** What a seat can read on a run, as readAll asks it: the spare's feed has no word that a game will not play. */
 function freshStates(seat: Seat, down: Seat | null, phase: Phase): readonly Fresh[] {
 	if (phase === "day7" || seat === down) return ["silent"];
-	return seat === 3 ? ["silent", "none", "A", "B"] : ["silent", "none", "absent", "A", "B"];
+	return seat === 4 ? ["silent", "none", "A", "B"] : ["silent", "none", "off", "A", "B"];
 }
 
 function* runs(down: Seat | null, phase: Phase): Generator<Reading[]> {
@@ -226,9 +226,9 @@ function near(seat: Seat, s: Near): Reading {
 		case "later":
 			return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: record(DATE + 2 * HOUR) };
 		case "absent":
-			return { seat, kind: "no_final", home: null, away: null, recorded: null, detail: "absent", record: null };
+			return silent(seat, "absent");
 		case "outside":
-			return { seat, kind: "no_final", home: null, away: null, recorded: null, detail: "outside window", record: record(DATE + 3 * 86_400) };
+			return { ...silent(seat, "outside window"), record: record(DATE + 3 * 86_400) };
 		case "final":
 			return { seat, kind: "final", home: POINTS.A[0], away: POINTS.A[1], recorded: null, detail: "final", record: record(DATE) };
 	}
@@ -327,7 +327,7 @@ const ABOUT = [
 	"readings: one per seat in seat order, each [seat, kind, home, away]; kind is the games set's ReadingKind (0 silent, 1 answered without a final, 2 final).",
 	"clock: when the run decided it. verification; inside the window, before start + n; after the window, from start + n; hour 24, the void of a game with no record, from start + n; day 7, from the first record plus the day-7 clock.",
 	"game: the status the report meets: unverified, verified (no dispute record) or disputed. decision: start, score, void, dispute record (the first) or update (a later one). why: the program's own reason.",
-	"Values: final A is 27-20 and final B 20-27. An answer without a final carries 27-20, as a game still on can; a reading the program builds without points (seat 3's board row, a listing that doesn't give the game) carries 0-0. The program never compares an answer's points unless both are finals, so these stand for any others.",
+	"Values: final A is 27-20 and final B 20-27. An answer without a final carries 27-20, as a game still on can; a reading the program builds without points (seat 3's board row; a postponed row, the one answer a void may rest on) carries 0-0; a listing that doesn't give the game is silent. The program never compares an answer's points unless both are finals, so these stand for any others.",
 	"Not listed: a report with three or four different finals (only a dispute record, an update or a day-7 void can carry one). Not part of a shape: the game id, the start (a start's is the earliest counting seat's listed time, within a day of the date), and the payout (the zero address on a start and a dispute report). At the launch terms: n 24 hours, the day-7 clock seven days.",
 ];
 

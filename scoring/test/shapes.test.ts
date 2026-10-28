@@ -3,16 +3,20 @@
 // behind the program, so this rebuilds it and compares. And each shape is held to the lines the
 // program keeps, which are the ones the games set's readings check refuses a report for breaking.
 //
-// The counts, by hand where the rule makes it short (the values are shapes.ts's states):
-//   start 4             seat 3 passes beside the spare listed, silent or not giving the game (3); seat 3
-//                       silent for the game with the spare standing in, listed (1)
-//   inside, score 10    the three counting seats one final, the spare silent, not final, not giving
-//                       the game or the same (4 x 2); seat 3 silent for the game, the spare the third (2)
-//   inside, first 110   every seat's answer, any of four, with both finals: 4^4 - 2 x 3^4 + 2^4
-//   after, score 36     three counting seats one final, or two and the third silent (4 x 4 spares x 2),
-//                       and with seat 3 silent for the game, the two its game adds (2 x 2)
-//   hour 24, void 44    no final, two or more counting seats answering: 12 x 3 spares, and 8 more with
-//                       seat 3 silent for the game
+// The counts, by hand where the rule makes it short (the values are shapes.ts's states: silent; none,
+// in play; off, postponed, seats 1 to 3 only; the finals A and B):
+//   start 3             seat 3 passes beside the spare listed or silent (a spare not giving the game is
+//                       silent too) (2); seat 3 silent for the game with the spare standing in, listed (1)
+//   inside, score 8     the three counting seats one final, the spare silent, in play or the same
+//                       (3 x 2); seat 3 silent for the game, the spare the third (2)
+//   inside, first 170   every seat's answer, five at seats 1 to 3 and four at the spare, with both
+//                       finals: 500 - 2 x 192 + 54
+//   after, score 28     three counting seats one final, or two and the third silent, the spare silent,
+//                       in play or the same (4 x 3 x 2); with seat 3 silent for the game, the spare the
+//                       second final beside one of seats 1 and 2 (2 x 2)
+//   hour 24, void 8     no final, two counting seats off and the third silent (3) or all three off (1),
+//                       the spare silent or in play (x 2); the spare standing in adds none the first
+//                       game's shapes don't have
 //   disputed scores     inside 8 and after 12: three counting votes one final beside the spare's silent,
 //                       not final or the same vote, or two and the spare's the third (6 x 2), less those
 //                       the inside rule refuses; day 7, 20: the 6 a record written inside n can still
@@ -32,21 +36,21 @@ describe("the shapes file: every report the program can send", () => {
 	});
 
 	test("counted, by when it was decided, the game it meets and what it is", () => {
-		expect(now.runs).toEqual({ verification: 1_728, scoring: 258_685, records: 909 });
+		expect(now.runs).toEqual({ verification: 1_728, scoring: 496_964, records: 1_692 });
 		expect(now.counts).toEqual({
-			total: 1_207,
-			"verification, unverified, start": 4,
-			"inside the window, verified, score": 10,
-			"inside the window, verified, dispute record": 110,
+			total: 2_109,
+			"verification, unverified, start": 3,
+			"inside the window, verified, score": 8,
+			"inside the window, verified, dispute record": 170,
 			"inside the window, disputed, score": 8,
-			"inside the window, disputed, update": 251,
-			"after the window, verified, score": 36,
-			"after the window, verified, dispute record": 232,
+			"inside the window, disputed, update": 495,
+			"after the window, verified, score": 28,
+			"after the window, verified, dispute record": 404,
 			"after the window, disputed, score": 12,
-			"after the window, disputed, update": 251,
-			"hour 24, verified, void": 44,
-			"day 7, disputed, score": 20,
-			"day 7, disputed, void": 229,
+			"after the window, disputed, update": 495,
+			"hour 24, verified, void": 8,
+			"day 7, disputed, score": 26,
+			"day 7, disputed, void": 452,
 		});
 	});
 
