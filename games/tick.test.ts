@@ -5,14 +5,16 @@
 // whatever the open list holds.
 //
 // The never-line's tick half: a probe never writes, and the full read writes only what the program
-// decided. The break that turns it red (tick.ts, runTick): in the probe loop, after `if (!read) continue;`,
-// any bytes written from there,
+// decided. The break that turns it red (tick.ts, probeOne): after `if (!read) return;`, any bytes
+// written from there,
 //   ->  deps.write("0x" + "00".repeat(64));
 // Two more that redden it: the verification's `&& d.due.fires` dropped (verified on every tick), and
 // `hourly` keyed to tick 0 (the hour's reads on the verification's tick). And the probe's seat taken
 // from the hint alone (lib.ts, probeSeatFor: `"none" in hintOf(game.hints) ? SPARE : 3`): the probe asks
 // a seat the start report excluded. And in dueOf a cutoff two days past the date for an unverified
 // game (`if (now > row.date + VERIFY_NEAR) return none(...)`): a game the feeds list late is skipped for good.
+// And the verification's turn stopping at a head that cannot fit the count (tick.ts, the verification
+// loop: `break;` after the first wait): the next due game that fits no longer takes the read.
 
 import { describe, expect, test } from "bun:test";
 import type { ChainGame, Report } from "../scoring/src/chain";
@@ -21,13 +23,16 @@ import { LATE, NOW } from "../scoring/test/cases";
 import { KEY, saved } from "../scoring/test/fixtures";
 import { PAYOUT, chainOf } from "../scoring/test/rule-helpers";
 import type { HttpRequest, HttpResponse } from "../scoring/src/types";
-import type { OpenGame } from "./chain";
-import { CLOCK_WINDOW, EXPECTED_DURATION, HOURLY_TICK, READS_PER_EXECUTION, REQUESTS_PER_EXECUTION, VERIFY_BEFORE, VERIFY_NEAR, decodeReport, keysFor } from "./lib";
+import { encodeAbiParameters } from "viem";
+import { placeNamed, type OpenGame } from "./chain";
+import { CLOCK_WINDOW, EXPECTED_DURATION, HOURLY_TICK, READS_PER_EXECUTION, REQUESTS_PER_EXECUTION, VERIFY_BEFORE, VERIFY_NEAR, decodeReport, keysFor, readCall } from "./lib";
 import { GAMES, fakeChainOf, recordingWriter } from "./test-helpers";
-import { dueOf, onTheHour, pageTurnsOf, runTick, sameVote, tickOfHour, type TickDeps, type TickResult } from "./tick";
+import { countsOf, dueOf, hourCount, onTheHour, otherCount, runTick, sameVote, tickOfHour, type TickDeps, type TickResult } from "./tick";
 
 const KEYS = keysFor({ 4: KEY });
 const PERIOD = 300;
+/** The open list read's selector, to answer that read alone from a stand-in chain. */
+const OPEN_GAMES_SELECTOR = readCall("getOpenGames", [0n, 1n]).slice(0, 10);
 const BASE = chainOf("nba final, read after the game");
 const START = BASE.start!;
 const DURATION = EXPECTED_DURATION.nba;
@@ -178,12 +183,19 @@ describe("what a game is due for", () => {
 		expect(HOURLY_TICK).toBe(1);
 	});
 
-	test("the pages' turns: the tick's count every tick, and the hour's count too on the hour's first two ticks", () => {
+	test("the counts: the hour's on its first two ticks; the other ticks' on every tick, advancing on the hour's other ten and repeating the hour before's last two on its first two", () => {
 		const hour = Math.floor(firstTick(START) / 3_600);
-		expect(pageTurnsOf(firstTick(START), PERIOD)).toEqual([hour, hour * 12]);
-		expect(pageTurnsOf(secondTick(START), PERIOD)).toEqual([hour, hour * 12 + 1]);
-		expect(pageTurnsOf(laterTick(START), PERIOD)).toEqual([hour * 12 + 4]);
-		expect(pageTurnsOf(hourAfter(START) + 11 * PERIOD + 10, PERIOD)).toEqual([hour * 12 + 11]);
+		const at = (j: number, hours = 0): number => hourAfter(START) + hours * 3_600 + j * PERIOD + 10;
+		expect([hourCount(at(0)), hourCount(at(1)), hourCount(at(11)), hourCount(at(0, 1))]).toEqual([hour, hour, hour, hour + 1]);
+		// Tick j of hour h, j from 2, counts 10h + j; the next hour's tick 2 follows on, and its ticks 0 and 1 repeat 10h + 10 and 10h + 11.
+		expect([2, 3, 10, 11].map((j) => otherCount(at(j), PERIOD))).toEqual([10 * hour + 2, 10 * hour + 3, 10 * hour + 10, 10 * hour + 11]);
+		expect([otherCount(at(2, 1), PERIOD), otherCount(at(0, 1), PERIOD), otherCount(at(1, 1), PERIOD)]).toEqual([10 * hour + 12, 10 * hour + 10, 10 * hour + 11]);
+		// The pages a tick reads: the hour's count's on the first two ticks beside the other ticks' count's, the latter alone after.
+		expect([countsOf(at(0), PERIOD), countsOf(at(1), PERIOD), countsOf(at(4), PERIOD)]).toEqual([[hour, 10 * hour], [hour, 10 * hour + 1], [10 * hour + 4]]);
+		// A schedule of two ticks an hour has no other ticks: the tick's own count stands.
+		expect(otherCount(at(0), 1_800)).toBe(Math.floor(at(0) / 1_800));
+		// The place a count names on a shard of three pages of 64: page count mod 3, row floor(count / 3).
+		expect([placeNamed(0, 3, 64), placeNamed(4, 3, 64), placeNamed(191, 3, 64), placeNamed(192, 3, 64)]).toEqual([0, 4, 191, 0]);
 	});
 
 	test("a clock fires on every tick in its window, then on the hour's second tick only", () => {
@@ -304,9 +316,9 @@ describe("one tick", () => {
 		expect(result.fullRead?.run?.decision.action).toBe("score");
 		expect(writer.written.length).toBe(1);
 		expect(decodeReport(writer.written[0])).toMatchObject({ kind: 2, homeScore: 114, awayScore: 106, payout: PAYOUT });
-		// The scoring run asks 8 requests on this case, seat 3's among them; the probe asked it first, so the tick asks 8, not 9.
-		expect(result.requests).toBe(8);
-		expect(t.asked.length).toBe(8);
+		// The scoring run asks 5 requests on this case (one at seat 1, two at seat 2, seat 3's, the spare's); the probe asked seat 3's first, so the tick asks 5, not 6.
+		expect(result.requests).toBe(5);
+		expect(t.asked.length).toBe(5);
 		expect(t.asked.filter((r) => r.url.includes("/results/")).length).toBe(1);
 	});
 
@@ -328,8 +340,11 @@ describe("one tick", () => {
 				const games = Array.from({ length: count }, (_, i) => gameOf(i + 1, { start: START + i }));
 				const f = tick(games, PROBING, { says: () => says });
 				expect({ count, says, under: f.result.reads <= READS_PER_EXECUTION && f.result.requests <= REQUESTS_PER_EXECUTION }).toEqual({ count, says, under: true });
-				// The list's total, and the two pages of 64 a tick reads at most.
-				expect([f.result.open, f.result.mine]).toEqual([count, Math.min(count, 128)]);
+				// The list's total, and the pages a tick reads: its first, and the one the other ticks' count names.
+				const own = Math.ceil(count / 64);
+				const headPage = own <= 1 ? 0 : placeNamed(otherCount(PROBING, PERIOD), own, 64) % own;
+				const rowsOf = (m: number): number => Math.max(0, Math.min(64, count - 64 * m));
+				expect([f.result.open, f.result.mine]).toEqual([count, rowsOf(0) + (headPage === 0 ? 0 : rowsOf(headPage))]);
 				expect(f.written.length).toBe(says === "final" && count > 0 ? 1 : 0);
 				expect(f.result.probes.length + f.result.waiting.filter((w) => w.endsWith("for its probe")).length).toBe(f.result.mine);
 				if (says === "final" && count > 1) expect(f.result.waiting.filter((w) => w.endsWith("waits: one full read a tick")).length).toBe(f.result.probes.length - 1);
@@ -422,15 +437,16 @@ describe("one tick", () => {
 		// Pages of 2 and seven games: four pages; shard 0 of 3 owns pages 0 and 3, shard 1 page 1, shard 2 page 2.
 		const games = [1, 2, 3, 4, 5, 6, 7].map((i) => gameOf(i));
 		const probed = (f: Fixture) => [...new Set(f.result.probes.map((p) => p.gameId).concat(f.result.waiting.map((w) => w.split(":")[0])))].sort();
-		const a = tick(games, PROBING, { shard: { index: 0, count: 3 }, pageSize: 2, says: () => "final" });
+		// Shard 0 reads its first page every tick and page 3 on the ticks whose count names a place on it: two consecutive ticks name both.
+		const a = [tick(games, PROBING, { shard: { index: 0, count: 3 }, pageSize: 2, says: () => "final" }), tick(games, PROBING + PERIOD, { shard: { index: 0, count: 3 }, pageSize: 2, says: () => "final" })];
 		const b = tick(games, PROBING, { shard: { index: 1, count: 3 }, pageSize: 2, says: () => "final" });
 		const c = tick(games, PROBING, { shard: { index: 2, count: 3 }, pageSize: 2, says: () => "final" });
-		expect([a.result.mine, b.result.mine, c.result.mine]).toEqual([3, 2, 2]);
-		expect([a.result.pages, b.result.pages, c.result.pages]).toEqual([{ own: 2, read: 2 }, { own: 1, read: 1 }, { own: 1, read: 1 }]);
-		expect([probed(a), probed(b), probed(c)]).toEqual([["1", "2", "7"], ["3", "4"], ["5", "6"]]);
-		expect(a.asked.every((u) => u.includes(hintOf(1)) || u.includes(hintOf(2)) || u.includes(hintOf(7)))).toBe(true);
+		expect([a.map((f) => f.result.mine).sort(), b.result.mine, c.result.mine]).toEqual([[2, 3], 2, 2]);
+		expect([a.map((f) => f.result.pages.read).sort(), a[0].result.pages.own, b.result.pages, c.result.pages]).toEqual([[1, 2], 2, { own: 1, read: 1 }, { own: 1, read: 1 }]);
+		expect([[...new Set(a.flatMap(probed))].sort(), probed(b), probed(c)]).toEqual([["1", "2", "7"], ["3", "4"], ["5", "6"]]);
+		expect(a.every((f) => f.asked.every((u) => u.includes(hintOf(1)) || u.includes(hintOf(2)) || u.includes(hintOf(7))))).toBe(true);
 		expect(b.asked.every((u) => u.includes(hintOf(3)) || u.includes(hintOf(4)))).toBe(true);
-		expect([a.result.open, b.result.open, c.result.open]).toEqual([7, 7, 7]);
+		expect([a[0].result.open, b.result.open, c.result.open]).toEqual([7, 7, 7]);
 	});
 
 	test("a game created without a usable hint is probed at the spare, from the identity the probe read", () => {
@@ -481,8 +497,8 @@ describe("the verification on the hour's first tick", () => {
 		expect(f.written.length).toBe(1);
 		expect(decodeReport(f.written[0])).toMatchObject({ gameId: "1", kind: 1, start: NFL.start });
 		expect(f.names).toEqual(["getOpenGames", "getGameIdentity", "getGameReporters", "i_token", "getApprovedReporters", "getReporter"]);
-		// A start asks 18 and sends 11 distinct: the tick's count is the sent ones, under the 15.
-		expect([f.result.reads, f.result.requests, t.asked.length]).toEqual([7, 11, 11]);
+		// A start asks 9 and sends 9, none twice (the range's dates and the window's differ): under the 15.
+		expect([f.result.reads, f.result.requests, t.asked.length]).toEqual([7, 9, 9]);
 		expect(f.result.probes).toEqual([]);
 	});
 
@@ -498,7 +514,7 @@ describe("the verification on the hour's first tick", () => {
 		expect([late.result.fullRead?.why, late.handed.length]).toEqual(["verification", 1]);
 	});
 
-	test("the nearer games take the turns, nearest date first: a game more than two days past its date is verified only when no nearer game is due", () => {
+	test("the nearer games take the turns, in turn by the hour's count: a game more than two days past its date is verified only when no nearer game is due", () => {
 		const nearer = [unverifiedOf(1, { date: VERIFY_AT + 2 * 86_400 }), unverifiedOf(2, { date: VERIFY_AT + 86_400 })];
 		const far = [unverifiedOf(3, { date: VERIFY_AT - 5 * 86_400 }), unverifiedOf(4, { date: VERIFY_AT - 9 * 86_400 })];
 		const handed: string[] = [];
@@ -507,9 +523,8 @@ describe("the verification on the hour's first tick", () => {
 			handed.push(f.handed[0].id);
 			expect(f.result.waiting.filter((w) => w.startsWith("3:") || w.startsWith("4:"))).toEqual(["3: verification waits for its hour's turn", "4: verification waits for its hour's turn"]);
 		}
-		// Four hours, the two nearer games in turn, the nearest (game 2, a day out) on the hours whose count is even.
-		expect([...new Set(handed)].sort()).toEqual(["1", "2"]);
-		expect(handed.filter((id, i) => (Math.floor(VERIFY_AT / 3_600) + i) % 2 === 0)).toEqual(["2", "2"]);
+		// Four hours, the two nearer games in turn, each twice.
+		expect([...handed].sort()).toEqual(["1", "1", "2", "2"]);
 		// With no nearer game due, the far ones take turns, nearest first.
 		const alone: string[] = [];
 		for (let hour = 0; hour < 2; hour++) alone.push(tick(far, VERIFY_AT + hour * 3_600, { program: waiter() }).handed[0].id);
@@ -538,40 +553,74 @@ describe("the verification on the hour's first tick", () => {
 		expect([atDay7.result.fullRead?.why, atDay7.result.waiting]).toEqual(["verification", ["8: day 7 waits: one full read a tick"]]);
 		expect(tick([inWindow, disputed], day7 + PERIOD, { program: waiter() }).result.fullRead?.why).toBe("day 7");
 		const unverified = unverifiedOf(9);
-		// Six verified games final at seat 3 beside the unverified one: the real verification sends 11, four probes follow, the rest wait.
+		// Six verified games final at seat 3 beside the unverified one: the real verification sends 9, four probes follow (two reads each, to the reads' count), the rest wait.
 		const t = saved(undefined, VERIFY_AT);
 		const s3 = seat3Transport(() => "final");
 		const send = (req: HttpRequest): HttpResponse => (/\/results\/0000000[1-6]-/.test(req.url) ? s3.send(req) : t.send(req));
 		const finals = [1, 2, 3, 4, 5, 6].map((i) => gameOf(i, { start: VERIFY_AT - DURATION - 600 - i }));
 		const f = tick([unverified, ...finals], VERIFY_AT, { program: "real", send });
 		expect([f.result.fullRead?.why, f.result.fullRead?.run?.decision.action, f.written.length]).toEqual(["verification", "start", 1]);
-		expect([f.result.requests, f.result.probes.length, f.result.probes.every((p) => p.final)]).toEqual([15, 4, true]);
+		expect([f.result.requests, f.result.probes.length, f.result.probes.every((p) => p.final)]).toEqual([13, 4, true]);
 		expect(f.result.waiting.filter((w) => w.endsWith("waits: one full read a tick")).length).toBe(4);
-		expect(f.result.waiting.filter((w) => w.endsWith("no request left for its probe")).length).toBe(2);
+		expect(f.result.waiting.filter((w) => w.endsWith("no read left for its probe")).length).toBe(2);
 		expect(f.result.reads).toBeLessThanOrEqual(READS_PER_EXECUTION);
 	});
 
-	test("a full read starts only when its league's worst case of requests fits the count; otherwise it waits, with nothing of it sent", () => {
-		// A verification needs 13 for this league (budget.test.ts): under a count of 5 it is not started.
+	test("a full read starts only when its worst case of requests fits the count; otherwise it waits with nothing sent, and the next due game that fits takes the read", () => {
+		// A verification needs 9 (budget.test.ts): under a count of 5 it is not started.
 		const t = saved(undefined, VERIFY_AT);
 		const f = tick([unverifiedOf(1)], VERIFY_AT, { program: "real", send: t.send, requestsLimit: 5 });
-		expect([f.result.fullRead, f.result.waiting, f.written.length, f.result.requests, t.asked.length]).toEqual([null, ["1: verification waits: needs 13 requests, 5 left"], 0, 0, 0]);
-		// Under a count of 13 it is: 11 sent on the saved answers, the start written.
-		const t13 = saved(undefined, VERIFY_AT);
-		const ok = tick([unverifiedOf(1)], VERIFY_AT, { program: "real", send: t13.send, requestsLimit: 13 });
-		expect([ok.result.fullRead?.why, ok.result.fullRead?.run?.decision.action, ok.written.length, ok.result.requests]).toEqual(["verification", "start", 1, 11]);
-		// College: a scoring run's worst case is 26 and a verification's 27, past the platform's 15, so under
-		// it neither starts: the final found by the probe waits every tick, holding the work, and the
-		// unverified game waits every hour; nothing is sent for either. Under a count that holds the worst
-		// case, both run.
+		expect([f.result.fullRead, f.result.waiting, f.written.length, f.result.requests, t.asked.length]).toEqual([null, ["1: verification waits: needs 9 requests, 5 left"], 0, 0, 0]);
+		// Under a count of 9 it is: 9 sent on the saved answers, the start written.
+		const t9 = saved(undefined, VERIFY_AT);
+		const ok = tick([unverifiedOf(1)], VERIFY_AT, { program: "real", send: t9.send, requestsLimit: 9 });
+		expect([ok.result.fullRead?.why, ok.result.fullRead?.run?.decision.action, ok.written.length, ok.result.requests]).toEqual(["verification", "start", 1, 9]);
+		// College fits the count like any league: the readers ask for the one game, so a scoring run is 5 and
+		// a verification 9 whatever the league, and a college final is read under the platform's 15.
 		const college = gameOf(1, { league: "ncaab" });
-		const held = tick([college], PROBING, { says: () => "final" });
-		expect([held.result.probes.length, held.result.fullRead, held.result.waiting, held.asked.length, held.written.length]).toEqual([1, null, ["1: final at seat 3 waits: needs 26 requests, 14 left"], 1, 0]);
-		const room = tick([college], PROBING, { says: () => "final", requestsLimit: 30 });
-		expect([room.result.fullRead?.why, room.written.length]).toEqual(["final at seat 3", 1]);
+		const read = tick([college], PROBING, { says: () => "final" });
+		expect([read.result.probes.length, read.result.fullRead?.why, read.written.length, read.result.waiting]).toEqual([1, "final at seat 3", 1, []]);
 		const unverified = tick([unverifiedOf(1, { league: "ncaab" })], VERIFY_AT, { program: waiter() });
-		expect([unverified.result.fullRead, unverified.result.waiting, unverified.handed.length, unverified.asked.length]).toEqual([null, ["1: verification waits: needs 27 requests, 15 left"], 0, 0]);
-		expect(tick([unverifiedOf(1, { league: "ncaab" })], VERIFY_AT, { program: waiter(), requestsLimit: 27 }).handed.length).toBe(1);
+		expect([unverified.result.fullRead?.why, unverified.handed.length, unverified.result.waiting]).toEqual(["verification", 1, []]);
+		// A college game beside a pro game, both unverified: under the platform's count each is verified on
+		// its own hour's turn, and nothing waits for want of requests; under a count of 7 neither fits, and
+		// every hour's lines record both waits, nothing sent.
+		const pair = [unverifiedOf(1, { league: "ncaab" }), unverifiedOf(2)];
+		const hours = [0, 1].map((h) => tick(pair, VERIFY_AT + h * 3_600, { program: waiter() }));
+		expect(hours.flatMap((f) => f.handed.map((g) => g.id)).sort()).toEqual(["1", "2"]);
+		expect(hours.every((f) => f.result.waiting.every((w) => w.endsWith("waits for its hour's turn")))).toBe(true);
+		for (const h of [0, 1]) {
+			const short = tick(pair, VERIFY_AT + h * 3_600, { program: waiter(), requestsLimit: 7 });
+			expect([short.handed.length, short.asked.length, [...short.result.waiting].sort()]).toEqual([0, 0, ["1: verification waits: needs 9 requests, 7 left", "2: verification waits: needs 9 requests, 7 left"]]);
+		}
+		// A game whose full read cannot fit does not take the turn: an hour-24 read (5) under a count of 4,
+		// beside a day-7 read (none) due the same tick. Hour 24 records its wait; day 7 is read, and written.
+		const at = START + 7_200;
+		const disputed = gameOf(2, { status: "disputed", dispute: { at, records: [SCORE_REPORT("2").readings] } });
+		const when = laterTick(at + disputed.day7);
+		const hour24 = gameOf(1, { start: when - BASE.n - 600 });
+		expect(dueOf(row(hour24), when, PERIOD)).toMatchObject({ kind: "clock", clock: "hour 24", fires: true });
+		const both = tick([hour24, disputed], when, { requestsLimit: 4 });
+		expect([both.result.fullRead?.why, both.result.fullRead?.gameId, both.written.length]).toEqual(["day 7", "2", 1]);
+		expect(both.result.waiting.some((w) => w.startsWith("1: hour 24 waits: "))).toBe(true);
+		// Alone, the same hour-24 read waits with its reason, every tick.
+		for (const k of [0, 1]) expect(tick([hour24], when + k * PERIOD, { requestsLimit: 4 }).result.waiting).toEqual(["1: hour 24 waits: needs 5 requests, 4 left"]);
+	});
+
+	test("a page with a row shorter than the interface's: the tick reads nothing, writes nothing, and its error names the row", () => {
+		const game = unverifiedOf(1);
+		const chain = fakeChainOf([game], VERIFY_AT);
+		// The games set's page, re-encoded without the date word, as a games set of seven words would send it.
+		const short = encodeAbiParameters(
+			[{ type: "tuple[]", components: [{ name: "gameId", type: "uint256" }, { name: "status", type: "uint8" }, { name: "start", type: "uint64" }, { name: "window", type: "uint64" }, { name: "day7Clock", type: "uint64" }, { name: "disputedAt", type: "uint64" }, { name: "league", type: "string" }] }, { type: "uint256" }],
+			[[{ gameId: 1n, status: 1, start: 0n, window: BigInt(game.n), day7Clock: BigInt(game.day7), disputedAt: 0n, league: game.league }], 1n],
+		);
+		const evm = { ...chain, call: (to: `0x${string}`, data: `0x${string}`) => (data.startsWith(OPEN_GAMES_SELECTOR) ? short : chain.call(to, data)) };
+		const writer = recordingWriter();
+		expect(() => runTick({ evm, games: GAMES, payout: PAYOUT, keys: KEYS, send: () => ({ status: 200, body: "[]" }), write: writer.write, score: scorer().score, period: PERIOD, shard: { index: 0, count: 1 } })).toThrow("row 0 of the page at 0 is shorter than the interface's eight words");
+		expect(writer.written.length).toBe(0);
+		// The control: the games set's own row verifies and writes.
+		expect(tick([game], VERIFY_AT).written.length).toBe(1);
 	});
 
 	test("a full read the count cuts all the same writes nothing: the readers raise the cut, the run ends undecided, and the tick's line says cut", () => {

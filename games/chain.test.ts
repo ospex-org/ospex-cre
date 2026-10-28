@@ -1,9 +1,14 @@
 // The chain reads: what the wrapper asks the games set for, from state, and what it builds from the
 // answers. The open list is a page per read and carries what the tick decides on, a shard reading its
-// own pages, its first every tick and the rest in turn; a game's identity, its readings and its
-// reporters are one read each, asked for the one game a full read is about; a game before any report
-// is the creation event's, and a game that has ended is read no further than its status. Nothing is
-// read from a log past the trigger's own.
+// own pages, its first every tick and the page each count handed in names (placeNamed), each row with
+// its place; a game's identity, its readings and its reporters are one read each, asked for the one
+// game a full read is about; a game before any report is the creation event's, and a game that has
+// ended is read no further than its status. Nothing is read from a log past the trigger's own. A page
+// whose rows are shorter than the interface's is refused whole, naming the row.
+//
+// The break that turns the short row's test red (chain.ts, checkRows): the check dropped from `page`,
+//   ->  // checkRows(data, offset);
+// with which a row that omits the date word decodes, its date the league string's length.
 
 import { describe, expect, test } from "bun:test";
 import { encodeAbiParameters, type AbiParameter } from "viem";
@@ -11,7 +16,7 @@ import type { ChainGame } from "../scoring/src/chain";
 import { lastRecorded } from "../scoring/src/rule";
 import { chainOf } from "../scoring/test/rule-helpers";
 import INTERFACE from "./abi/IOspexGames.json";
-import { gameOfCreation, gameOfState, readIdentity, readOpenGames, readReadings, readReporters, recordOfVotes, type Evm, type OpenGame } from "./chain";
+import { gameOfCreation, gameOfState, pageOfPlace, placeNamed, placeOf, readIdentity, readOpenGames, readReadings, readReporters, recordOfVotes, type Evm, type OpenGame } from "./chain";
 import { GAMES, REPORTER, RETIRED, creationOf, fakeChain, fakeChainOf } from "./test-helpers";
 
 const RECORD_A = [
@@ -43,15 +48,18 @@ describe("the chain reads, from state", () => {
 		const c: ChainGame = { ...a, id: "9", status: "disputed", dispute: { at: a.start! + 7_200, records: [RECORD_A] } };
 		const ended: ChainGame = { ...a, id: "11", status: "scored" };
 		const chain = fakeChainOf([a, b, c, ended], 1);
-		const { rows, reads, total, pages } = readOpenGames(chain, GAMES, { index: 0, count: 1 }, [0], 2);
+		// Pages of 2, three open games: two pages; count 1 names place 1, on the second page.
+		const { rows, reads, total, pages } = readOpenGames(chain, GAMES, { index: 0, count: 1 }, [1], 2);
 		expect([reads, total, pages]).toEqual([2, 3, { own: 2, read: 2 }]);
 		expect(rows.map((r) => [r.gameId, r.status, r.start, r.disputedAt])).toEqual([
 			[7n, "unverified", null, null],
 			[9n, "disputed", a.start, a.start! + 7_200],
 			[42n, "verified", a.start, null],
 		]);
-		expect(rows[0]).toEqual({ gameId: 7n, status: "unverified", start: null, window: b.n, day7Clock: b.day7, disputedAt: null, league: b.league, date: b.date });
-		expect(rows[2]).toEqual({ gameId: 42n, status: "verified", start: a.start, window: a.n, day7Clock: a.day7, disputedAt: null, league: a.league, date: a.date });
+		// Each row's place on the shard's walk: row i of page m is place i x own + m.
+		expect(rows[0]).toEqual({ gameId: 7n, status: "unverified", start: null, window: b.n, day7Clock: b.day7, disputedAt: null, league: b.league, date: b.date, place: 0 });
+		expect(rows[2]).toEqual({ gameId: 42n, status: "verified", start: a.start, window: a.n, day7Clock: a.day7, disputedAt: null, league: a.league, date: a.date, place: 1 });
+		expect(rows.map((r) => r.place)).toEqual([0, 2, 1]);
 		expect(chain.names()).toEqual(["getOpenGames", "getOpenGames"]);
 		expect(chain.calls.map((c) => c.args)).toEqual([[0n, 2n], [2n, 2n]]);
 	});
@@ -66,7 +74,32 @@ describe("the chain reads, from state", () => {
 		const evm: Evm = { call: () => answer, latest: () => ({ number: 1n, timestamp: 1 }) };
 		const { rows, total } = readOpenGames(evm, GAMES);
 		expect(total).toBe(1);
-		expect(rows).toEqual([{ gameId: 77n, status: "verified", start: 1_700_000_000, window: 86_400, day7Clock: 604_800, disputedAt: 1_700_010_000, league: "nhl", date: 1_700_007_200 }]);
+		expect(rows).toEqual([{ gameId: 77n, status: "verified", start: 1_700_000_000, window: 86_400, day7Clock: 604_800, disputedAt: 1_700_010_000, league: "nhl", date: 1_700_007_200, place: 0 }]);
+	});
+
+	test("a row shorter than the interface's eight words is refused, naming the row, and nothing is decoded", () => {
+		// The interface's row with its date word omitted, encoded as a games set of seven words would encode
+		// it: the decoder would read it, the date as the league string's length (3 for "nba").
+		const getOpenGames = INTERFACE.abi.find((e) => e.type === "function" && e.name === "getOpenGames") as { outputs: readonly AbiParameter[] };
+		const rowsOut = getOpenGames.outputs[0] as AbiParameter & { components: readonly AbiParameter[] };
+		const short = { ...rowsOut, components: rowsOut.components.filter((c) => c.name !== "date") };
+		const row = { gameId: 1n, status: 1, start: 0n, window: 86_400n, day7Clock: 604_800n, disputedAt: 0n, league: "nba" };
+		const answer = encodeAbiParameters([short, getOpenGames.outputs[1]], [[row], 1n] as never);
+		const evm: Evm = { call: () => answer, latest: () => ({ number: 1n, timestamp: 1 }) };
+		expect(() => readOpenGames(evm, GAMES)).toThrow("row 0 of the page at 0 is shorter than the interface's eight words: its league begins at byte 224");
+		// A page of two rows, the second short: named by its number.
+		const whole = { gameId: 2n, status: 1, start: 0n, window: 86_400n, day7Clock: 604_800n, disputedAt: 0n, league: "nba", date: 1_700_000_000n };
+		const mixed = encodeAbiParameters(getOpenGames.outputs, [[whole], 2n]);
+		// Built by hand: the whole row's bytes, then the short row's, under one array of two.
+		const body = (hex: `0x${string}`) => hex.slice(2);
+		const wholeRow = body(encodeAbiParameters([rowsOut], [[whole]] as never)).slice(64 * 3); // past the array offset, its length and the row's offset
+		const shortRow = body(encodeAbiParameters([short], [[row]] as never)).slice(64 * 3);
+		const words = (n: bigint) => n.toString(16).padStart(64, "0");
+		const two = `0x${words(64n)}${words(2n)}${words(2n)}${words(64n)}${words(BigInt(64 + wholeRow.length / 2))}${wholeRow}${shortRow}` as `0x${string}`;
+		void mixed;
+		expect(() => readOpenGames({ ...evm, call: () => two }, GAMES)).toThrow("row 1 of the page at 0 is shorter than the interface's eight words");
+		// The control: the interface's own row decodes (the test above), and a page of no rows passes.
+		expect(readOpenGames({ ...evm, call: () => encodeAbiParameters(getOpenGames.outputs, [[], 0n]) }, GAMES).rows).toEqual([]);
 	});
 
 	test("an empty open list is one read, and a list that fits a page is one read", () => {
@@ -75,34 +108,40 @@ describe("the chain reads, from state", () => {
 		expect(readOpenGames(fakeChainOf([a], 1), GAMES)).toMatchObject({ reads: 1, total: 1, pages: { own: 1, read: 1 } });
 	});
 
-	test("a shard reads its own pages only: its first every tick, and of the rest the page each turn names, so every page is read over the turns", () => {
+	test("a shard reads its own pages only: its first every tick, and the page each count names on its walk, so every page is read over the counts", () => {
 		const a = chainOf("nba final, read after the game");
 		const games = Array.from({ length: 11 }, (_, i) => ({ ...a, id: String(i + 1) }));
 		// Pages of 2: six pages (the last of one row). Shard 1 of 3 owns pages 1 and 4 (rows 3,4 and 9,10); shard 2 owns 2 and 5 (rows 5,6 and 11); shard 0 owns 0 and 3.
-		const one = readOpenGames(fakeChainOf(games, 1), GAMES, { index: 1, count: 3 }, [0], 2);
-		expect([one.reads, one.total, one.pages, one.rows.map((r) => r.gameId)]).toEqual([2, 11, { own: 2, read: 2 }, [3n, 4n, 9n, 10n]]);
-		const two = readOpenGames(fakeChainOf(games, 1), GAMES, { index: 2, count: 3 }, [0], 2);
+		// Count 1 names place 1, on each shard's second page; count 0 names place 0, on its first, which is read anyway.
+		const one = readOpenGames(fakeChainOf(games, 1), GAMES, { index: 1, count: 3 }, [1], 2);
+		expect([one.reads, one.total, one.pages, one.rows.map((r) => [r.gameId, r.place])]).toEqual([2, 11, { own: 2, read: 2 }, [[3n, 0], [4n, 2], [9n, 1], [10n, 3]]]);
+		const two = readOpenGames(fakeChainOf(games, 1), GAMES, { index: 2, count: 3 }, [1], 2);
 		expect([two.reads, two.pages, two.rows.map((r) => r.gameId)]).toEqual([2, { own: 2, read: 2 }, [5n, 6n, 11n]]);
+		expect(readOpenGames(fakeChainOf(games, 1), GAMES, { index: 1, count: 3 }, [0], 2).pages).toEqual({ own: 2, read: 1 });
 		// A shard past the list's pages: one read, nothing.
 		const past = readOpenGames(fakeChainOf(games.slice(0, 2), 1), GAMES, { index: 2, count: 3 }, [0], 2);
 		expect([past.reads, past.total, past.pages, past.rows]).toEqual([1, 2, { own: 0, read: 0 }, []]);
-		// One shard owning six pages reads its first and the page the turn names: over five turns, every other page once, in order.
+		// One shard owning six pages: count c names place c mod 12, on page c mod 6; counts 1 to 5 read pages 1 to 5, in order.
 		const seen: bigint[][] = [];
-		for (let turn = 0; turn < 5; turn++) {
+		for (let count = 1; count <= 5; count++) {
 			const chain = fakeChainOf(games, 1);
-			const t = readOpenGames(chain, GAMES, { index: 0, count: 1 }, [turn], 2);
+			const t = readOpenGames(chain, GAMES, { index: 0, count: 1 }, [count], 2);
 			expect([t.reads, t.pages]).toEqual([2, { own: 6, read: 2 }]);
 			expect(t.rows.slice(0, 2).map((r) => r.gameId)).toEqual([1n, 2n]);
-			expect(chain.calls.map((c) => c.args)).toEqual([[0n, 2n], [BigInt(2 * (1 + turn)), 2n]]);
+			expect(chain.calls.map((c) => c.args)).toEqual([[0n, 2n], [BigInt(2 * count), 2n]]);
 			seen.push(t.rows.slice(2).map((r) => r.gameId));
 		}
 		expect(seen).toEqual([[3n, 4n], [5n, 6n], [7n, 8n], [9n, 10n], [11n]]);
-		// Two turns read the two pages they name, wrapping; two turns naming one page read it once.
+		// The walk: twelve places, page c mod 6, row floor(c / 6); counts 6 and 11 name the second rows of pages 0 and 5.
+		expect([0, 1, 5, 6, 7, 11, 12, -1].map((c) => placeNamed(c, 6, 2))).toEqual([0, 1, 5, 6, 7, 11, 0, 11]);
+		expect([pageOfPlace(7, 6), pageOfPlace(11, 6), placeOf(1, 1, 6), placeOf(5, 1, 6)]).toEqual([1, 5, 7, 11]);
+		// Two counts read the two pages they name; two counts naming one page read it once; a count naming the first page adds no read.
 		const chain = fakeChainOf(games, 1);
 		const three = readOpenGames(chain, GAMES, { index: 0, count: 1 }, [4, 5], 2);
-		expect([three.reads, three.pages, chain.calls.map((c) => c.args)]).toEqual([3, { own: 6, read: 3 }, [[0n, 2n], [10n, 2n], [2n, 2n]]]);
-		const same = readOpenGames(fakeChainOf(games, 1), GAMES, { index: 0, count: 1 }, [7, 2], 2);
-		expect([same.reads, same.pages, same.rows.slice(2).map((r) => r.gameId)]).toEqual([2, { own: 6, read: 2 }, [7n, 8n]]);
+		expect([three.reads, three.pages, chain.calls.map((c) => c.args)]).toEqual([3, { own: 6, read: 3 }, [[0n, 2n], [8n, 2n], [10n, 2n]]]);
+		const same = readOpenGames(fakeChainOf(games, 1), GAMES, { index: 0, count: 1 }, [7, 1], 2);
+		expect([same.reads, same.pages, same.rows.slice(2).map((r) => r.gameId)]).toEqual([2, { own: 6, read: 2 }, [3n, 4n]]);
+		expect(readOpenGames(fakeChainOf(games, 1), GAMES, { index: 0, count: 1 }, [6, 12], 2).pages).toEqual({ own: 6, read: 1 });
 		expect(() => readOpenGames(fakeChainOf(games, 1), GAMES, { index: 0, count: 1 }, [], 2)).toThrow();
 		expect(() => readOpenGames(fakeChainOf(games, 1), GAMES, { index: 3, count: 3 }, [0], 2)).toThrow();
 	});

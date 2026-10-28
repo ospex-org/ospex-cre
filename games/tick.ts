@@ -8,18 +8,28 @@
 // against its vote on record, and its full read also runs on the hour's second tick, so the other
 // seats' changes are recorded within the hour, and at day 7. On the hour's first tick the full read
 // is a verification: one game the creation trigger's run left unverified, from seven days before its
-// date until it leaves the list, the nearer dates first, so a game created before the feeds list it
+// date until it leaves the list, the nearer games first, so a game created before the feeds list it
 // is verified when they do, however late, with nothing from anywhere but the chain and the feeds.
 //
 // The tick budgets the platform's quotas per execution: 15 chain reads and 15 feed requests. One full
 // read per tick, started only with its reads in hand and the most requests the program may send for
-// that league (lib.ts, scoringRequests and verifyingRequests, from the readers' own pagination), so
-// the count never cuts a run short of the seats the program would read; probes while reads and
-// requests remain; a full read found without room waits for the next tick, where the probes start
-// from another game, so no game is starved and no work is dropped. Each class of work (the
-// verification, the hour's reads, the clocks in their windows, the probes) takes its games in turn by
-// its own count, so a game that waited or failed last turn is not first next turn. Should the count
-// still stop a run, the readers raise the cut and the run writes nothing. Nothing here decides a
+// it (lib.ts, requestsFor, from the readers' own reads, one game at a time), so the count never cuts a
+// run short of the seats the program would read; probes while reads and requests remain. A full read
+// that cannot fit does not take the turn: its line records the wait, and the next due game that fits
+// takes the read the same tick, so nothing is silent and nothing is skipped for good. Should the count
+// still stop a run, the readers raise the cut and the run writes nothing.
+//
+// The page follows the game, never the game the page. Each class of work (the verification, the
+// hour's reads, the clocks in their windows, the probes) has its own count, and the count names a
+// place on the shard's walk over its rows (chain.ts, placeNamed): the tick reads the page that holds
+// the place, and the class begins its turn at the game there, then takes the rest in turn by the
+// count. So the game at a place is read on the count that names it, whatever else its page holds,
+// and a game that waited or failed last turn is not first next turn. The bound: every game on the
+// shard that is due for a class, and whose full read fits the count, enters the program within own x
+// 64 of the class's own ticks (own the shard's pages of 64 rows): the hour's first ticks for the
+// verification, its second ticks for the hour's reads, the hour's other ten ticks for a clock in its
+// window and for a probe, which is probed on that count and read in full on its final. parity.test.ts
+// proves it by program entries on a stable 500-game list across three shards. Nothing here decides a
 // score: the full read is the program's run, and the probe asks only whether the game is over.
 
 import type { Address } from "viem";
@@ -29,11 +39,12 @@ import { keyFor } from "../scoring/src/keys";
 import { OPEN_FOR } from "../scoring/src/rule";
 import { isCut, runSync } from "../scoring/src/run";
 import type { Game, HttpRequest, HttpResponse, Reading, Seat } from "../scoring/src/types";
-import { NO_READINGS, gameOfState, readIdentity, readOpenGames, readReadings, readReporters, type Evm, type Identity, type OpenGame, type Readings, type Shard } from "./chain";
+import { NO_READINGS, gameOfState, placeNamed, readIdentity, readOpenGames, readReadings, readReporters, type Evm, type Identity, type OpenGame, type PlacedGame, type Readings, type Shard } from "./chain";
 import {
 	CLOCK_WINDOW,
 	EXPECTED_DURATION,
 	HOURLY_TICK,
+	OPEN_PAGE,
 	READS_PER_EXECUTION,
 	REQUESTS_PER_EXECUTION,
 	VERIFY_BEFORE,
@@ -41,9 +52,8 @@ import {
 	counted,
 	memoized,
 	probeSeatFor,
+	requestsFor,
 	saysFinal,
-	scoringRequests,
-	verifyingRequests,
 } from "./lib";
 import { runGame, summarize, type Deps, type Run } from "./run";
 
@@ -113,18 +123,28 @@ export function onTheHour(now: number, period: number): boolean {
 	return tickOfHour(now, period) === 0;
 }
 
+/** The hour's count: the turn of the verification, on the hour's first tick, and of the hour's reads, on its second. */
+export function hourCount(now: number): number {
+	return Math.floor(now / 3_600);
+}
+
 /**
- * The turns a tick reads its shard's other pages by, one page each (chain.ts, readOpenGames): the
- * tick's count on every tick, the turn of the probes and the clocks' windows, which run on every tick;
- * and on the hour's first two ticks the hour's count too, the turn of the verification (the first) and
- * the hour's reads (the second). A five-minute schedule has twelve ticks an hour, so a shard whose
- * other pages share a factor with twelve would meet the hour's ticks on the same pages for ever if
- * those ticks turned by the tick's count. With its own count, each class of work reaches every page
- * of its shard within own - 1 of its own ticks: hours for the hour's classes, ticks for the rest.
+ * The count of the hour's other ticks: the turn of the clocks in their windows and of the probes. It
+ * advances on every tick but the hour's first two, whose one full read is the hour's own (the
+ * verification, the hour's reads), and on those two it repeats the hour before's last two counts, so
+ * every place it names (chain.ts, placeNamed) is named on a tick whose full read is free for its game,
+ * whatever factor the shard's places share with the hour. A schedule of two ticks an hour has no other
+ * ticks, and the tick's own count stands.
  */
-export function pageTurnsOf(now: number, period: number): number[] {
+export function otherCount(now: number, period: number): number {
+	const perHour = Math.floor(3_600 / period);
 	const tick = Math.floor(now / period);
-	return tickOfHour(now, period) <= HOURLY_TICK ? [Math.floor(now / 3_600), tick] : [tick];
+	return perHour > 2 ? tick - 2 * Math.floor(now / 3_600) : tick;
+}
+
+/** The counts whose pages a tick reads (chain.ts, readOpenGames): the hour's on its first two ticks, the other ticks' always. */
+export function countsOf(now: number, period: number): number[] {
+	return tickOfHour(now, period) <= HOURLY_TICK ? [hourCount(now), otherCount(now, period)] : [otherCount(now, period)];
 }
 
 /** What a game on the open list is due for at the chain's clock. */
@@ -166,8 +186,6 @@ export function sameVote(vote: ReportReading | undefined, r: Reading): boolean {
 	return r.kind !== "final" || (vote.homeScore === r.home && vote.awayScore === r.away);
 }
 
-const CLOCK_ORDER: Readonly<Record<Clock, number>> = { "day 7": 0, "hour 24": 1, "the hour": 2 };
-
 /** One tick for one shard. */
 export function runTick(deps: TickDeps): TickResult {
 	const readsLimit = deps.readsLimit ?? READS_PER_EXECUTION;
@@ -191,7 +209,13 @@ export function runTick(deps: TickDeps): TickResult {
 	const runDeps: Deps = { ...deps, evm, send };
 
 	const now = evm.latest().timestamp;
-	const open = readOpenGames(evm, deps.games, deps.shard, pageTurnsOf(now, deps.period), deps.pageSize);
+	const pageSize = deps.pageSize ?? OPEN_PAGE;
+	const open = readOpenGames(evm, deps.games, deps.shard, countsOf(now, deps.period), pageSize);
+	// The places the counts name on this shard's walk: where each class of work begins its turn.
+	const hourTurn = hourCount(now);
+	const otherTurn = otherCount(now, deps.period);
+	const hourHead = placeNamed(hourTurn, open.pages.own, pageSize);
+	const otherHead = placeNamed(otherTurn, open.pages.own, pageSize);
 	const dues = open.rows.map((row) => ({ row, due: dueOf(row, now, deps.period) }));
 	const probes: Probe[] = [];
 	const waiting: string[] = [];
@@ -219,14 +243,10 @@ export function runTick(deps: TickDeps): TickResult {
 	/** The chain reads a full read of this game still needs: its identity and its readings unless in hand (an unverified game has none), its reporters, the three for the payout's refusals. */
 	const readsForFull = (row: OpenGame): number => (identities.has(row.gameId) ? 0 : 1) + (row.status === "unverified" || readings.has(row.gameId) ? 0 : 1) + 1 + 3;
 	/**
-	 * The most requests a full read of this game may send, the league's worst case from the readers' own
-	 * pagination: a verification's, a scoring run's, or none at day 7, which asks no seat.
+	 * The most requests a full read of this game may send, from the readers' own reads (lib.ts, requestsFor):
+	 * a verification's, a scoring run's, or none at day 7, which asks no seat.
 	 */
-	const requestsForFull = (row: OpenGame, why: string): number => {
-		if (why === "verification") return verifyingRequests(row.league, row.date, row.window);
-		if (why === "day 7") return 0;
-		return scoringRequests(row.league, row.start ?? now, row.window);
-	};
+	const requestsForFull = (_row: OpenGame, why: string): number => requestsFor(why === "verification" ? "verification" : why === "day 7" ? "day 7" : "scoring");
 	/** Why a full read of this game cannot start on this tick, or null when it can: one a tick, its reads, its league's worst case in requests. */
 	const shortOf = (row: OpenGame, why: string): string | null => {
 		if (fullRead !== null) return "one full read a tick";
@@ -263,54 +283,51 @@ export function runTick(deps: TickDeps): TickResult {
 		}
 	}
 
-	// Each class of work takes its games in turn, begun from the one its own count names, so the game
-	// that waited or failed last turn is not first next turn and no head keeps the rest from theirs: the
-	// verification and the hour's reads by the hour's count, the clocks in their windows and the probes
-	// by the tick's count.
-	const hourTurn = Math.floor(now / 3_600);
-	const tickTurn = Math.floor(now / deps.period);
-	const inTurn = <T>(list: readonly T[], turn: number): T[] => {
-		const shift = list.length === 0 ? 0 : turn % list.length;
-		return [...list.slice(shift), ...list.slice(0, shift)];
+	// Each class of work takes its games in turn: first the game at the place its own count names, when
+	// that game is due (the page that holds it was read for it, so it is read on that count whatever
+	// else the page holds), then the rest of the class in turn by the count, so a game that waited or
+	// failed last turn is not first next turn and no head keeps the rest from theirs. The verification
+	// and the hour's reads turn by the hour's count, the clocks in their windows and the probes by the
+	// other ticks'.
+	const inTurn = <T extends { readonly row: PlacedGame }>(list: readonly T[], count: number, head: number): T[] => {
+		if (list.length === 0) return [];
+		const byPlace = [...list].sort((a, b) => a.row.place - b.row.place);
+		const shift = ((count % byPlace.length) + byPlace.length) % byPlace.length;
+		const turned = [...byPlace.slice(shift), ...byPlace.slice(0, shift)];
+		const at = turned.findIndex((x) => x.row.place === head);
+		return at <= 0 ? turned : [turned[at], ...turned.slice(0, at), ...turned.slice(at + 1)];
 	};
 
-	// The hour's first tick: one verification, the game whose turn it is, with its league's worst case
-	// of requests in hand. The turns go to the nearer games, those not yet VERIFY_NEAR past their date,
-	// nearest date first; a game further past its date takes a turn only when no nearer game is due.
-	// The others take their turn on the hours after.
-	const verifies = dues.filter((d): d is { row: OpenGame; due: Extract<Due, { kind: "verify" }> } => d.due.kind === "verify" && d.due.fires);
+	// The hour's first tick: one verification, with its worst case of requests in hand. The turns go to
+	// the nearer games, those not yet VERIFY_NEAR past their date; a game further past its date takes a
+	// turn only when no nearer game is due. A game whose full read cannot fit the count does not take the
+	// turn: its line records the wait, and the next due game that fits takes the read the same tick. The
+	// others take their turn on the hours after.
+	const verifies = dues.filter((d): d is { row: PlacedGame; due: Extract<Due, { kind: "verify" }> } => d.due.kind === "verify" && d.due.fires);
 	const near = verifies.filter((v) => now <= v.row.date + VERIFY_NEAR);
-	const queue = (near.length > 0 ? near : verifies).sort((a, b) => Math.abs(a.row.date - now) - Math.abs(b.row.date - now) || (a.row.gameId < b.row.gameId ? -1 : 1));
-	if (queue.length > 0) {
-		const pick = queue[hourTurn % queue.length];
-		fullReadOrWait(pick.row, "verification");
-		for (const v of verifies) if (v !== pick) waiting.push(`${v.row.gameId}: verification waits for its hour's turn`);
+	const tier = near.length > 0 ? near : verifies;
+	for (const v of inTurn(tier, hourTurn, hourHead)) {
+		if (fullRead !== null) waiting.push(`${v.row.gameId}: verification waits for its hour's turn`);
+		else fullReadOrWait(v.row, "verification");
 	}
+	for (const v of verifies) if (!tier.includes(v)) waiting.push(`${v.row.gameId}: verification waits for its hour's turn`);
 
-	// Then the clocks, in turn: day 7 asks no seat, so it costs no request; hour 24 and the hour's read
-	// cost a scoring run's. On the hour's second tick the turn is the hour's, on the others the tick's.
-	const clocks = dues
-		.filter((d): d is { row: OpenGame; due: Extract<Due, { kind: "clock" }> } => d.due.kind === "clock" && d.due.fires)
-		.sort((a, b) => CLOCK_ORDER[a.due.clock] - CLOCK_ORDER[b.due.clock] || (a.row.start ?? 0) - (b.row.start ?? 0));
-	for (const c of inTurn(clocks, tickOfHour(now, deps.period) === HOURLY_TICK ? hourTurn : tickTurn)) fullReadOrWait(c.row, c.due.clock);
-
-	// Then the probes, in start order, begun from the game the tick's count names, so a run of games not
-	// yet final at the front never keeps the ones behind them from their turn. A probe reads the game's
-	// identity (its hints, and its teams for the spare) and its readings (the start report, which says
-	// which seat it asks; a disputed game's votes); it keeps the reads a full read on its final would
-	// need, while this tick has none yet.
-	const due = dues.filter((d): d is { row: OpenGame; due: Extract<Due, { kind: "probe" }> } => d.due.kind === "probe").sort((a, b) => (a.row.start ?? 0) - (b.row.start ?? 0));
-	for (const p of inTurn(due, tickTurn)) {
-		const row = p.row;
+	/**
+	 * One probe: the game's identity (its hints, and its teams for the spare) and its readings (the start
+	 * report, which says which seat it asks; a disputed game's votes) read, keeping the reads a full read
+	 * on its final would need while this tick has none yet; then one request at the seat the start report
+	 * shows readable, and the full read on a final, or on a change for a disputed game.
+	 */
+	const probeOne = (row: PlacedGame): void => {
 		if (requests.used() + 1 > requestsLimit) {
 			waiting.push(`${row.gameId}: no request left for its probe`);
-			continue;
+			return;
 		}
 		const probeReads = (identities.has(row.gameId) ? 0 : 1) + (readings.has(row.gameId) ? 0 : 1);
 		const keep = fullRead === null ? readsForFull(row) - probeReads : 0;
 		if (reads + probeReads + keep > readsLimit) {
 			waiting.push(`${row.gameId}: no read left for its probe`);
-			continue;
+			return;
 		}
 		const identity = identityOf(row.gameId);
 		const held = readingsOf(row.gameId);
@@ -318,12 +335,12 @@ export function runTick(deps: TickDeps): TickResult {
 		const openFor = OPEN_FOR[seat];
 		if (openFor !== null && now - (row.start as number) > openFor) {
 			lines.push(`game ${row.gameId}: seat ${seat} is closed, not probed`);
-			continue;
+			return;
 		}
 		const key = keyFor(deps.keys, seat);
 		if (key === null) {
 			lines.push(`game ${row.gameId}: seat ${seat} has no key, not probed`);
-			continue;
+			return;
 		}
 		const game: Game = { league: identity.league, home: identity.home, away: identity.away, start: row.start as number, n: row.window, hints: identity.hints };
 		const reading = runSync(seat, readerFor(seat)({ game, now, key }), send);
@@ -335,9 +352,24 @@ export function runTick(deps: TickDeps): TickResult {
 			read = changed;
 		}
 		probes.push({ gameId: row.gameId.toString(), seat, kind: reading.kind, final: saysFinal(reading), changed });
-		if (!read) continue;
+		if (!read) return;
 		fullReadOrWait(row, changed === null ? `final at seat ${seat}` : `a change at seat ${seat}`);
-	}
+	};
+
+	// The clocks and the probes. On the hour's second tick the clocks turn by the hour's count (the
+	// hour's reads); on the other ticks both turn by the other ticks' count, and the game at the place
+	// that count names comes before everything else, whatever its class: a clock in its window is first in
+	// its turn, and a probe runs here, before the clocks, so the game is read on that count whatever the
+	// clocks hold. Day 7 asks no seat, so it costs no request; hour 24 and the hour's read cost a scoring
+	// run's. A clock whose full read cannot fit records its wait, and the next that fits takes the read.
+	const clocks = dues.filter((d): d is { row: PlacedGame; due: Extract<Due, { kind: "clock" }> } => d.due.kind === "clock" && d.due.fires);
+	const due = dues.filter((d): d is { row: PlacedGame; due: Extract<Due, { kind: "probe" }> } => d.due.kind === "probe");
+	const hourly = tickOfHour(now, deps.period) === HOURLY_TICK;
+	const probesInTurn = inTurn(due, otherTurn, otherHead);
+	const headProbe = hourly || onTheHour(now, deps.period) ? undefined : probesInTurn.find((p) => p.row.place === otherHead);
+	if (headProbe !== undefined) probeOne(headProbe.row);
+	for (const c of inTurn(clocks, hourly ? hourTurn : otherTurn, hourly ? hourHead : otherHead)) fullReadOrWait(c.row, c.due.clock);
+	for (const p of probesInTurn) if (p !== headProbe) probeOne(p.row);
 
 	return { now, shard: deps.shard, open: open.total, mine: open.rows.length, pages: open.pages, reads, requests: requests.used(), probes, fullRead, waiting, lines };
 }

@@ -13,11 +13,11 @@ is in it, since those live in the program, inside the fingerprint.
 |---|---|
 | `main.ts` | the entry: the games set's creation event as the trigger for a start, the tick as a cron in shards for the ends, the chain through the EVM capability, the feeds through confidential HTTP, the write through the reporter |
 | `lib.ts` | pure: the config schema, the chain table, the games set's event and read shapes, the one report shape as the reporter decodes it, the seat keys as the transport fills them, the tick's constants, the transport's memo and count |
-| `chain.ts` | what the workflow reads about a game, from state: a shard's pages of the games set's open list, each game's clocks, date and league; a game's identity, its start readings and each seat's last vote, its reporters; and what the games set refuses as a payout |
+| `chain.ts` | what the workflow reads about a game, from state: a shard's pages of the games set's open list, each game's clocks, date, league and place on the shard's walk; a game's identity, its start readings and each seat's last vote, its reporters; and what the games set refuses as a payout. A page whose rows are shorter than the interface's is refused whole |
 | `run.ts` | one run for one game: decide, write; written against interfaces so a test runs it with a fake chain and saved feed answers |
 | `tick.ts` | one cron fire for one shard of the open list: the clocks, the probe at seat 3, the full read on a final or a clock, the verification on the hour's first tick, under the platform's quotas |
 | `abi/IOspexGames.json` | the games set's interface ABI as forge builds it at the commit the reads are coded to; `abi.test.ts` pins every read and the open list's row to it |
-| `*.test.ts` | `bun test`: the ABI pins, the four never-lines' wrapper halves, the chain reads, the tick, the worst case derived from the readers (`budget.test.ts`), the pages and the hour over 48 hours (`parity.test.ts`) |
+| `*.test.ts` | `bun test`: the ABI pins, the four never-lines' wrapper halves, the chain reads, the tick, the worst case derived from the readers and the viability table (`budget.test.ts`), every game's entry within the bound on a stable 500-game list (`parity.test.ts`) |
 | `config.production.example.json` | the config template the reproducible build writes from; every address a placeholder |
 | `secrets.yaml` | the four seat keys' names in the vault |
 | `workflow.yaml` | the CRE target: `osgames` on the onchain registry |
@@ -49,12 +49,16 @@ delivery (`rehearsal/`), every report kind through the production forwarder's ow
 games set, with the game's state as the receipt.
 
 **The tick.** Every five minutes (the schedule is config, inside the fingerprint) each shard reads its
-own pages of the games set's open list: pages of 64 rows, shard k of n reading pages k, k + n, k + 2n
-and so on, its first every tick, its page by the tick's count every tick, and on the hour's first two
-ticks its page by the hour's count too, so no shard reads the whole list and each class of work (the
-verification on the hour's first tick, the hour's reads on its second, the probes and the clocks'
-windows on every tick) reaches every page of its shard within own − 1 of its own ticks, hours for the
-hour's classes, whatever factor the schedule shares with the hour. A game past its written start plus the league's
+own pages of the games set's open list: pages of 64 rows, shard k of n owning pages k, k + n, k + 2n
+and so on. The page follows the game, never the game the page: each class of work (the verification
+on the hour's first tick, the hour's reads on its second, the clocks in their windows and the probes
+on the hour's other ten ticks) has its own count, the count names a place on the shard's walk over
+its rows (row i of the shard's page m is place i × own + m), the tick reads its first page and the
+page that holds the place, and the class begins its turn at the game there, then takes the rest in
+turn by the count. So every game on the shard that is due for a class, and whose full read fits the
+count, enters the program within own × 64 of the class's own ticks, hours for the hour's classes,
+whatever factor the shard's places share with the hour (`parity.test.ts`: a stable 500-game list on
+three shards, every game entered within 192, 192 and 128 own ticks). A game past its written start plus the league's
 expected duration (a table in `lib.ts`) is probed: its identity and its readings read, two chain reads,
 then one request at the seat the start report shows readable: seat 3 by its hint, or the spare where
 the start marked seat 3 silent for the game (no usable hint, or a hint that failed the board check),
@@ -65,40 +69,45 @@ on the hour's second tick; a disputed game is probed for a change against its vo
 in full on the hour's second tick too. On the hour's first tick the full read is a verification: one
 game the creation trigger's run left unverified (the feeds list a game days ahead, a creator may
 create it months ahead), from seven days before its date until the game leaves the list, the nearer
-dates first and in turn when there are several (a game more than two days past its date takes a turn
+games first and in turn when there are several (a game more than two days past its date takes a turn
 only when no nearer game is due), so a game is verified when the feeds first carry it, however late,
-and never skipped for good. Each class of work (the verification,
-the hour's reads, the clocks in their windows, the probes) takes its games in turn by its own count, so
-a game that waited or failed last turn is not first next turn and no head keeps the rest from theirs. A
-full read never runs on the tick itself.
+and never skipped for good. A game whose full read cannot fit the count does not take the turn: its
+line records the wait, and the next due game that fits takes the read the same tick. A full read
+never runs on the tick itself.
 
 **The quotas.** The platform allows a run 15 chain reads and 15 feed requests. A tick reads the header
-and up to two pages, probes at two reads each (the identity and the readings), and runs at most one
+and up to three pages, probes at two reads each (the identity and the readings), and runs at most one
 full read, started only with its reads in hand (six, or the four a probe left to read) and the most
-requests the program may send for that league, derived from the readers' own pagination (`lib.ts`,
-`scoringRequests` and `verifyingRequests`; `budget.test.ts` derives the numbers by running the readers).
-A scoring run reads the game's window, three filing dates for a day's window, one page a date at seats
-1 and 2 for a league under a hundred teams, one request each at seats 3 and 4: 8. A verification reads
-two days around the date by team and the window again from the start chosen, the board, seat 3's
-result and the spare: 13. Day 7 asks no seat. College fills four pages a date or more, and each reader
-stops at the program's own bound of twelve, so its worst case is 26 for a scoring run and 27 for a
-verification, past the platform's 15: under that count a college game's full read waits every tick and
-its verification every hour, nothing of it sent, until the per-execution quota is raised, which is the
-platform's to do. A full read found without room waits for the next tick or its next turn, where the
-probes begin from another game, holding the work. Should the count still stop a run, the readers raise
-the cut rather than read the seat silent, the program decides nothing, nothing is written, and the
-tick's line says cut. A request already made in a run is answered from memory, so the probe's answer
-serves the full read, and a start, which the program confirms by reading every seat again in the
-window, sends 11 distinct requests of the 18 it asks on the saved answers. Throughput: one full read
-per tick per shard, so twelve finals an hour per shard, and one verification an hour per shard.
+requests the program may send for it. The readers ask for one game at a time (seat 1 for the two
+teams' games on the window's dates by its own ids for the teams, seat 2 for each team's games by its
+own spelling, seat 3 for its result by hint, the spare for the game by its id or its slate), so the
+count turns on no league: a scoring run is 1 + 2 + 1 + 1 = 5, a verification 9 (the range read at
+seats 1, 2 and the spare, the board, then the window again at seats 1 and 2 and seat 3's result), day 7
+none (`lib.ts`, `requestsFor`; `budget.test.ts` derives the numbers by running the readers and the
+program in every league, college included, and on the saved answers). The assumption behind them: a
+team's games on a window's filing dates fit one page of a hundred rows. A feed that pages past it is
+stopped by the program's own bound on a reader (twelve), and the tick's count cuts the run first: the
+readers raise the cut rather than read the seat silent, the program decides nothing, nothing is
+written, and the tick's line says cut. A request already made in a run is answered from memory, so the
+probe's answer serves the full read: a scoring run after a probe sends 4 more. What one game's answer
+weighs, per seat and league, is the viability table in `budget.test.ts`, from the saved answers: under
+10 KB at seats 1 and 2 in every league saved, 200 bytes at seat 3, the spare's slate 0.6 to 20 KB;
+the two slates still asked for are the ones past the platform's 25 KB for an answer: seat 3's board at
+verification in college football as saved (29,367 bytes) and in college basketball in season, and the
+spare's slate for a college basketball game created without its id, in season. Those are the wrong
+feeds for those leagues at those reads, and they are reported, not worked around. Throughput: one
+full read per tick per shard, so twelve finals an hour per shard, and one verification an hour per shard.
 
 **Waiting.** The games set's change that stores a game's identity, its readings and the open list is
 in review. Its reads are coded as its branch gives them: the interface's ABI at that branch's head is
 committed as `abi/IOspexGames.json`, and `abi.test.ts` pins every read and the open list's row to it,
-field for field in its order, so a row the games set changes fails the suite, never the tick. The
+field for field in its order, so a row the games set changes fails the suite, never the tick; a page
+whose rows are shorter than the interface's eight words is refused whole, naming the row, and the
+tick reads nothing (`chain.ts`, `checkRows`). The
 rehearsal still reads the games set at contracts-v2 main from its events, on a fork
-(`rehearsal/logs.ts`), until it is re-run against that games set. The first simulation on a college
-slate, with the platform's limits enforced, is the next proof after the merge.
+(`rehearsal/logs.ts`), until it is re-run against that games set. The first simulation on a pro slate, with the platform's limits enforced, is the next proof after the
+merge; the live feeds' answers to the one-game requests (seat 1 by team ids, seat 2 by team name) are
+the capture's to show, since no such answer is saved yet.
 
 ## Build and test
 

@@ -6,8 +6,9 @@
 // reporters). The one log the workflow reads is its trigger's own, the creation event, for the start.
 //
 // The platform allows a run 15 chain reads, so the reads are few and whole: a shard reads its own
-// pages of the open list, one per read, its first page every tick and one other in turn; a probe reads
-// the game's identity; a full read its identity, its readings and its reporters, three.
+// pages of the open list, one per read, its first page every tick and the pages the counts of its
+// classes of work name (placeNamed); a probe reads the game's identity and its readings; a full read
+// its identity, its readings and its reporters, three.
 
 import type { Address, Hex } from "viem";
 import type { ChainGame, PayoutRefused, ReportReading } from "../scoring/src/chain";
@@ -36,15 +37,44 @@ export interface OpenGame {
 	readonly date: number;
 }
 
+/**
+ * The shard's walk over its rows, by which each class of work takes its turns (tick.ts): count c names
+ * page c mod own of the shard's pages and row floor(c / own) mod pageSize of it, so every page is
+ * named within own counts and every place within own x pageSize. A row's place is the count that
+ * names it. The tick reads the page the count names and begins the class's turn at that place, so the
+ * game there is read on that count whatever else the page holds: the page follows the game, never
+ * the game the page.
+ */
+export function placeNamed(count: number, own: number, pageSize: number): number {
+	const places = own * pageSize;
+	if (places === 0) return 0;
+	return ((count % places) + places) % places;
+}
+
+/** The shard's page a place lies on. */
+export function pageOfPlace(place: number, own: number): number {
+	return own === 0 ? 0 : place % own;
+}
+
+/** The place of row `index` of the shard's page `page`. */
+export function placeOf(page: number, index: number, own: number): number {
+	return index * own + page;
+}
+
+/** A row of the open list with its place on its shard (placeNamed). */
+export interface PlacedGame extends OpenGame {
+	readonly place: number;
+}
+
 /** Which of the open list's pages a tick reads: shard `index` of `count` reads the pages index, index + count, index + 2 count, ... */
 export interface Shard {
 	readonly index: number;
 	readonly count: number;
 }
 
-/** The shard's rows this tick, with what the read cost and what it covered. */
+/** The shard's rows this tick, each with its place, with what the read cost and what it covered. */
 export interface OpenList {
-	readonly rows: readonly OpenGame[];
+	readonly rows: readonly PlacedGame[];
 	readonly reads: number;
 	/** How many games the whole list holds, from the first page's answer. */
 	readonly total: number;
@@ -124,26 +154,54 @@ export function readPayoutRefused(evm: Evm, games: Address, gameReporters: reado
 }
 
 /**
- * The shard's pages of the games set's open list, one read each. The shard's first page is read every
- * tick (its answer carries the list's total, which says how many pages the shard owns); of its other
- * pages, one is read per turn handed in, the page the turn's count names, so a list longer than a
- * tick's pages is covered over the turns of each class of work and no tick reads past its budget. Two
- * turns naming one page read it once. A page is one block's snapshot, and an end moves the last open
- * game into the ended one's place, so a game can be missed on one tick and seen on the next.
+ * Refuses a page whose rows are shorter than the interface's row: eight words before the league string
+ * (lib.ts, OPEN_GAME). The decoder reads a row's words by position, so a row that omitted a word
+ * before the string would still decode, its date read as the string's length, and the tick would
+ * decide on it. Here each row's league offset, its seventh word, must reach past the eight words the
+ * interface's head holds; a page of any other shape fails before it is decoded, naming the row, and
+ * the tick reads nothing.
  */
-export function readOpenGames(evm: Evm, games: Address, shard: Shard = { index: 0, count: 1 }, turns: readonly number[] = [0], pageSize = OPEN_PAGE): OpenList {
+export function checkRows(data: Hex, offset: bigint): void {
+	const words = (data.length - 2) / 64;
+	if (!Number.isInteger(words) || words < 2) throw new Error(`the page at ${offset} is ${data.length - 2} hex characters, not whole words`);
+	const word = (i: number, what: string): bigint => {
+		if (!Number.isInteger(i) || i < 0 || i >= words) throw new Error(`the page at ${offset}: ${what} lies past its ${words} words`);
+		return BigInt(`0x${data.slice(2 + i * 64, 2 + (i + 1) * 64)}`);
+	};
+	const rowsAt = Number(word(0, "the rows' offset") / 32n);
+	const count = Number(word(rowsAt, "the rows' count"));
+	for (let i = 0; i < count; i++) {
+		const row = rowsAt + 1 + Number(word(rowsAt + 1 + i, `row ${i}'s offset`) / 32n);
+		const league = word(row + 6, `row ${i}'s league offset`);
+		if (league < 8n * 32n) throw new Error(`row ${i} of the page at ${offset} is shorter than the interface's eight words: its league begins at byte ${league}`);
+	}
+}
+
+/**
+ * The shard's pages of the games set's open list, one read each. The shard's first page is read every
+ * tick (its answer carries the list's total, which says how many pages the shard owns), and the page
+ * each count handed in names (placeNamed), so a list longer than a tick's pages is covered over the
+ * counts of each class of work and no tick reads past its budget. Two counts naming one page read it
+ * once; a count naming the first page adds no read. Each row comes with its place on the shard. A page
+ * is one block's snapshot, and an end moves the last open game into the ended one's place, so a game
+ * can be missed on one tick and seen on the next. A page whose rows are shorter than the interface's
+ * is refused whole (checkRows), and the tick reads nothing.
+ */
+export function readOpenGames(evm: Evm, games: Address, shard: Shard = { index: 0, count: 1 }, counts: readonly number[] = [0], pageSize = OPEN_PAGE): OpenList {
 	if (!Number.isInteger(shard.index) || !Number.isInteger(shard.count) || shard.count < 1 || shard.index < 0 || shard.index >= shard.count) throw new Error(`shard ${shard.index} of ${shard.count}`);
-	if (turns.length < 1 || turns.some((t) => !Number.isInteger(t))) throw new Error("a shard reads its first page and one other per turn");
+	if (counts.length < 1 || counts.some((c) => !Number.isInteger(c))) throw new Error("a shard reads its first page and the page each count names");
 	if (!Number.isInteger(pageSize) || pageSize < 1) throw new Error(`a page of ${pageSize}`);
 	let reads = 0;
 	const page = (m: number): { readonly rows: OpenGame[]; readonly total: number } => {
 		const offset = BigInt(shard.index + m * shard.count) * BigInt(pageSize);
+		const data = evm.call(games, readCall("getOpenGames", [offset, BigInt(pageSize)]));
+		reads++;
+		checkRows(data, offset);
 		// The row in the games set's order (lib.ts, OPEN_GAME), each field taken by its name from the decoded tuple.
-		const [answer, total] = readAnswer("getOpenGames", evm.call(games, readCall("getOpenGames", [offset, BigInt(pageSize)]))) as [
+		const [answer, total] = readAnswer("getOpenGames", data) as [
 			readonly { gameId: bigint; status: number; start: bigint; window: bigint; day7Clock: bigint; disputedAt: bigint; league: string; date: bigint }[],
 			bigint,
 		];
-		reads++;
 		return {
 			total: Number(total),
 			rows: answer.map((r) => ({
@@ -161,11 +219,11 @@ export function readOpenGames(evm: Evm, games: Address, shard: Shard = { index: 
 	const first = page(0);
 	const all = Math.ceil(first.total / pageSize);
 	const own = all <= shard.index ? 0 : Math.ceil((all - shard.index) / shard.count);
-	const rows = [...first.rows];
+	const placed = (m: number, list: readonly OpenGame[]): PlacedGame[] => list.map((r, i) => ({ ...r, place: placeOf(m, i, own) }));
+	const rows = placed(0, first.rows);
 	if (own <= 1) return { rows, reads, total: first.total, pages: { own, read: own } };
-	const rest = own - 1;
-	const named = [...new Set(turns.map((turn) => 1 + (((turn % rest) + rest) % rest)))];
-	for (const m of named) rows.push(...page(m).rows);
+	const named = [...new Set(counts.map((c) => pageOfPlace(placeNamed(c, own, pageSize), own)))].filter((m) => m !== 0);
+	for (const m of named) rows.push(...placed(m, page(m).rows));
 	return { rows, reads, total: first.total, pages: { own, read: 1 + named.length } };
 }
 

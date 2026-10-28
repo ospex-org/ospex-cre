@@ -18,12 +18,9 @@ import { z } from "zod";
 import { READING_KIND, REPORT_KIND, type ChainGame, type Report, type ReportReading } from "../scoring/src/chain";
 import type { Keys } from "../scoring/src/keys";
 import { silentForGame } from "../scoring/src/rule";
-import { Cut, MAX_REQUESTS } from "../scoring/src/run";
+import { Cut } from "../scoring/src/run";
 import { SEATS, SPARE, seatRow } from "../scoring/src/table";
-import { TEAMS } from "../scoring/src/teams/index";
 import type { HttpRequest, HttpResponse, Reading, Seat } from "../scoring/src/types";
-import { START_BOUND } from "../scoring/src/verify";
-import { filingDates } from "../scoring/src/window";
 
 // ──────────────────────────── The chain ────────────────────────────
 
@@ -147,67 +144,31 @@ export const READS_PER_EXECUTION = 15;
 export const REQUESTS_PER_EXECUTION = 15;
 
 /**
- * The most requests one full read may send, by league, derived from the readers' own pagination and
- * the program's own bound on a reader. A full read starts only when this fits in the count the tick
- * has left, so the tick's own budget never cuts a run short of the seats the program would read: a run
- * cut short would decide on the part it saw (lib.ts, counted; the readers raise a cut). Per seat:
+ * The most requests one full read may send, from the readers' own reads: each reader asks for the one
+ * game, so the count turns on no league. Seat 1 asks once (the two teams' games on the window's filing
+ * dates, by its own ids for the teams, one page); seat 2 once per team, two (one where its list lacks
+ * a team); seat 3 once (its result by hint, or the board at verification); the spare once (by its id,
+ * or its slate). A full read starts only when this fits in the count the tick has left, so the tick's
+ * own budget never cuts a run short of the seats the program would read: a run cut short would decide
+ * on the part it saw (counted, below; the readers raise the cut). The assumption behind each number,
+ * written where the claim is made: a team's games on a window's filing dates fit one page of a hundred
+ * rows. A feed that pages past it is stopped by the program's own bound on a reader
+ * (scoring/src/run.ts, MAX_REQUESTS, 12), and the count cuts the run first, with the cut on the line.
  *
- *   seats 1 and 2   one request per filing date of the window read (window.ts, filingDates) per page
- *                   of ROWS_A_PAGE rows. A date lists at most one game per team of the league's own
- *                   list (baseball's doubleheaders stay under a page), so a date fills
- *                   ceil(teams / 100) pages at seat 1, which ends on the page without a cursor, and
- *                   floor(teams / 100) + 1 at seat 2, which asks once more after a full page. One
- *                   reader run stops at MAX_REQUESTS (12) and reads silent, the program's own bound.
- *   seat 3          one: its result by hint, or the board at verification.
- *   seat 4          one.
- *
- * A scoring run (a verified game; a disputed one before day 7) reads the game's window, 3 dates for a
- * day's window: 3 + 3 + 1 + 1 = 8 for a league whose dates fit one page (the saved cases' most), and
- * 12 + 12 + 2 = 26 for college, where both readers reach the bound. A verification reads two days
- * around the date by team (4 dates) and then the window again from the start chosen, which reaches one
- * date more when the start is a day past the date; a request already made is answered from memory, so
- * only that date's pages are sent again: 5 + 5 + 3 = 13 for a league of one page (the board, seat 3's
- * result, the spare), and 12 + 12 + 3 = 27 for college, whose readers are cut on the first read. Day 7
- * asks no seat. The numbers are derived by running the readers in budget.test.ts.
+ * A scoring run (a verified game; a disputed one before day 7): 1 + 2 + 1 + 1 = 5. A verification:
+ * seats 1 and 2 over the range the games set accepts a start in (1 + 2), the board (1), the spare (1),
+ * and seat 3's result where the board no longer lists the hint (1); then every seat read again in the
+ * window from the start chosen, whose dates differ from the range's, so memory serves none of it at
+ * seats 1 and 2 (1 + 2), seat 3's result where it counts (1: the one the board's miss did not read),
+ * the spare from memory: 9. Day 7 asks no seat. budget.test.ts derives each number by running the
+ * readers and the program against a feed that answers one game at a time, in every league.
  */
-export const ROWS_A_PAGE = 100;
+export const SCORING_REQUESTS = 5;
+export const VERIFYING_REQUESTS = 9;
 
-/** The pages a filing date of a league fills at seats 1 and 2: 1 and 1 for a league under 100 teams. */
-export function pagesADate(league: string): { readonly 1: number; readonly 2: number } {
-	const teams = Object.prototype.hasOwnProperty.call(TEAMS, league) ? TEAMS[league].length : 0;
-	return { 1: Math.ceil(teams / ROWS_A_PAGE), 2: Math.floor(teams / ROWS_A_PAGE) + 1 };
-}
-
-/** One reader run over `dates` filing dates at `pages` a date, stopped at the program's bound. */
-function readerSends(dates: number, pages: number): number {
-	return Math.min(dates * pages, MAX_REQUESTS);
-}
-
-/** The most requests a scoring run of a game in `league` sends, its window [start, start + window). */
-export function scoringRequests(league: string, start: number, window: number): number {
-	const dates = filingDates({ from: start, to: start + window }).length;
-	const p = pagesADate(league);
-	return readerSends(dates, p[1]) + readerSends(dates, p[2]) + 2;
-}
-
-/**
- * The most requests a verification of a game in `league` sends: the range read, [date - START_BOUND,
- * date + START_BOUND], then the window again from the start chosen, whose new dates are the ones a
- * start at the range's far end reaches, sent only while the re-read's own run is under the bound (the
- * new date is its last). A reader cut on the range read makes the run wait, with no re-read.
- */
-export function verifyingRequests(league: string, date: number, window: number): number {
-	const range = filingDates({ from: date - START_BOUND, to: date + START_BOUND + 1 });
-	const again = filingDates({ from: date + START_BOUND, to: date + START_BOUND + window });
-	const fresh = again.filter((d) => !range.includes(d)).length;
-	const p = pagesADate(league);
-	const seat = (pages: number): number => {
-		const first = range.length * pages;
-		if (first > MAX_REQUESTS) return MAX_REQUESTS;
-		const before = (again.length - fresh) * pages;
-		return first + Math.max(0, Math.min(fresh * pages, MAX_REQUESTS - before));
-	};
-	return seat(p[1]) + seat(p[2]) + 3;
+/** The most requests a full read sends, by what the read is: a verification, day 7, or a scoring run. */
+export function requestsFor(why: "verification" | "day 7" | "scoring"): number {
+	return why === "verification" ? VERIFYING_REQUESTS : why === "day 7" ? 0 : SCORING_REQUESTS;
 }
 
 /** The chain reads one full read makes: the identity, the readings, the reporters, the coin, the approved list, the payout's record. */
@@ -221,13 +182,13 @@ export const READS_PER_FULL_READ = 6;
 export const READS_PER_PROBE = 2;
 
 /**
- * The most of the open list's pages one shard reads in a tick: its first page every tick; its page by
- * the tick's count every tick, the turn of the probes and the clocks' windows, which run on every
- * tick; and on the hour's first two ticks its page by the hour's count, the turn of the verification
- * (the first tick) and the hour's reads (the second). Each class of work so reaches every page of its
- * shard within own - 1 of its own ticks, hours for the hour's classes (tick.ts, pageTurnsOf), and the
- * reads for the probes and the full read stay in hand: 1 for the header, up to 3 here, 6 for a full
- * read, the rest for probes.
+ * The most of the open list's pages one shard reads in a tick: its first page every tick; the page the
+ * other ticks' count names every tick, the turn of the probes and the clocks' windows (tick.ts,
+ * otherCount); and on the hour's first two ticks the page the hour's count names, the turn of the
+ * verification (the first tick) and the hour's reads (the second). Each count names a place on the
+ * shard (chain.ts, placeNamed), and the page that holds it is the one read, so the game at that place
+ * is read on that count; the reads for the probes and the full read stay in hand: 1 for the header, up
+ * to 3 here, 6 for a full read, the rest for probes.
  */
 export const MOST_PAGES_PER_TICK = 3;
 
@@ -652,8 +613,8 @@ export function memoized(send: (req: HttpRequest) => HttpResponse): (req: HttpRe
  * A transport that refuses the request past the limit, before sending, so the run's own count is what
  * stops it, never the platform's refusal. The refusal is a cut (scoring/src/run.ts, Cut): the readers
  * raise it rather than read the seat silent, so a run the count stops decides nothing and writes
- * nothing. A full read is started only when its league's worst case fits the count (scoringRequests,
- * verifyingRequests), so the cut is the backstop, not the plan.
+ * nothing. A full read is started only when its worst case fits the count (requestsFor), so the cut
+ * is the backstop, not the plan.
  */
 export function counted(send: (req: HttpRequest) => HttpResponse, limit: number): { send: (req: HttpRequest) => HttpResponse; used: () => number } {
 	let used = 0;
