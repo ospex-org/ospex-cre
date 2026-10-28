@@ -1672,5 +1672,365 @@
     "sha256": "837caff750d666d6f725a91482a9987ab058e48dcff4c0f38ced7cdd97716644",
     "bytes": 575,
     "capturedAt": "2026-10-24T03:46:25.472Z"
+  },
+  {
+    "seat": 1,
+    "path": "/nfl/v1/games?dates[]=2026-10-19&dates[]=2026-10-20&dates[]=2026-10-21&team_ids[]=30&team_ids[]=21&per_page=100",
+    "status": 200,
+    "file": "seat1/nfl/nfl-v1-games-dates-2026-10-19-dates-2026-10-20-dates-2026-10-21-team-ids-30-team-ids-21-per-page-100.json",
+    "sha256": "c5b5c269ed405e2043f7b63a0aaf9ab58dfa5436654430339d450c5735ed379c",
+    "bytes": 875,
+    "capturedAt": "2026-10-28T18:27:30.374Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NFL&team=San%20Francisco%2049ers&date=2026-10-19,2026-10-21",
+    "status": 200,
+    "file": "seat2/nfl/games-league-nfl-team-san-20francisco-2049ers-date-2026-10-19-2026-10-21.json",
+    "sha256": "973adbc7e7de94b713e29a534b25154a0054c6b6345022e7c475e517eff5339a",
+    "bytes": 1355,
+    "capturedAt": "2026-10-28T18:27:30.809Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NFL&team=Washington%20Commanders&date=2026-10-19,2026-10-21",
+    "status": 200,
+    "file": "seat2/nfl/games-league-nfl-team-washington-20commanders-date-2026-10-19-2026-10-21.json",
+    "sha256": "eb0a66d6a0c303d1c4d6bc7762234d1c665d0e72212ac3cc3ad7afd2b718d429",
+    "bytes": 1355,
+    "capturedAt": "2026-10-28T18:27:32.102Z"
+  },
+  {
+    "seat": 1,
+    "path": "/v1/games?dates[]=2026-10-21&dates[]=2026-10-22&dates[]=2026-10-23&team_ids[]=14&team_ids[]=10&per_page=100",
+    "status": 200,
+    "file": "seat1/nba/v1-games-dates-2026-10-21-dates-2026-10-22-dates-2026-10-23-team-ids-14-team-ids-10-per-page-100.json",
+    "sha256": "cceb289ab3f2a4115ba8b73815a0edeaac740e90408f1f195c5d7e98d348daf1",
+    "bytes": 2707,
+    "capturedAt": "2026-10-28T18:27:43.138Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NBA&team=Los%20Angeles%20Lakers&date=2026-10-21,2026-10-23",
+    "status": 200,
+    "file": "seat2/nba/games-league-nba-team-los-20angeles-20lakers-date-2026-10-21-2026-10-23.json",
+    "sha256": "d3f899894aa3981208f77c5d86e792a5244f7d3d429529b21d19ed88cc5ff6ac",
+    "bytes": 2674,
+    "capturedAt": "2026-10-28T18:27:43.283Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NBA&team=Golden%20State%20Warriors&date=2026-10-21,2026-10-23",
+    "status": 200,
+    "file": "seat2/nba/games-league-nba-team-golden-20state-20warriors-date-2026-10-21-2026-10-23.json",
+    "sha256": "f1ea21e5bc5fe5b86986b2dbafe30aff3d50fea2dbe0893d9eb7ecf88b3f86fb",
+    "bytes": 2677,
+    "capturedAt": "2026-10-28T18:27:44.764Z"
+  },
+  {
+    "seat": 1,
+    "path": "/mlb/v1/games?dates[]=2026-10-19&dates[]=2026-10-20&team_ids[]=27&team_ids[]=8&per_page=100",
+    "status": 200,
+    "file": "seat1/mlb/mlb-v1-games-dates-2026-10-19-dates-2026-10-20-team-ids-27-team-ids-8-per-page-100.json",
+    "sha256": "81ad1c28210ac6a2b6c9d6c7742fae6e4ebe8dc65fa6a93ebaaeed6d2407ed80",
+    "bytes": 1888,
+    "capturedAt": "2026-10-28T18:27:56.138Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=MLB&team=Tampa%20Bay%20Rays&date=2026-10-19,2026-10-20",
+    "status": 200,
+    "file": "seat2/mlb/games-league-mlb-team-tampa-20bay-20rays-date-2026-10-19-2026-10-20.json",
+    "sha256": "51036fb43d4e1dbbaa131cb082f14c69e9b8b925fc6d17787ea81c89fb9c3b46",
+    "bytes": 1376,
+    "capturedAt": "2026-10-28T18:27:56.249Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=MLB&team=Cleveland%20Guardians&date=2026-10-19,2026-10-20",
+    "status": 200,
+    "file": "seat2/mlb/games-league-mlb-team-cleveland-20guardians-date-2026-10-19-2026-10-20.json",
+    "sha256": "24c3f821cfdfb11e50c7ab684fefa26fc8f23443209286e75507a9251f65b970",
+    "bytes": 1376,
+    "capturedAt": "2026-10-28T18:27:57.779Z"
+  },
+  {
+    "seat": 1,
+    "path": "/nhl/v1/games?dates[]=2026-10-21&dates[]=2026-10-22&dates[]=2026-10-23&team_ids[]=51&team_ids[]=23&per_page=100",
+    "status": 200,
+    "file": "seat1/nhl/nhl-v1-games-dates-2026-10-21-dates-2026-10-22-dates-2026-10-23-team-ids-51-team-ids-23-per-page-100.json",
+    "sha256": "2b1956eb708f2eee2459a41d71f9a4bf9315fd84cc43c8b02f4303b7d321ffe7",
+    "bytes": 578,
+    "capturedAt": "2026-10-28T18:28:09.159Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NHL&team=Boston%20Bruins&date=2026-10-21,2026-10-23",
+    "status": 200,
+    "file": "seat2/nhl/games-league-nhl-team-boston-20bruins-date-2026-10-21-2026-10-23.json",
+    "sha256": "bbef669bdde0ce5ffbe2e5d7144645275a5ff10384597549b8cec5c1d6efe0c6",
+    "bytes": 1325,
+    "capturedAt": "2026-10-28T18:28:09.269Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NHL&team=Nashville%20Predators&date=2026-10-21,2026-10-23",
+    "status": 200,
+    "file": "seat2/nhl/games-league-nhl-team-nashville-20predators-date-2026-10-21-2026-10-23.json",
+    "sha256": "6a3c899d3e6bcc79b1af22836341444e51d63f463bbad22d6fbd48dc53d9ed21",
+    "bytes": 1325,
+    "capturedAt": "2026-10-28T18:28:10.773Z"
+  },
+  {
+    "seat": 1,
+    "path": "/ncaaf/v1/games?dates[]=2026-10-21&dates[]=2026-10-22&dates[]=2026-10-23&team_ids[]=123&team_ids[]=128&per_page=100",
+    "status": 200,
+    "file": "seat1/ncaaf/ncaaf-v1-games-dates-2026-10-21-dates-2026-10-22-dates-2026-10-23-team-ids-123-team-ids-128-per-page-100.json",
+    "sha256": "46becca67ae0c614e37e5043301921684f427d5a40a020bcc5d80e5c77c250ab",
+    "bytes": 663,
+    "capturedAt": "2026-10-28T18:28:22.162Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NCAAF&team=Appalachian%20State&date=2026-10-21,2026-10-23",
+    "status": 200,
+    "file": "seat2/ncaaf/games-league-ncaaf-team-appalachian-20state-date-2026-10-21-2026-10-23.json",
+    "sha256": "17f216056d73b96f8e811ccf6f6f388f9dd09f7804f44a476ad322605d8bf6dd",
+    "bytes": 1359,
+    "capturedAt": "2026-10-28T18:28:22.279Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NCAAF&team=James%20Madison&date=2026-10-21,2026-10-23",
+    "status": 200,
+    "file": "seat2/ncaaf/games-league-ncaaf-team-james-20madison-date-2026-10-21-2026-10-23.json",
+    "sha256": "e19f4c9243934450f620db323694c918a65dd39c71404ef9bbaa8d0b69423af1",
+    "bytes": 1359,
+    "capturedAt": "2026-10-28T18:28:23.805Z"
+  },
+  {
+    "seat": 1,
+    "path": "/ncaab/v1/games?dates[]=2026-11-02&dates[]=2026-11-03&team_ids[]=74&team_ids[]=43&per_page=100",
+    "status": 200,
+    "file": "seat1/ncaab/ncaab-v1-games-dates-2026-11-02-dates-2026-11-03-team-ids-74-team-ids-43-per-page-100.json",
+    "sha256": "73be264ded66d054f29f2854bffb28fbaaf006a3aeb9672126d3454080e23b36",
+    "bytes": 667,
+    "capturedAt": "2026-10-28T18:28:35.201Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NCAAB&team=Iowa%20State&date=2026-11-02,2026-11-03",
+    "status": 200,
+    "file": "seat2/ncaab/games-league-ncaab-team-iowa-20state-date-2026-11-02-2026-11-03.json",
+    "sha256": "3355342e51baa8191c483cb0f7bc5dc0670546564a1a60799538770e9f24d774",
+    "bytes": 1141,
+    "capturedAt": "2026-10-28T18:28:35.342Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NCAAB&team=Memphis&date=2026-11-02,2026-11-03",
+    "status": 200,
+    "file": "seat2/ncaab/games-league-ncaab-team-memphis-date-2026-11-02-2026-11-03.json",
+    "sha256": "b7ec5dbe6f2ec1f3c175f37cd468308153339c30a15b00c7ebfefda068800e8d",
+    "bytes": 1141,
+    "capturedAt": "2026-10-28T18:28:36.847Z"
+  },
+  {
+    "seat": 4,
+    "path": "/v4/sports/americanfootball_nfl/scores/?daysFrom=3&dateFormat=iso&eventIds=f122527f003276d3bca19efa48c902c1&apiKey=SEATKEY",
+    "status": 200,
+    "file": "seat4/nfl/v4-sports-americanfootball-nfl-scores-daysfrom-3-dateformat-iso-eventids-f122527f003276d3bca19efa48c902c1.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "bytes": 3,
+    "capturedAt": "2026-10-28T18:28:37.121Z"
+  },
+  {
+    "seat": 4,
+    "path": "/v4/sports/americanfootball_nfl/scores/?daysFrom=3&dateFormat=iso&apiKey=SEATKEY",
+    "status": 200,
+    "file": "seat4/nfl/v4-sports-americanfootball-nfl-scores-daysfrom-3-dateformat-iso-at-20261028T1828z.json",
+    "sha256": "96e810a03df991d4084cdede4a5c5f8b44574bd6a0ed2fb6df73fbc13eec8176",
+    "bytes": 8986,
+    "capturedAt": "2026-10-28T18:28:38.977Z"
+  },
+  {
+    "seat": 1,
+    "path": "/nfl/v1/games?dates[]=2026-10-26&dates[]=2026-10-27&dates[]=2026-10-28&team_ids[]=18&team_ids[]=19&per_page=100",
+    "status": 200,
+    "file": "seat1/nfl/nfl-v1-games-dates-2026-10-26-dates-2026-10-27-dates-2026-10-28-team-ids-18-team-ids-19-per-page-100.json",
+    "sha256": "acbfef19f271f73f4f168bb2d8b3386bfd6eba18c8abacb843ccb4d70d0f977c",
+    "bytes": 798,
+    "capturedAt": "2026-10-28T19:19:49.519Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NFL&team=Philadelphia%20Eagles&date=2026-10-26,2026-10-28",
+    "status": 200,
+    "file": "seat2/nfl/games-league-nfl-team-philadelphia-20eagles-date-2026-10-26-2026-10-28.json",
+    "sha256": "60654e292df1d0e9bb7050f10e9c69aa33e55263b3e3917f2c87763edf2f7b4b",
+    "bytes": 1336,
+    "capturedAt": "2026-10-28T19:19:49.896Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NFL&team=Dallas%20Cowboys&date=2026-10-26,2026-10-28",
+    "status": 200,
+    "file": "seat2/nfl/games-league-nfl-team-dallas-20cowboys-date-2026-10-26-2026-10-28.json",
+    "sha256": "5fa867a9df24188068e38255786790d756f5f8ee7b6cf60a1a0a6805313beeeb",
+    "bytes": 1336,
+    "capturedAt": "2026-10-28T19:19:51.142Z"
+  },
+  {
+    "seat": 4,
+    "path": "/v4/sports/americanfootball_nfl/scores/?daysFrom=3&dateFormat=iso&eventIds=4853610e63c246f2027a6a248e642c9a&apiKey=SEATKEY",
+    "status": 200,
+    "file": "seat4/nfl/v4-sports-americanfootball-nfl-scores-daysfrom-3-dateformat-iso-eventids-4853610e63c246f2027a6a248e642c9a.json",
+    "sha256": "6e6d1fea490d10b441352643ef6bf3d4819a2b0671c02deb6d95ca465aaea146",
+    "bytes": 349,
+    "capturedAt": "2026-10-28T19:19:51.401Z"
+  },
+  {
+    "seat": 1,
+    "path": "/mlb/v1/games?dates[]=2026-06-10&dates[]=2026-06-11&dates[]=2026-06-12&team_ids[]=6&team_ids[]=2&per_page=100",
+    "status": 200,
+    "file": "seat1/mlb/mlb-v1-games-dates-2026-06-10-dates-2026-06-11-dates-2026-06-12-team-ids-6-team-ids-2-per-page-100.json",
+    "sha256": "3472af13a3e3cfaae6316ee5ccd5647b485e0d75da78f3912fb83252f9173a48",
+    "bytes": 6322,
+    "capturedAt": "2026-10-28T19:21:19.557Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=MLB&team=Chicago%20White%20Sox&date=2026-06-10,2026-06-12",
+    "status": 200,
+    "file": "seat2/mlb/games-league-mlb-team-chicago-20white-20sox-date-2026-06-10-2026-06-12.json",
+    "sha256": "c2efcd30fc841c927b785606b5f172e6b42b6e83d1ad9d5d974ebead94ff9518",
+    "bytes": 3905,
+    "capturedAt": "2026-10-28T19:21:19.958Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=MLB&team=Atlanta%20Braves&date=2026-06-10,2026-06-12",
+    "status": 200,
+    "file": "seat2/mlb/games-league-mlb-team-atlanta-20braves-date-2026-06-10-2026-06-12.json",
+    "sha256": "5ce7796129d3a95fd945fbe270d85d8e4aa2f3968d95efb2adf1c0d1546bde8c",
+    "bytes": 3871,
+    "capturedAt": "2026-10-28T19:21:21.198Z"
+  },
+  {
+    "seat": 1,
+    "path": "/mlb/v1/games?dates[]=2026-06-10&dates[]=2026-06-11&dates[]=2026-06-12&team_ids[]=13&team_ids[]=11&per_page=100",
+    "status": 200,
+    "file": "seat1/mlb/mlb-v1-games-dates-2026-06-10-dates-2026-06-11-dates-2026-06-12-team-ids-13-team-ids-11-per-page-100.json",
+    "sha256": "fbe56c3be7eae2dda6d07d10bdd84ee00af087af59ec76196419ac596bcb1031",
+    "bytes": 3897,
+    "capturedAt": "2026-10-28T19:21:32.358Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=MLB&team=Los%20Angeles%20Angels&date=2026-06-10,2026-06-12",
+    "status": 200,
+    "file": "seat2/mlb/games-league-mlb-team-los-20angeles-20angels-date-2026-06-10-2026-06-12.json",
+    "sha256": "45b2bfa098b745ae0d57def036c1807ec38c161cc84e60905c22ce8d98fae936",
+    "bytes": 2646,
+    "capturedAt": "2026-10-28T19:21:32.538Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=MLB&team=Houston%20Astros&date=2026-06-10,2026-06-12",
+    "status": 200,
+    "file": "seat2/mlb/games-league-mlb-team-houston-20astros-date-2026-06-10-2026-06-12.json",
+    "sha256": "7c1212f05adeb63867b2e50e55cb3fd99e0b4f95050d2ac886916d79f049785b",
+    "bytes": 2659,
+    "capturedAt": "2026-10-28T19:21:34.004Z"
+  },
+  {
+    "seat": 1,
+    "path": "/mlb/v1/games?dates[]=2026-08-19&dates[]=2026-08-20&dates[]=2026-08-21&team_ids[]=6&team_ids[]=2&per_page=100",
+    "status": 200,
+    "file": "seat1/mlb/mlb-v1-games-dates-2026-08-19-dates-2026-08-20-dates-2026-08-21-team-ids-6-team-ids-2-per-page-100.json",
+    "sha256": "19eac156e65e3908ede2fe681628cd7f0e1ef9618459254d2c9c549c271102f0",
+    "bytes": 9687,
+    "capturedAt": "2026-10-28T19:21:45.405Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=MLB&team=Chicago%20White%20Sox&date=2026-08-19,2026-08-21",
+    "status": 200,
+    "file": "seat2/mlb/games-league-mlb-team-chicago-20white-20sox-date-2026-08-19-2026-08-21.json",
+    "sha256": "0c546323131a2b3ed043c8cd81945d594a9d8eb07794fe8901468a24d6aab142",
+    "bytes": 3914,
+    "capturedAt": "2026-10-28T19:21:45.534Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=MLB&team=Atlanta%20Braves&date=2026-08-19,2026-08-21",
+    "status": 200,
+    "file": "seat2/mlb/games-league-mlb-team-atlanta-20braves-date-2026-08-19-2026-08-21.json",
+    "sha256": "314183dd95d5a7fb5b92edc4e795c6332d555e139ef28879f5f2f18f03455b2f",
+    "bytes": 3928,
+    "capturedAt": "2026-10-28T19:21:47.093Z"
+  },
+  {
+    "seat": 1,
+    "path": "/v1/games?dates[]=2026-10-20&dates[]=2026-10-21&dates[]=2026-10-22&team_ids[]=27&team_ids[]=21&per_page=100",
+    "status": 200,
+    "file": "seat1/nba/v1-games-dates-2026-10-20-dates-2026-10-21-dates-2026-10-22-team-ids-27-team-ids-21-per-page-100.json",
+    "sha256": "56888e185f0590b75042c7f211572227ad0cc2662def94646281b4d4110b164f",
+    "bytes": 1823,
+    "capturedAt": "2026-10-28T19:21:58.380Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NBA&team=San%20Antonio%20Spurs&date=2026-10-20,2026-10-22",
+    "status": 200,
+    "file": "seat2/nba/games-league-nba-team-san-20antonio-20spurs-date-2026-10-20-2026-10-22.json",
+    "sha256": "cf442f133739fb45a651aec1cbe1c64922423cb05ddbe1f69a43a30d96a95fe2",
+    "bytes": 1381,
+    "capturedAt": "2026-10-28T19:21:58.508Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NBA&team=Oklahoma%20City%20Thunder&date=2026-10-20,2026-10-22",
+    "status": 200,
+    "file": "seat2/nba/games-league-nba-team-oklahoma-20city-20thunder-date-2026-10-20-2026-10-22.json",
+    "sha256": "2d830542c4fd006208120852e7dde2539b8a85c041ddb461bacae442da2b080d",
+    "bytes": 2670,
+    "capturedAt": "2026-10-28T19:22:00.346Z"
+  },
+  {
+    "seat": 1,
+    "path": "/v1/games?dates[]=2026-10-21&dates[]=2026-10-22&dates[]=2026-10-23&team_ids[]=14&team_ids[]=10&per_page=100",
+    "status": 200,
+    "file": "seat1/nba/v1-games-dates-2026-10-21-dates-2026-10-22-dates-2026-10-23-team-ids-14-team-ids-10-per-page-100-at-20261028T1922z.json",
+    "sha256": "cceb289ab3f2a4115ba8b73815a0edeaac740e90408f1f195c5d7e98d348daf1",
+    "bytes": 2707,
+    "capturedAt": "2026-10-28T19:22:11.376Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NBA&team=Los%20Angeles%20Lakers&date=2026-10-21,2026-10-23",
+    "status": 200,
+    "file": "seat2/nba/games-league-nba-team-los-20angeles-20lakers-date-2026-10-21-2026-10-23-at-20261028T1922z.json",
+    "sha256": "6ec9112821c8dd5cfa9c9f081bffeddc59032489fc622981475ce5b9ff9bb9a8",
+    "bytes": 2674,
+    "capturedAt": "2026-10-28T19:22:11.500Z"
+  },
+  {
+    "seat": 2,
+    "path": "/games?league=NBA&team=Golden%20State%20Warriors&date=2026-10-21,2026-10-23",
+    "status": 200,
+    "file": "seat2/nba/games-league-nba-team-golden-20state-20warriors-date-2026-10-21-2026-10-23-at-20261028T1922z.json",
+    "sha256": "7e05476c7a7879e60aa3891ca43b70ef649ab5b81e526b6bfc14f301264b734e",
+    "bytes": 2677,
+    "capturedAt": "2026-10-28T19:22:13.011Z"
+  },
+  {
+    "seat": 3,
+    "path": "POST /odds/bygames {\"GameIDs\":[\"8188e4fe-2a4f-43e1-bb96-8cfec05f2cfd\"],\"Sport\":\"NFL\",\"OddType\":\"Game\"}",
+    "status": 200,
+    "file": "seat3/nfl/post-odds-bygames-gameids-8188e4fe-2a4f-43e1-bb96-8cfec05f2cfd-sport-nfl-oddtype-game.json",
+    "sha256": "c5b10cdf2de8c7a4e77012068b6dfe8e1316409bdd21b50ddecfb6ebeeb3f333",
+    "bytes": 579,
+    "capturedAt": "2026-10-28T19:22:16.331Z"
   }
 ]

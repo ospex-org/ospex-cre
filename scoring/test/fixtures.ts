@@ -2,13 +2,14 @@
 // answered from fixtures/, and a request with no saved answer is recorded as a miss so the test
 // asking it fails instead of passing on a guess.
 //
-// The readers ask for one game at a time (seats 1 and 2 by team, the spare by its id when hinted),
-// and no live answer to such a request is saved: the saved pages are the days' slates. A one-game
-// request is answered from the slate pages it would be drawn from, filtered the way the feed filters
-// (seat 1 to the two teams' ids, seat 2 to the team's name, the spare to the id), so a reader's
-// parsing and the pick run on the feed's real records. The filter is this file's, not the feed's: what
-// the live feed returns to such a request is for the capture to show. A date whose slate page is not
-// saved is a miss, as any unsaved answer is.
+// The readers ask for one game at a time (seats 1 and 2 by team, seat 3's board and the spare by its
+// id). Where the feed's own answer to such a request is saved (the capture's one-game answers), it is
+// served as any saved answer is, as of the clock. Where none is, the request is answered from the slate
+// pages it would be drawn from, filtered the way the feed filters (seat 1 to the two teams' ids, seat 2
+// to the team's name, the board and the spare to the id), so a reader's parsing and the pick run on the
+// feed's real records at the clock a test reads at; fixtures.test.ts holds that filter to the feed's
+// own answers wherever both exist. A date whose slate page is not saved is a miss, as any unsaved
+// answer is.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -96,9 +97,8 @@ function latestOnce(pages: readonly unknown[], key: string, idOf: (g: Record<str
 /** How a one-game request is answered from the slate pages, or null for a request served as saved. */
 export function oneGameOf(seat: Seat, path: string): OneGame | null {
 	const at = path.indexOf("?");
-	if (at < 0) return null;
-	const base = path.slice(0, at);
-	const q = new URLSearchParams(path.slice(at + 1));
+	const base = at < 0 ? path : path.slice(0, at);
+	const q = new URLSearchParams(at < 0 ? "" : path.slice(at + 1));
 	if (seat === 1 && q.has("team_ids[]")) {
 		const ids = new Set(q.getAll("team_ids[]"));
 		const dates = q.getAll("dates[]");
@@ -135,6 +135,16 @@ export function oneGameOf(seat: Seat, path: string): OneGame | null {
 			},
 		};
 	}
+	if (seat === 3 && path.startsWith("POST /odds/bygames ")) {
+		// The board's row for an id: drawn from the league's saved board, filtered to the ids asked.
+		const body = JSON.parse(path.slice("POST /odds/bygames ".length)) as { GameIDs?: unknown; Sport?: unknown };
+		const ids = new Set((Array.isArray(body.GameIDs) ? body.GameIDs : []).map((x) => String(x).toLowerCase()));
+		return {
+			firsts: [`/odds/${encodeURIComponent(String(body.Sport ?? ""))}?oddType=Game`],
+			next: () => null,
+			filter: (pages) => (Array.isArray(pages[0]) ? (pages[0] as { ID?: unknown }[]).filter((r) => ids.has(String(r.ID).toLowerCase())) : pages[0]),
+		};
+	}
 	if (seat === 4 && q.has("eventIds")) {
 		const id = (q.get("eventIds") as string).toLowerCase();
 		return {
@@ -151,11 +161,17 @@ export function bytesOf(file: string): Uint8Array {
 	return new Uint8Array(readFileSync(join(ROOT, file)));
 }
 
-/** Which seat a request is for, by its host, and its path. Null if it went anywhere else. */
+/**
+ * Which seat a request is for, by its host, and its path: for a POST, the method, the path and the body
+ * as one key, the form the index saves such an answer under. Null if it went anywhere else.
+ */
 export function locate(req: HttpRequest): { seat: Seat; path: string } | null {
 	for (const row of SEATS) {
 		const prefix = `https://${row.host}/`;
-		if (req.url.startsWith(prefix)) return { seat: row.seat, path: req.url.slice(prefix.length - 1) };
+		if (req.url.startsWith(prefix)) {
+			const path = req.url.slice(prefix.length - 1);
+			return { seat: row.seat, path: req.method === "GET" ? path : `${req.method} ${path} ${req.body ?? ""}` };
+		}
 	}
 	return null;
 }
@@ -203,7 +219,9 @@ export function saved(derive: Derive | undefined, asOf: number): Saved {
 				if (entry === undefined) return miss(path === at.path ? `seat ${at.seat} ${at.path}` : `seat ${at.seat} ${at.path} (no saved page ${path})`);
 				return { entry, body: new TextDecoder().decode(bytesOf(entry.file)) };
 			};
-			const one = oneGameOf(at.seat, at.path);
+			// An answer saved for the request itself, as of the clock, comes first: the capture's own answers to
+			// the one-game requests. Short of one, a one-game request is drawn from the slate pages.
+			const one = answerAsOf(at.seat, at.path, asOf) === undefined ? oneGameOf(at.seat, at.path) : null;
 			if (one === null) {
 				const { entry, body } = served(at.path);
 				if (derive === undefined || entry.status !== 200) return { status: entry.status, body };

@@ -60,7 +60,8 @@ describe("saved answers", () => {
 
 	test("the index keeps paths, never a host or a key", () => {
 		for (const e of INDEX) {
-			expect(e.path.startsWith("/")).toBe(true);
+			// A GET's path, or a POST's method, path and body as one key.
+			expect(e.path.startsWith("/") || /^POST \/\S+ \{/.test(e.path)).toBe(true);
 			expect(e.path).not.toContain("://");
 			for (const row of SEATS) {
 				if ("query" in row.key && e.seat === row.seat) {
