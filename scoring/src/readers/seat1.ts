@@ -37,6 +37,7 @@
 // or any row for the game, makes it an answer the reader could not use (the game's row in a 503); an
 // error object, a page or an empty body on any status is a failure (readers/request.ts, failed).
 
+import { quoted } from "../line";
 import { pick, points, refused, type FeedRecord, type FeedTeam } from "../pick";
 import { clean, silent } from "../run";
 import { leagueRow } from "../table";
@@ -156,9 +157,12 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 		state = Object.prototype.hasOwnProperty.call(STATE, raw) ? STATE[raw] : raw.trim() === "" ? "no_status" : "unrecognized";
 		status = raw;
 	} else {
+		// The older field's word is the feed's own text, whichever word decided the state (hockey's final is
+		// its game_state, beside a status field that can say anything): unrecognized, it is the word (quoted
+		// where a reading carries it, src/pick.ts); otherwise it rides the reader's note through `quoted`.
 		const word = String(g.status ?? g.game_state ?? "");
 		state = f.older(g) ?? (word.trim() === "" ? "no_status" : "unrecognized");
-		status = state === "unrecognized" ? word : `no status_state; ${word.trim()}`.trim();
+		status = state === "unrecognized" ? word : `no status_state; ${quoted(word.trim())}`;
 	}
 	if (state === "final") {
 		const short = f.short(g);

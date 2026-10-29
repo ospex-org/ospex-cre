@@ -180,19 +180,19 @@ game.
   spare past the feed's three-day window is silent by its own date arithmetic, with no request
   sent. Silent is never turned into "no final". A final without points, or one short of a whole game, is silent, an answer the reader
   could not use: scoring never counts it, verification writes no start on it, and the void waits on it.
-* **The line.** A word on a line is a word ([`src/line.ts`](src/line.ts), the one function every
-  line goes through before it is written, and every `why` before it leaves the program; the
-  wrapper's lines go through it too). A feed's own word rides a reading verbatim, in double quotes,
-  so the run's line shows it the first time it happens; a feed can put anything in that field, a
-  request URL with its key included. So before any line is written, a quoted word longer than 32
-  characters or carrying `://`, `?` or `=` becomes `[not a status word]`, and every configured
-  secret value (the seat keys; the board's key is seat 3's) is redacted from any line and any `why`,
-  wherever it appears. A status word is never a URL; the line keeps its diagnostic value for every
-  real word and cannot carry a key ([`test/status.test.ts`](test/status.test.ts): a status field
-  echoing a request URL with a fake key, at each seat under 200, 201, 500 and 503, and a word of 40
-  characters, each the marker, a word of 32 verbatim; a canary key planted in a feed's field, never
-  on a line; the break in [`test/never-void.test.ts`](test/never-void.test.ts)'s header: a line
-  written without the redaction).
+* **The line.** No line carries the query key, raw or escaped, or any feed string that is not a short
+  plain word; the header keys the platform fills are never the workflow's to hold and are protected by
+  the word rule ([`src/line.ts`](src/line.ts), the one function every line goes through before it is
+  written, and every `why` before it leaves the program; the wrapper's lines and the creation handler's
+  rethrown error go through it too). The readers put every feed string on a reading through one quoting
+  helper, so it stands in double quotes. A short plain word is 16 characters or fewer of letters,
+  digits, spaces and `/ : . -`, never a URL; anything else becomes `[not a status word]`, and so does a
+  run outside the quotes carrying `://`, `?` or `=`. Every configured secret value is redacted wherever
+  it appears, compared as the decoded word, so a key holding `"` or `\` is found escaped too. A header
+  key that is itself a short plain word would stand: the residual this rule accepts
+  ([`test/line.test.ts`](test/line.test.ts), [`test/status.test.ts`](test/status.test.ts), and
+  [`../games/line.test.ts`](../games/line.test.ts) at the handlers' own log calls; the breaks are in
+  their headers and in [`test/never-void.test.ts`](test/never-void.test.ts)'s).
 
 ## Open and closed: how long each seat is asked
 

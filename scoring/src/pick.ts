@@ -50,6 +50,7 @@
 // row to score; beside another row that could be the game it does not clear the anomaly for the void,
 // and the reading says so ("chosen").
 
+import { quoted } from "./line";
 import { resolveTeam } from "./teams";
 import { clean, silent } from "./run";
 import type { Game, Reading, Seat } from "./types";
@@ -71,7 +72,12 @@ export interface FeedRecord {
 	 * verbatim in `status`: both read silent, an answer the reader could not use.
 	 */
 	readonly state: "final" | "short" | "postponed" | "canceled" | "not_final" | "no_status" | "unrecognized";
-	/** The feed's own status words, kept for the reading's detail; for "unrecognized", the word verbatim. */
+	/**
+	 * The feed's own status words, kept for the reading's detail: a word the reader matched against its
+	 * own list as that list writes it; for "unrecognized", the word verbatim, which a reading carries only
+	 * through `quoted` (line.ts); for a short final, the reader's note beside the word, any feed string in
+	 * it already through `quoted`. So whatever of it a reading carries, every feed string in it is quoted.
+	 */
 	readonly status: string;
 }
 
@@ -125,7 +131,7 @@ export function refused(game: Game, records: readonly FeedRecord[]): string {
 		const b = resolveFeedTeam(game.league, r.teams[1]);
 		return (a === home && b === away) || (a === away && b === home);
 	});
-	return own === undefined ? "unreadable record" : `unreadable record; the game's row says ${JSON.stringify(own.status)}`;
+	return own === undefined ? "unreadable record" : `unreadable record; the game's row says ${quoted(own.status)}`;
 }
 
 /**
@@ -244,7 +250,8 @@ function readingOf(seat: Seat, league: string, r: FeedRecord, homeKey: string, a
 	const homeTeam = firstIsHome ? r.teams[0] : r.teams[1];
 	const awayTeam = firstIsHome ? r.teams[1] : r.teams[0];
 	// The feed says final, but its count or its points can't make one: silent, an answer the reader
-	// could not use (types.ts, answer); verification writes no start on it, and the void waits on it.
+	// could not use (types.ts, answer); verification writes no start on it, and the void waits on it. The
+	// detail is the reader's note: the list's word, or the older field's word through `quoted` (seat 1).
 	if (r.state === "short") return silent(seat, r.status);
 	if (r.state === "final") {
 		if (homeTeam.points === null || awayTeam.points === null) return silent(seat, "final without points");
@@ -254,7 +261,7 @@ function readingOf(seat: Seat, league: string, r: FeedRecord, homeKey: string, a
 	// kept verbatim, so a feed's own word for a lesser case shows in the run's line the first time it
 	// happens: both silent, an answer the reader could not use.
 	if (r.state === "no_status") return silent(seat, "no status");
-	if (r.state === "unrecognized") return silent(seat, `unrecognized status ${JSON.stringify(r.status)}`);
+	if (r.state === "unrecognized") return silent(seat, `unrecognized status ${quoted(r.status)}`);
 	// The feed's own word that the game will not or did not play rides on the reading: a void may rest
 	// on it (rule.ts). A row scheduled or in play carries none.
 	const recorded = r.state === "postponed" || r.state === "canceled" ? r.state : null;

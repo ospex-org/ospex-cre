@@ -38,6 +38,7 @@
 // a page or an empty body on any status is a failure (readers/request.ts, failed). A refusal for a bad row carries the hint's row's
 // word and its final flag beside it (`the hint's row says "Finished", Final "TRUE"`).
 
+import { quoted } from "../line";
 import { points } from "../pick";
 import { clean, silent } from "../run";
 import { leagueRow } from "../table";
@@ -84,10 +85,10 @@ export function* read(ask: Ask): ReaderRun {
 			}
 			const id = str(r.ID);
 			if (id === null || !ID.test(id)) {
-				if (unusable === null) unusable = r.ID === undefined ? "result without an id" : `result without a usable id: ${String(JSON.stringify(r.ID))}`;
+				if (unusable === null) unusable = r.ID === undefined ? "result without an id" : `result without a usable id: ${quoted(r.ID)}`;
 			} else if (id.toLowerCase() === hint.id) rows.push(r);
 		}
-		const word = rows.length === 0 ? "" : `; the hint's row says ${JSON.stringify(typeof rows[0].FinalType === "string" ? rows[0].FinalType : "")}, Final ${String(JSON.stringify(rows[0].Final))}`;
+		const word = rows.length === 0 ? "" : `; the hint's row says ${quoted(typeof rows[0].FinalType === "string" ? rows[0].FinalType : "")}, Final ${quoted(rows[0].Final)}`;
 		if (unreadable) return silent(SEAT, `unreadable record${word}`);
 		if (unusable !== null) return silent(SEAT, `${unusable}${word}`);
 		// The hint's rows absent from the answer: clean silence. Listed twice, or naming a row for a half or
@@ -116,7 +117,7 @@ function readingOf(r: Record<string, unknown>, id: string): Reading {
 	if (type === "Finished") {
 		// The feed's own word for a whole game played, under its final flag; a flag the reader does not
 		// know is unrecognized, verbatim.
-		if (!isFinalFlag(r.Final)) return silent(SEAT, `unrecognized final flag ${String(JSON.stringify(r.Final))}`);
+		if (!isFinalFlag(r.Final)) return silent(SEAT, `unrecognized final flag ${quoted(r.Final)}`);
 		if (home === null || away === null) return silent(SEAT, "final without points");
 		return { seat: SEAT, kind: "final", home, away, recorded: null, detail: "final", record, answer: "the game" };
 	}
@@ -128,5 +129,5 @@ function readingOf(r: Record<string, unknown>, id: string): Reading {
 	// A row with no status word is a partial row; any other word is one the reader does not know, kept
 	// verbatim so the feed's own word shows in the run's line: both silent, an answer it could not use.
 	if (type.trim() === "") return silent(SEAT, "no status");
-	return silent(SEAT, `unrecognized status ${JSON.stringify(type)}`);
+	return silent(SEAT, `unrecognized status ${quoted(type)}`);
 }

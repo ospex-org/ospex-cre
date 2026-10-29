@@ -19,6 +19,15 @@
 // A stand-in such as `{{.seat2}}`, for a transport that fills a header's key itself, is visible
 // ASCII and passes. A stand-in can't stand for a key in the query: it isn't one query value as
 // given, and the workflow's own transport fills only headers and bodies.
+//
+// What a line may carry of a key (src/line.ts). A key the program holds as a value is redacted from
+// every line, as given and as JSON writes it inside a quoted word: a header key may hold `"` or `\`,
+// which a quoted word writes escaped, so the line function compares the decoded word. In the workflow
+// that is the query key alone: it is read from the vault for the run and rides in the request's URL. A
+// key that goes in a header is never the workflow's to hold: the program is handed its stand-in, the
+// transport fills the value on the way out, and the value never enters the program, so no line can
+// redact it by value. The word rule protects it instead: a feed string on a line is a short plain word
+// (16 characters or fewer of letters, digits, spaces and / : . -) or it is the marker.
 
 import { seatRow } from "./table";
 import type { Seat } from "./types";
