@@ -40,9 +40,10 @@
 // never a void's vote.
 //
 // Every reading says what the reader did with the answer (types.ts, answer), and the void reads that
-// class: its silence is only clean silence. Clean here is an empty answer, the game absent from the
-// listing, or its record outside the window: nothing of the game arrived. Every other silence is an
-// answer the reader could not use, and holds the void: a row of the game without a status word, with
+// class: its silence is only clean silence. Clean here is an empty answer, or a readable list of rows
+// none of which is the game by id or by its names and time (the game absent from the listing, or its
+// record outside the window): nothing of the game arrived. Every other silence is an answer the reader
+// could not use, and holds the void: a row of the game without a status word, with
 // a word the reader does not recognize (kept verbatim on the reading), a final without points or
 // short of a whole game, a record with no game time, two records that could be the game, two copies
 // of a record that disagree about it, two hints. A hint that names the game's row by id chooses which
@@ -106,6 +107,25 @@ export function resolveFeedTeam(league: string, team: FeedTeam): string | null {
 		found = key;
 	}
 	return found;
+}
+
+/**
+ * The detail of an answer refused for a row the reader could not parse: it carries the status word of
+ * the game's own row among the rows that did parse, bound by its two teams and a time inside the
+ * window, so the run's line says the word whether the bad row came first or second.
+ */
+export function refused(game: Game, records: readonly FeedRecord[]): string {
+	const home = resolveTeam(game.league, game.home);
+	const away = resolveTeam(game.league, game.away);
+	if (home === null || away === null || home === away) return "unreadable record";
+	const w = windowOf(game);
+	const own = records.find((r) => {
+		if (r.time === null || !inWindow(r.time, w)) return false;
+		const a = resolveFeedTeam(game.league, r.teams[0]);
+		const b = resolveFeedTeam(game.league, r.teams[1]);
+		return (a === home && b === away) || (a === away && b === home);
+	});
+	return own === undefined ? "unreadable record" : `unreadable record; the game's row says ${JSON.stringify(own.status)}`;
 }
 
 /**

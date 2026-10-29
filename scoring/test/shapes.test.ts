@@ -11,15 +11,17 @@
 //                       (3 x 2); seat 3 silent for the game, the spare the third (2)
 //   inside, first 170   every seat's answer, five at seats 1 to 3 and four at the spare, with both
 //                       finals: 500 - 2 x 192 + 54
-//   after, score 28     three counting seats one final, or two and the third silent, the spare silent,
-//                       in play or the same (4 x 3 x 2); with seat 3 silent for the game, the spare the
-//                       second final beside one of seats 1 and 2 (2 x 2)
+//   after, score 72     three counting seats one final, or two and the third silent, in play or
+//                       postponed, the spare silent, in play or the same (10 x 3 x 2 = 60); with seat
+//                       3 silent for the game, three counting finals or two beside the third silent,
+//                       in play or postponed (at seats 1 and 2) or silent or in play (the spare) (9 x
+//                       2 = 18), less the 6 the first game's shapes already hold
 //   hour 24, void 8     no final, two counting seats off and the third silent (3) or all three off (1),
 //                       the spare silent or in play (x 2); the spare standing in adds none the first
 //                       game's shapes don't have
-//   disputed scores     inside 8 and after 12: three counting votes one final beside the spare's silent,
-//                       not final or the same vote, or two and the spare's the third (6 x 2), less those
-//                       the inside rule refuses; day 7, 20: the 6 a record written inside n can still
+//   disputed scores     inside 8 and after 24: three or more votes with one final, by the ordinary rule
+//                       (after n two counting finals over a third answer, the spare's vote the third
+//                       final), as measured; day 7, 20: the 6 a record written inside n can still
 //                       score by the ordinary rule, and day 7's own 14 (three of a final beside a
 //                       counting seat not final, or beside the other final)
 // The rest (the first records after n, updates, day-7 voids) are as measured at this head.
@@ -38,16 +40,16 @@ describe("the shapes file: every report the program can send", () => {
 	test("counted, by when it was decided, the game it meets and what it is", () => {
 		expect(now.runs).toEqual({ verification: 1_728, scoring: 496_964, records: 1_692 });
 		expect(now.counts).toEqual({
-			total: 2_109,
+			total: 1_951,
 			"verification, unverified, start": 3,
 			"inside the window, verified, score": 8,
 			"inside the window, verified, dispute record": 170,
 			"inside the window, disputed, score": 8,
 			"inside the window, disputed, update": 495,
-			"after the window, verified, score": 28,
-			"after the window, verified, dispute record": 404,
-			"after the window, disputed, score": 12,
-			"after the window, disputed, update": 495,
+			"after the window, verified, score": 72,
+			"after the window, verified, dispute record": 202,
+			"after the window, disputed, score": 24,
+			"after the window, disputed, update": 483,
 			"hour 24, verified, void": 8,
 			"day 7, disputed, score": 26,
 			"day 7, disputed, void": 452,

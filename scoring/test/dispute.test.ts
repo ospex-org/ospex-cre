@@ -99,7 +99,8 @@ describe("the first record: posted at the first disagreement, inside n or after"
 			[[1, 2, 3], true, ["A", "B", "A", "silent"], RECORD],
 			[[1, 2, 4], true, ["A", "B", "silent", "none"], RECORD],
 			[[1, 2, 3], false, ["A", "B", "silent", "silent"], RECORD],
-			[[1, 2, 3], false, ["A", "A", "none", "silent"], "dispute: after n: finals beside answers without a final"],
+			[[1, 2, 3], false, ["A", "A", "none", "silent"], "score: after n: two counting seats or more, the same final"], // a third answer that is not a competing final neither votes nor disputes
+			[[1, 2, 3], false, ["A", "none", "none", "silent"], "wait: after n: one final, no second, and the answers beside it neither vote nor dispute; seat 1 a final, seat 2 in progress, seat 3 in progress, seat 4 silence (silent)"], // a lone final beside answers in play: no record
 			[[1, 2, 3], true, ["A", "A", "none", "silent"], "wait: inside n: not every counting seat has a final yet"], // no disagreement inside n
 		];
 		for (const [counting, inside, states, want] of rows) {
@@ -143,15 +144,15 @@ describe("after the record: a score the moment the votes agree, an update when a
 			"123 inside score": 2_750,
 			"123 inside dispute": 60_465,
 			"123 inside wait": 2_321,
-			"123 after score": 3_500,
-			"123 after dispute": 59_763,
-			"123 after wait": 2_273,
+			"123 after score": 7_250,
+			"123 after dispute": 56_109,
+			"123 after wait": 2_177,
 			"124 inside score": 2_750,
 			"124 inside dispute": 60_465,
 			"124 inside wait": 2_321,
-			"124 after score": 3_500,
-			"124 after dispute": 59_763,
-			"124 after wait": 2_273,
+			"124 after score": 7_250,
+			"124 after dispute": 56_109,
+			"124 after wait": 2_177,
 		});
 	});
 
@@ -199,8 +200,10 @@ describe("after the record: a score the moment the votes agree, an update when a
 		// Seat 3's final is a vote though it later falls silent: seats 1 and 2 differ, seat 3 A, the spare
 		// not final. After n, seat 2 corrected and seat 3 silent: every vote agrees, and the game scores.
 		expect(after(C, false, ["A", "A", "silent", "A"], [["A", "B", "A", "none"]])).toBe("score 27-20");
-		// Posted at start + n with seat 3 not final and the spare silent; a minute later all four agree.
-		expect(decide(readings(["A", "A", "none", "silent"]), C, false).action).toBe("dispute");
+		// Two finals beside seat 3 not final and the spare silent score at start + n, so no record is posted
+		// there; a record posted earlier with that shape (seat 3 then in play) scores a minute later when all
+		// four agree.
+		expect(decide(readings(["A", "A", "none", "silent"]), C, false).action).toBe("score");
 		expect(after(C, false, ["A", "A", "A", "A"], [["A", "A", "none", "silent"]])).toBe("score 27-20");
 		// A 2-2 on the record stays a 2-2 while the seats that hold B are silent: never a score on two.
 		expect(after(C, false, ["A", "A", "silent", "silent"], [["A", "A", "B", "B"]])).toBe("wait");
@@ -344,7 +347,7 @@ describe("end to end, on the saved answers", () => {
 		expect([o.decision.action, o.decision.readings[2].detail]).toEqual(["wait", "silent for the game"]);
 	});
 
-	test("a seat that doesn't list the game is silent: after n the two counting finals beside it score at once; a seat that answers the game in play holds them to the record", () => {
+	test("a seat that doesn't list the game is silent: after n the two counting finals beside it score at once; a seat that answers the game in play neither votes nor disputes, and they score over it", () => {
 		// After n, seat 2's answer lists a game of the two teams the night before and not this one. Absence is
 		// silence (src/pick.ts): the run reads two counting finals, the third silent, and the spare's final the
 		// same, and scores, seat 2 written silent. The spare still showing the game on changes nothing: its
@@ -357,31 +360,30 @@ describe("end to end, on the saved answers", () => {
 		};
 		const after = g.start! + g.n + 60;
 		const scored = run(g, unlisted, after);
-		expect(scored.got).toEqual(["score", "after n: two counting seats or more, the same final, the rest silent", 2]);
+		expect(scored.got).toEqual(["score", "after n: two counting seats or more, the same final", 2]);
 		expect(scored.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 0], [3, 2], [4, 2]]);
 		const spareOn: Derive = (s, p, b) => {
 			if (s === 4 && p.includes("basketball_nba")) return (copy(b) as Record<string, any>[]).map((x) => (x.id === "110e33c79c5ec8c0377702aff685f83b" ? { ...x, completed: false } : x));
 			return unlisted(s, p, b);
 		};
 		const on = run(g, spareOn, after);
-		expect(on.got).toEqual(["score", "after n: two counting seats or more, the same final, the rest silent", 2]);
+		expect(on.got).toEqual(["score", "after n: two counting seats or more, the same final", 2]);
 		expect(on.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 0], [3, 2], [4, 1]]);
-		// The control: seat 2 answering the game in play is not silent, and two finals beside it are the
-		// first record, with seat 2's vote of no final. The next run, nothing moved, writes nothing; day 7,
-		// asking no seat, reads the record's votes, three of them the same final, and scores.
+		// The control: seat 2 answering the game in play is not silent, but after n a single answer that is
+		// not a competing final neither votes nor disputes: the two finals beside it score at once, seat 2
+		// written in play, and no record is posted. A lone final (seat 1's) beside seats 2 and 3 in play and
+		// the spare's in play waits for a second: no record, and never a void.
 		const inPlay: Derive = (s, p, b) => {
 			if (s !== 2 || !p.startsWith("/games?league=NBA")) return b;
 			const c = copy(b) as { results: Record<string, any>[] };
 			for (const x of c.results) if (x.gameId === 340484) Object.assign(x, { status: "in progress", scoreboard: { currentPeriod: 3, score: { home: 80, away: 77 } } });
 			return c;
 		};
-		const first = run(g, inPlay, after);
-		expect(first.got).toEqual(["dispute", "after n: finals beside answers without a final", 4]);
-		expect(first.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 1], [3, 2], [4, 2]]);
-		const disputed = { ...g, status: "disputed" as const, dispute: { at: after, records: [first.report!.readings] } };
-		expect(run(disputed, inPlay, after + 60).got).toEqual(["wait", "disputed: no seat's vote has changed since the record", null]);
-		const day7 = run(disputed, inPlay, after + g.day7);
-		expect([...day7.got, day7.asked]).toEqual(["score", "day 7: three sources or more, the same final", 2, 0]);
+		const over = run(g, inPlay, after);
+		expect(over.got).toEqual(["score", "after n: two counting seats or more, the same final", 2]);
+		expect(over.report!.readings.map((r) => [r.seat, r.kind])).toEqual([[1, 2], [2, 1], [3, 2], [4, 2]]);
+		const lone = run(g, both(inPlay, behind), after);
+		expect(lone.got).toEqual(["wait", "after n: one final, no second, and the answers beside it neither vote nor dispute; seat 1 a final, seat 2 in progress, seat 3 silence (unrecognized final flag false), seat 4 not completed", null]);
 	});
 
 	test("the day-7 clock runs from the first record, an update never moves it, and the day-7 run asks no seat", () => {

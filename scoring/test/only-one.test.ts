@@ -214,9 +214,10 @@ describe("only one: a record the lists can't place, earlier in the window, keeps
 			const derive = withLater(seat, respellBoth(seat));
 			expect({ seat, ...read(seat, lakers.game, NOW, derive) }).toMatchObject({ seat, kind: "silent", detail: "ambiguous" });
 			// Hinted to its own record, which now names neither team: the hint is dropped, and the seat
-			// is silent all the same.
+			// is silent all the same. The spare, asked by its id, holds its id answer (a row it could not
+			// resolve) over the slate's ambiguity: the class is the worst of its reads.
 			const own = { ...lakers.game, hints: [{ seat, id: LAKERS[seat].id }] };
-			expect({ seat, ...read(seat, own, NOW, derive) }).toMatchObject({ seat, kind: "silent", detail: "ambiguous" });
+			expect({ seat, ...read(seat, own, NOW, derive) }).toMatchObject({ seat, kind: "silent", detail: seat === 4 ? "unresolved team names" : "ambiguous" });
 			// The control: a hint naming the later final reads it, as a hint that names the game does.
 			const later = { ...lakers.game, hints: [{ seat, id: LATER_ID[seat] }] };
 			expect({ seat, ...read(seat, later, NOW, derive) }).toMatchObject({ seat, kind: "final", home: 81, away: 79, id: LATER_ID[seat] });

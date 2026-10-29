@@ -338,7 +338,8 @@ describe("one run", () => {
 		// The spare's answer came last, and the run read it before deciding.
 		expect(answered.at(-1)).toBe(4);
 		expect(o.decision.readings.map((r) => [r.seat, r.kind])).toEqual([[1, "no_final"], [2, "no_final"], [3, "silent"], [4, "final"]]);
-		expect([o.decision.action, o.decision.why, o.report?.kind]).toEqual(["dispute", "after n: finals beside answers without a final", 4]);
+		// A lone final, the spare's, beside two answers in play: no record and no void; the run waits for a second final.
+		expect([o.decision.action, o.decision.why, o.report?.kind]).toEqual(["wait", "after n: one final, no second, and the answers beside it neither vote nor dispute; seat 1 in_progress, seat 2 in progress, seat 3 silence (silent for the game), seat 4 a final", undefined]);
 		// The control: without the spare's final, two answers that the game is still on are no void's votes
 		// (a void needs two counting seats saying the game will not or did not play), and the run waits, its
 		// line saying what each seat gave.

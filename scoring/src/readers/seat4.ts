@@ -12,18 +12,20 @@
 // true as a string) is unrecognized, silent too, verbatim on the reading, and the void holds both
 // (src/pick.ts). The feed records no postponed or cancelled state. Its game time is
 // the scheduled start until the game begins and the actual start after; it serves only this
-// seat's own window check, never the game's start. A request that fails, or an answer without rows,
-// before any row arrived is clean silence; after rows arrived it is partway through the seat's reads,
-// and the void holds it, as it holds a row the reader can't parse, which refuses the whole answer, and,
-// where no slate stands behind the id, the game's row by its id the reader could not use (types.ts,
-// answer); where the slate fits, the slate decides, as it would without the id.
+// seat's own window check, never the game's start. A request that fails, or an empty body, before any
+// row arrived is clean silence; after rows arrived it is partway through the seat's reads, and the void
+// holds it, as it holds a body that is not the feed's list and a row the reader can't parse, which
+// refuses the whole answer with the game's own row's word beside it (types.ts, answer; src/pick.ts,
+// refused). The class is the worst of the seat's reads: an id answer the reader could not use (the
+// game's row it could not read, or the game's row under another id, a by-id answer that is not the
+// requested record) survives a clean or empty slate; a slate that answers the game stands in its place.
 //
 // Retention: the feed keeps completed games for three days. The reader stops asking 66 hours after
 // the game's start, three days less six hours, a margin that holds whether the feed counts its
 // three days from the start, from the end or by calendar day; past it the feed is silent, because a
 // missing game then could be age, not absence.
 
-import { pick, points, type FeedRecord, type FeedTeam } from "../pick";
+import { pick, points, refused, type FeedRecord, type FeedTeam } from "../pick";
 import { clean, silent } from "../run";
 import { leagueRow } from "../table";
 import { normalise } from "../teams";
@@ -96,39 +98,47 @@ export function* read(ask: Ask): ReaderRun {
 	let arrived = false;
 	const listing = function* (path: string): Generator<HttpRequest, FeedRecord[] | Reading, HttpResponse> {
 		const res = jsonOf(yield request(SEAT, path, ask.key));
-		const quiet = arrived ? silent : clean;
-		if (!res.ok) return quiet(SEAT, res.detail);
-		if (!Array.isArray(res.value)) return quiet(SEAT, "unreadable");
+		// A request that failed, or an empty body, before any row arrived: clean silence. A body that is
+		// not the feed's list, or a failure after rows arrived: an answer the reader could not use.
+		if (!res.ok) return !res.arrived && !arrived ? clean(SEAT, res.detail) : silent(SEAT, res.detail);
+		if (!Array.isArray(res.value)) return silent(SEAT, "unreadable");
+		// Every row that parses is read before a row that doesn't refuses the whole answer, so the refusal
+		// carries the game's own row's word (pick.ts, refused).
 		const records: FeedRecord[] = [];
+		let unreadable = false;
 		for (const item of res.value) {
 			const o = obj(item);
 			const r = o === null ? null : toRecord(o);
-			// A row the reader can't parse refuses the whole answer, and the void holds it.
-			if (r === null) return silent(SEAT, "unreadable record");
-			records.push(r);
+			if (r === null) unreadable = true;
+			else records.push(r);
 		}
+		if (unreadable) return silent(SEAT, refused(ask.game, records));
 		if (records.length > 0) arrived = true;
 		return records;
 	};
 	// One game, one request, when the game was created with the feed's id for it: the hinted record is
 	// read when it is the game's two teams inside the window, as the hint rule reads it from a slate. An
-	// id the feed answers nothing for, or whose row is not this game inside the window, is unusable:
-	// the slate then decides as it would without the id, where the league's slate fits the size an
-	// answer may be; where it does not, the seat is silent. An empty answer is never a reading.
+	// empty answer for the id is clean, and the slate then decides as it would without the id, where the
+	// league's slate fits the size an answer may be; where it does not, the seat is silent. An id answer
+	// the reader could not use (the game's row it could not read, or the game's row under another id, a
+	// by-id answer that is not the requested record) is held: the class is the worst of the seat's reads,
+	// so it survives a clean or empty slate, and a slate that answers the game stands in its place. A row
+	// of another game, or of the two teams outside the window, is absence.
 	const hint = hintOf(ask.game.hints);
+	let held: Reading | null = null;
 	if (hint !== null) {
 		const one = yield* listing(`${slate}&eventIds=${hint}`);
 		if (!Array.isArray(one)) return one;
 		if (one.length > 0) {
 			const r = pick(SEAT, ask.game, [one], ask.near);
 			if (r.kind !== "silent" && r.record !== null && r.record.id === hint && r.record.time !== null && inWindow(r.record.time, windowOf(ask.game))) return r;
-			// The id's row the reader could not use, where no slate stands behind it: silent, and the void
-			// holds it. Where the slate fits, the slate decides, as it would without the id.
-			if (!SLATE_FITS.has(ask.game.league) && r.kind === "silent" && r.answer !== "nothing") return r;
+			if (r.kind !== "silent") held = silent(SEAT, "the id's row is not the requested record");
+			else if (r.answer !== "nothing") held = r;
 		}
-		if (!SLATE_FITS.has(ask.game.league)) return clean(SEAT, one.length === 0 ? "nothing for the id, and the slate is past the size" : "the id's row is not the game, and the slate is past the size");
+		if (!SLATE_FITS.has(ask.game.league)) return held ?? clean(SEAT, one.length === 0 ? "nothing for the id, and the slate is past the size" : "the id's row is not the game, and the slate is past the size");
 	} else if (!SLATE_FITS.has(ask.game.league)) return clean(SEAT, "no id, and the slate is past the size");
 	const records = yield* listing(slate);
-	if (!Array.isArray(records)) return records;
-	return pick(SEAT, ask.game, [records], ask.near);
+	if (!Array.isArray(records)) return held ?? records;
+	const r = pick(SEAT, ask.game, [records], ask.near);
+	return r.kind === "silent" && held !== null ? held : r;
 }

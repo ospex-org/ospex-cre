@@ -8,16 +8,26 @@
 // chosen by its hint beside another row that could be the game; a row that says the game is scheduled
 // or in play is an answer, not a void's vote. A void is held to the finals' count after n: two counting
 // seats or more affirm, and the rest of the counting seats are silent. And the void's silence is only
-// clean silence (types.ts, answer "nothing"): an answer that held nothing of the game, because it was
-// empty, the game was absent from it or its record outside the window, the request failed before any
-// row arrived, or the seat is past its window by date arithmetic. Every other reading that is not an
-// affirmative row holds the void, whatever the word was: an answer the reader could not use (a row of
-// the game without a usable id, a status word or points, a word it does not recognize, a final short of
-// a whole game, a part of the game, a row that would not parse, a failure or the reader's own cap
-// partway through the seat's reads after rows arrived, two rows that could be the game, two answers
-// that disagree about it), or the game's row chosen by its hint beside another that could be the game;
-// the run waits, its line naming the seat and the class, and a status word the reader does not know
-// verbatim (`seat 1 answered but could not be used: unrecognized status "PPD"`).
+// clean silence (types.ts, answer "nothing"): the body was empty (an empty list, or no result for the
+// id), or was a readable list of rows none of which is the game by id or by its names and time, or the
+// request failed before any body arrived, or the seat was never asked or is past its window by date
+// arithmetic; the class is per seat and the worst of its reads. Every other reading that is not an
+// affirmative row holds the void, whatever the word was: a non-empty body that is not the feed's list
+// (a single object, a wrong envelope, not a list), a by-id answer that is not the requested game (seat
+// 3's row without an id, the spare's row under another id where no slate stands behind it), and any
+// row for the game of any shape (a row the reader could not use: no usable id, no status word, a word
+// it does not recognize, a final without points, a short final, a part of the game; a row that would
+// not parse; a failure or the reader's own cap partway through the seat's reads after rows arrived; two
+// rows that could be the game; two answers that disagree about it), or the game's row chosen by its
+// hint beside another that could be the game. The run waits, its line naming the seat and the class, a
+// status word the reader does not know verbatim (`seat 1 answered but could not be used: unrecognized
+// status "PPD"`), and the game's row's word beside a row it could not parse, whether the bad row came
+// first or second.
+//
+// Where scoring lives: two agreeing finals after n score over any single answer at the third seat that
+// is not a competing final (in play, unrecognized, unusable, postponed, cancelled); that answer neither
+// votes nor disputes. A dispute is between finals that differ, or a lone final against two didn't-play
+// votes. Inside n, three finals.
 //
 // Counted by hand over ten states a seat can read (silent, clean; none, an answer in play; sched, the
 // game's row scheduled, an answer all the same; off, a postponed answer; the finals A and B; and four
@@ -33,9 +43,26 @@
 // no void anywhere: it is never a vote.
 //
 // The breaks that turn this red:
+//   seat1.ts, read: a clean declaration on a non-empty body that is not the feed's list,
+//     if (!Array.isArray(data)) return silent(SEAT, "unreadable");
+//     ->  if (!Array.isArray(data)) return clean(SEAT, "unreadable");
+//   with which a single object, a wrong envelope or a string at seat 1 voids beside two affirmative rows;
+//   seat4.ts, read: the spare's slate overwriting its id answer,
+//     return r.kind === "silent" && held !== null ? held : r;
+//     ->  return r;
+//   with which the spare's id answer it could not use, then an empty slate, voids;
+//   rule.ts, decide: an answer in play disputing two finals after n,
+//     if (finalsCounted >= AGREE.afterN) {
+//     ->  if (finalsCounted >= AGREE.afterN && answeredCounted - finalsCounted > 0) return { action: "dispute", readings, why: "after n: finals beside answers without a final" };
+//         if (finalsCounted >= AGREE.afterN) {
+//   with which two finals beside a third seat in play dispute where they score;
+//   verify.ts, decideStart: seat 3's result the reader could not use not standing down,
+//     if (seen.result.kind === "silent" && !unusable(seen.result) && !RESULT_ANSWERED.has(seen.result.detail)) return wait(
+//     ->  if (seen.result.kind === "silent" && !RESULT_ANSWERED.has(seen.result.detail)) return wait(
+//   with which a result listed twice at the first tick writes no start (verify.test.ts);
 //   rule.ts, decide: the class ignored by the void,
-//     if (finals.length === 0 && held.length > 0) {
-//     ->  if (false) {
+//     if (held.length > 0) return { action: "wait", readings, why: `after n: ${held.map(holding).join("; ")}` };
+//     ->  deleted
 //   with which seat 3's result listed twice, a final without points, a row without a status, and the
 //   rest of the unusable answers void beside two affirmative rows;
 //   run.ts, runSync and runAsync: a reader exiting on a cap or a throw after rows arrived read as clean silence,
@@ -135,8 +162,8 @@ describe("never: the hour-24 void beside a reading that is neither clean silence
 			[[1, 2, 3], false, ["off", "none", "silent", "silent"], "wait"], // one affirmative answer
 			[[1, 2, 3], false, ["none", "none", "silent", "silent"], "wait"], // two answers in play are no void's votes
 			[[1, 2, 3], false, ["off", "silent", "silent", "silent"], "wait"], // fewer than two counting seats answer
-			[[1, 2, 3], false, ["off", "off", "silent", "A"], "dispute"], // the spare's final: no void, a disagreement
-			[[1, 2, 4], false, ["off", "off", "A", "silent"], "dispute"], // seat 3 does not count here, but it answers with a final
+			[[1, 2, 3], false, ["off", "off", "silent", "A"], "dispute"], // the spare's final against two votes: no void, the record
+			[[1, 2, 4], false, ["off", "off", "A", "silent"], "dispute"], // seat 3 does not count here, but its final is a lone final against two votes
 			[[1, 2, 4], false, ["off", "off", "silent", "silent"], "void"],
 			[[1, 2, 4], false, ["off", "off", "sched", "silent"], "void"], // seat 3 silent for the game: its row does not count
 			[[1, 2, 4], false, ["off", "off", "silent", "sched"], "wait"], // the counting spare scheduled holds the void
@@ -155,13 +182,24 @@ describe("never: the hour-24 void beside a reading that is neither clean silence
 			// The game's postponed row chosen by its hint beside another row that could be the game: an answer to a score, and it holds the void.
 			[[1, 2, 3], false, ["chosen", "off", "off", "silent"], "wait"],
 			[[1, 2, 3], false, ["off", "chosen", "silent", "silent"], "wait"],
-			// Scoring unchanged: silent to the score, an unusable answer neither makes a final nor blocks one.
-			[[1, 2, 3], false, ["A", "A", "dup", "silent"], "score"], // two finals, the rest silent
+			// Where scoring lives: two agreeing finals after n score over a third answer that is not a competing final.
+			[[1, 2, 3], false, ["A", "A", "none", "silent"], "score"], // in play
+			[[1, 2, 3], false, ["A", "A", "off", "silent"], "score"], // postponed
+			[[1, 2, 3], false, ["A", "A", "dup", "silent"], "score"], // an answer the reader could not use
 			[[1, 2, 3], false, ["A", "A", "bare", "silent"], "score"],
-			[[1, 2, 3], false, ["A", "dup", "off", "silent"], "dispute"], // a final beside an answer without one: the record, as before
+			[[1, 2, 3], false, ["A", "A", "silent", "silent"], "score"],
+			[[1, 2, 4], false, ["A", "silent", "sched", "A"], "score"], // the spare standing in, seat 2 silent, seat 3's row not counting
+			[[1, 2, 3], false, ["A", "A", "B", "silent"], "dispute"], // two finals that differ
+			[[1, 2, 3], false, ["A", "A", "silent", "B"], "dispute"], // the spare's final differs
+			[[1, 2, 3], false, ["A", "off", "off", "silent"], "dispute"], // a lone final against two votes
+			[[1, 2, 3], false, ["A", "none", "silent", "silent"], "wait"], // a lone final beside an answer in play waits for a second
+			[[1, 2, 3], false, ["A", "off", "silent", "silent"], "wait"], // a lone final beside one vote: the same
+			[[1, 2, 3], false, ["A", "dup", "off", "silent"], "wait"], // a lone final beside an unusable answer and one vote: the same
+			[[1, 2, 3], false, ["A", "chosen", "silent", "silent"], "wait"], // a lone final beside the chosen row: the same
 			[[1, 2, 3], false, ["A", "B", "nopts", "silent"], "dispute"], // two finals that differ
-			[[1, 2, 3], false, ["A", "chosen", "silent", "silent"], "dispute"], // a final beside the chosen postponed row: an answer, the record
-			[[1, 2, 3], true, ["A", "A", "nopts", "silent"], "wait"], // inside n, a silent counting seat blocks, as before
+			[[1, 2, 3], true, ["A", "A", "none", "silent"], "wait"], // inside n, two finals beside anything: no score
+			[[1, 2, 3], true, ["A", "A", "nopts", "silent"], "wait"],
+			[[1, 2, 3], true, ["A", "A", "silent", "silent"], "wait"],
 		];
 		for (const [counting, inside, states, want] of rows) {
 			expect({ counting, inside, states, got: d(counting, inside, states) }).toEqual({ counting, inside, states, got: want });
@@ -178,6 +216,13 @@ describe("never: the hour-24 void beside a reading that is neither clean silence
 		expect([words.action, words.why]).toEqual(["wait", "after n: seat 1 answered but could not be used: final without points; seat 3 answered but could not be used: duplicate result"]);
 		const chosen = decide(SEATS4.map((s, i) => of(s, (["chosen", "off", "off", "silent"] as Edge[])[i])), [1, 2, 3], false);
 		expect([chosen.action, chosen.why]).toEqual(["wait", "after n: seat 1 answered by its hint beside another row that could be the game: postponed"]);
+		// The lines where scoring lives.
+		const scored = decide(SEATS4.map((s, i) => of(s, (["A", "A", "none", "silent"] as Edge[])[i])), [1, 2, 3], false);
+		expect([scored.action, scored.why]).toEqual(["score", "after n: two counting seats or more, the same final"]);
+		const lone = decide(SEATS4.map((s, i) => of(s, (["A", "off", "off", "silent"] as Edge[])[i])), [1, 2, 3], false);
+		expect([lone.action, lone.why]).toEqual(["dispute", "after n: a final against two counting seats that say the game will not or did not play"]);
+		const second = decide(SEATS4.map((s, i) => of(s, (["A", "none", "silent", "silent"] as Edge[])[i])), [1, 2, 3], false);
+		expect([second.action, second.why]).toEqual(["wait", "after n: one final, no second, and the answers beside it neither vote nor dispute; seat 1 a final, seat 2 in progress, seat 3 silence (silent), seat 4 silence (silent)"]);
 	});
 
 	// The artifact, on real answers: Atlanta at the White Sox, 11 Jun, rained out. Seat 1 reads it
@@ -222,9 +267,11 @@ describe("never: the hour-24 void beside a reading that is neither clean silence
 		// Seat 2's row with a word the reader does not know: silent, the word verbatim in the line.
 		const ppd = out(seat2({ status: "PPD" }));
 		expect([ppd.action, ppd.kind, ppd.why]).toEqual(["wait", null, 'after n: seat 2 answered but could not be used: unrecognized status "PPD"']);
-		// Derived from the real answer: seat 2 marks the rained-out game final, 3-1, after nine innings
-		// (a final needs the feed's period count to reach the league's regulation).
-		expect(out(seat2({ status: "final", scoreboard: { currentPeriod: 9, score: { home: 3, away: 1 } } }))).toMatchObject({ action: "dispute", kind: 4, readings: [[1, 1], [2, 2], [3, 0], [4, 0]] });
+		// Derived from the real answer: seat 2 marks the rained-out game final, 3-1, after nine innings (a
+		// final needs the feed's period count to reach the league's regulation): a lone final beside one
+		// vote, which waits for a second, never a void.
+		const lone = out(seat2({ status: "final", scoreboard: { currentPeriod: 9, score: { home: 3, away: 1 } } }));
+		expect([lone.action, lone.kind, lone.why]).toEqual(["wait", null, "after n: one final, no second, and the answers beside it neither vote nor dispute; seat 1 postponed, seat 2 a final, seat 3 silence (silent for the game), seat 4 silence (closed: past its window)"]);
 	});
 
 	test("the rainout's case is real: its game sits in the readers' cases with the readings the void rests on", () => {
@@ -265,6 +312,11 @@ describe("never: the hour-24 void beside a reading that is neither clean silence
 		const out = mutate(body);
 		return { status: 200, body: JSON.stringify(out === undefined ? body : out) };
 	};
+	/** A seat's answer built by hand, in place of the saved one, on the requests `when` picks. */
+	const replace = (seat: Seat, when: (path: string) => boolean, body: unknown) => (send: Send): Send => (q) => {
+		const at = locate(q);
+		return at !== null && at.seat === seat && when(at.path) ? { status: 200, body: JSON.stringify(body) } : send(q);
+	};
 	/** A row the reader can't parse, after the rows of a seat's answer as sent (the saved answers are filtered to the game before they are served, so the row goes on after). */
 	const thenNull = (seat: Seat) => afterSend(seat, (p) => ownPath(seat, p), (body) => void (seat === 1 ? body.data : seat === 2 ? body.results : body).push(null));
 	/** A transport that throws on the requests `when` picks, and answers the rest. */
@@ -300,14 +352,17 @@ describe("never: the hour-24 void beside a reading that is neither clean silence
 	/** Each feed's own word that the game will not play. */
 	const OFF: Readonly<Record<1 | 2 | 3, Record<string, unknown>>> = { 1: { status_state: "postponed" }, 2: { status: "canceled" }, 3: { FinalType: "Postponed" } };
 	const off = (seat: 1 | 2 | 3): Derive => rowsAt(seat, (r) => [{ ...r, ...OFF[seat] }]);
+	/** The word the refusal carries for each feed's own final row beside a row the reader can't parse. */
+	const FINAL_WORD: Readonly<Record<Seat, string>> = { 1: 'unreadable record; the game\'s row says "final"', 2: 'unreadable record; the game\'s row says "final"', 3: 'unreadable record; the hint\'s row says "Finished"', 4: 'unreadable record; the game\'s row says "completed"' };
 
-	const run = (game: ChainGame, derive: Derive, around: (send: Send) => Send = (s) => s) => {
+	const run = (game: ChainGame, derive: Derive, around: (send: Send) => Send = (s) => s, clock = H24) => {
 		const t = saved(derive, NOW);
-		const o = scoreGameSync(game, KEYS, PAYOUT, H24, around(t.send));
+		const o = scoreGameSync(game, KEYS, PAYOUT, clock, around(t.send));
 		expect(t.misses).toEqual([]);
 		return { action: o.decision.action, why: o.decision.why, kind: o.report?.kind ?? null, readings: o.report?.readings.map((r) => [r.seat, r.kind]) ?? null };
 	};
 	const VOID = "after n: two counting seats or more say the game will not or did not play, the rest silent, and no seat shows a final";
+	const LONE = "after n: a final against two counting seats that say the game will not or did not play";
 	const waits = (seat: Seat, detail: string) => ({ action: "wait", why: `after n: seat ${seat} answered but could not be used: ${detail}`, kind: null, readings: null });
 	// For each seat under test: the game, the other two counting seats' affirmative rows, and the seats a report lists.
 	const table: [Seat, ChainGame, Derive, number[][]][] = [
@@ -323,15 +378,15 @@ describe("never: the hour-24 void beside a reading that is neither clean silence
 			const form = (change: (row: Record<string, any>) => Record<string, any>[]) => both(others, rowsAt(seat, change));
 			// The control: no row of the game at this seat, clean silence, the other two affirmative: the void.
 			expect({ ...at, ...run(game, form(() => [])) }).toEqual({ ...at, action: "void", why: VOID, kind: 3, readings: voidReadings });
-			// The intact final: a final beside two answers without one, the dispute record.
-			expect({ ...at, ...run(game, form((r) => [{ ...r, ...FINAL[seat] }])) }).toMatchObject({ ...at, action: "dispute", why: "after n: finals beside answers without a final", kind: 4 });
+			// The intact final: a lone final against two counting seats that say the game will not or did not play, the record.
+			expect({ ...at, ...run(game, form((r) => [{ ...r, ...FINAL[seat] }])) }).toMatchObject({ ...at, action: "dispute", why: LONE, kind: 4 });
 			// The final without points: the reader can't score it, and it holds the void.
 			expect({ ...at, ...run(game, form((r) => [{ ...r, ...NO_POINTS[seat] }])) }).toEqual({ ...at, ...waits(seat, "final without points") });
-			// The final followed by a row the reader can't parse: the answer is refused whole.
-			expect({ ...at, ...run(game, form((r) => [{ ...r, ...FINAL[seat] }]), thenNull(seat)) }).toEqual({ ...at, ...waits(seat, "unreadable record") });
+			// The final followed by a row the reader can't parse: the answer is refused whole, the final's word on the line.
+			expect({ ...at, ...run(game, form((r) => [{ ...r, ...FINAL[seat] }]), thenNull(seat)) }).toEqual({ ...at, ...waits(seat, FINAL_WORD[seat]) });
 			// The final twice. Seat 3's reader refuses a result listed twice; the seats read by team hold two
-			// identical copies to be one record (pick.ts), so the final reads and disputes as the intact one does,
-			// and two copies that differ are two answers that disagree about the game.
+			// identical copies to be one record (pick.ts), so the final reads as the intact one does, and two
+			// copies that differ are two answers that disagree about the game.
 			const twice = run(game, form((r) => [{ ...r, ...FINAL[seat] }, { ...r, ...FINAL[seat] }]));
 			const differing = run(game, form((r) => [{ ...r, ...FINAL[seat] }, { ...r, ...FINAL[seat], ...OTHER[seat] }]));
 			if (seat === 3) {
@@ -341,9 +396,9 @@ describe("never: the hour-24 void beside a reading that is neither clean silence
 			}
 		}
 		// The spare that does not count, saying final without points beside two affirmative counting rows and
-		// seat 3 silent: it holds the void, as its scorable final would by a dispute.
+		// seat 3 silent: it holds the void, as its scorable final would by the record.
 		expect(run(bears, both(off(1), off(2), rowsAt(3, () => []), rowsAt(4, (r) => [{ ...r, ...NO_POINTS[4] }])))).toEqual(waits(4, "final without points"));
-		expect(run(bears, both(off(1), off(2), rowsAt(3, () => []), rowsAt(4, (r) => [{ ...r, ...FINAL[4] }])))).toMatchObject({ action: "dispute", kind: 4 });
+		expect(run(bears, both(off(1), off(2), rowsAt(3, () => []), rowsAt(4, (r) => [{ ...r, ...FINAL[4] }])))).toMatchObject({ action: "dispute", why: LONE, kind: 4 });
 	});
 
 	test("end to end, at hour 24: every other route by which an answer that touched the game reaches the rule holds the void, the line naming the seat and the class, and the word verbatim", () => {
@@ -396,27 +451,148 @@ describe("never: the hour-24 void beside a reading that is neither clean silence
 			expect({ seat, ...run(hinted, both(others, off(seat as 1 | 2))) }).toMatchObject({ seat, action: "void", kind: 3 });
 		}
 		// Spellings the readers do not know, alone and beside a row the reader can't parse, each counting seat
-		// and the spare standing in: the line carries the word verbatim.
-		const spelt: [Seat, ChainGame, Derive, Record<string, unknown>, string][] = [
-			[1, seat1[1], seat1[2], { status_state: "Final" }, 'unrecognized status "Final"'],
-			[1, seat1[1], seat1[2], { status_state: "PPD" }, 'unrecognized status "PPD"'],
-			[2, seat2[1], seat2[2], { status: "FINAL" }, 'unrecognized status "FINAL"'],
-			[2, seat2[1], seat2[2], { status: "final " }, 'unrecognized status "final "'],
-			[3, seat3[1], seat3[2], { Final: true, FinalType: "Finished " }, 'unrecognized status "Finished "'],
-			[3, seat3[1], seat3[2], { Final: "TRUE", FinalType: "Finished", HomeScore: "24", AwayScore: "17" }, 'unrecognized final flag "TRUE"'],
-			[4, spare[1], spare[2], { completed: "true" }, 'unrecognized status "true"'],
+		// and the spare standing in: the line carries the word verbatim, beside the bad row too.
+		const spelt: [Seat, ChainGame, Derive, Record<string, unknown>, string, string][] = [
+			[1, seat1[1], seat1[2], { status_state: "Final" }, 'unrecognized status "Final"', "Final"],
+			[1, seat1[1], seat1[2], { status_state: "PPD" }, 'unrecognized status "PPD"', "PPD"],
+			[2, seat2[1], seat2[2], { status: "FINAL" }, 'unrecognized status "FINAL"', "FINAL"],
+			[2, seat2[1], seat2[2], { status: "final " }, 'unrecognized status "final "', "final "],
+			[3, seat3[1], seat3[2], { Final: true, FinalType: "Finished " }, 'unrecognized status "Finished "', "Finished "],
+			[3, seat3[1], seat3[2], { Final: "TRUE", FinalType: "Finished", HomeScore: "24", AwayScore: "17" }, 'unrecognized final flag "TRUE"', "Finished"],
+			[4, spare[1], spare[2], { completed: "true" }, 'unrecognized status "true"', "true"],
 		];
-		for (const [seat, game, others, fields, detail] of spelt) {
+		for (const [seat, game, others, fields, detail, word] of spelt) {
 			expect({ seat, fields, ...run(game, both(others, rowsAt(seat, (r) => [{ ...r, ...fields }]))) }).toEqual({ seat, fields, ...waits(seat, detail) });
-			expect({ seat, fields, ...run(game, both(others, rowsAt(seat, (r) => [{ ...r, ...fields }])), thenNull(seat)) }).toEqual({ seat, fields, ...waits(seat, "unreadable record") });
+			const beside = seat === 3 ? `unreadable record; the hint's row says ${JSON.stringify(word)}` : `unreadable record; the game's row says ${JSON.stringify(word)}`;
+			expect({ seat, fields, ...run(game, both(others, rowsAt(seat, (r) => [{ ...r, ...fields }])), thenNull(seat)) }).toEqual({ seat, fields, ...waits(seat, beside) });
 		}
 		// The finished half and the finished part of the game under seat 3's hint: the game was played, and
-		// the void waits (it posted before this pass).
+		// the void waits (it posted before the seventh pass).
 		for (const part of ["FirstHalf", "FirstInnings"]) {
 			expect({ part, ...run(bears, both(off(1), off(2), rowsAt(3, (r) => [{ ...r, ...FINAL[3], OddType: part }]))) }).toEqual({ part, ...waits(3, "hint names a part of the game") });
 		}
 		// Two affirmative rows beside a third seat's empty answer: clean silence, and the void posts.
 		expect(run(bears, both(off(1), off(2)), afterSend(3, (p) => ownPath(3, p), () => []))).toMatchObject({ action: "void", kind: 3 });
 		expect(run(spareIn, both(off(1), off(2)), afterSend(4, (p) => ownPath(4, p), () => []))).toMatchObject({ action: "void", kind: 3 });
+	});
+
+	test("the clean sites, audited: a by-id answer that is not the requested game, a non-empty body that is not the feed's list, and the spare's id answer held over its slate each hold the void; the bodies that are clean still void", () => {
+		// The spare by its id, standing in for seat 3: its id answer the game's row without points, then an
+		// empty slate, or a slate without the game: the id answer survives (the class is the worst of the
+		// seat's reads). An empty id answer and an empty slate: clean, and the void posts.
+		const spareById = chainOf("nfl not final", { hints: [{ seat: 4, id: IDS[4] }] });
+		const byId = (p: string) => p.includes("eventIds=");
+		const slate = (p: string) => ownPath(4, p) && !p.includes("eventIds=");
+		const idRow = (fields: Record<string, unknown>) => afterSend(4, byId, (body: Record<string, any>[]) => body.map((r) => (isOwn(4, r) ? { ...r, ...fields } : r)));
+		for (const [what, after] of [
+			["an empty slate", afterSend(4, slate, () => [])],
+			["a slate without the game", afterSend(4, slate, (body: Record<string, any>[]) => body.filter((r) => !isOwn(4, r)))],
+		] as const) {
+			expect({ what, ...run(spareById, both(off(1), off(2)), wrap(idRow(NO_POINTS[4]), after)) }).toEqual({ what, ...waits(4, "final without points") });
+			expect({ what, ...run(spareById, both(off(1), off(2)), wrap(idRow({ completed: undefined }), after)) }).toEqual({ what, ...waits(4, "no status") });
+			expect({ what, ...run(spareById, both(off(1), off(2)), wrap(idRow({ completed: "TRUE" }), after)) }).toEqual({ what, ...waits(4, 'unrecognized status "TRUE"') });
+		}
+		expect(run(spareById, both(off(1), off(2)), wrap(afterSend(4, byId, () => []), afterSend(4, slate, () => [])))).toMatchObject({ action: "void", kind: 3 });
+		// The spare that does not count, by its id, beside seat 3 silent: the same.
+		const bearsById = chainOf("nfl not final", { hints: [...bears.hints, { seat: 4, id: IDS[4] }] });
+		expect(run(bearsById, both(off(1), off(2), rowsAt(3, () => [])), wrap(idRow(NO_POINTS[4]), afterSend(4, slate, () => [])))).toEqual(waits(4, "final without points"));
+		// The spare's id answer a final of the game under another id, where no slate stands behind the id
+		// (college basketball): a by-id answer that is not the requested record, and it holds the void. The
+		// answers are built by hand: the saved college answers do not carry this game's rows at seat 1.
+		const kentucky = chainOf("ncaab final: Santa Clara at Kentucky", { hints: [{ seat: 4, id: "0123456789abcdef0123456789abcdef" }] });
+		const start = kentucky.start as number;
+		const iso = (t: number) => new Date(t * 1000).toISOString();
+		const seat1Off = replace(1, (p) => p.includes("/ncaab/v1/games"), { data: [{ id: 1, date: iso(start), status_state: "postponed", period: 0, home_team: { college: "Kentucky" }, visitor_team: { college: "Santa Clara" }, home_score: null, away_score: null }], meta: {} });
+		const seat2Off = replace(2, (p) => p.includes("league=NCAAB"), { results: [{ gameId: 1, schedule: { date: iso(start), tbaTime: false }, status: "canceled", teams: { home: { team: "Kentucky" }, away: { team: "Santa Clara" } }, scoreboard: { currentPeriod: 0, score: {} } }] });
+		const spareSays = (rows: unknown[]) => replace(4, (p) => p.includes("basketball_ncaab") && p.includes("eventIds="), rows);
+		const otherId = [{ id: "ffffffffffffffffffffffffffffffff", commence_time: iso(start), home_team: "Kentucky", away_team: "Santa Clara", completed: true, scores: [{ name: "Kentucky", score: "89" }, { name: "Santa Clara", score: "84" }] }];
+		const college = (rows: unknown[]) => run(kentucky, (s, p, b) => b, wrap(seat1Off, seat2Off, spareSays(rows)), start + kentucky.n + 600);
+		expect(college(otherId)).toEqual(waits(4, "the id's row is not the requested record"));
+		// The controls: nothing for the id, and a row of another game, are clean, and the void posts.
+		expect(college([])).toMatchObject({ action: "void", kind: 3 });
+		expect(college([{ ...otherId[0], home_team: "Kansas", away_team: "Baylor", scores: [] }])).toMatchObject({ action: "void", kind: 3 });
+		// A non-empty body that is not the feed's list of rows, at all four seats: a single object (the game's
+		// own row), a wrong envelope, and not a list at all.
+		for (const [seat, game, others] of table) {
+			const own = (body: any): Record<string, any> => (seat === 1 ? body.data : seat === 2 ? body.results : body).find((r: Record<string, any>) => isOwn(seat, r));
+			for (const [what, shape] of [
+				["a single object", (body: any) => own(body)],
+				["a wrong envelope", (body: any) => ({ games: [own(body)] })],
+				["not a list", () => "busy"],
+			] as const) {
+				expect({ seat, what, ...run(game, others, afterSend(seat, (p) => ownPath(seat, p), shape)) }).toEqual({ seat, what, ...waits(seat, "unreadable") });
+			}
+		}
+		// Seat 3's result as an empty object, or with a missing, empty or object id: a by-id answer that is
+		// not the requested game, and it holds the void; a row under another valid id is absence, and the
+		// void posts.
+		for (const [what, rows] of [
+			["an empty object", () => [{}]],
+			["the id missing", (r: Record<string, any>) => [{ ...r, ...FINAL[3], ID: undefined }]],
+			["the id empty", (r: Record<string, any>) => [{ ...r, ...FINAL[3], ID: "" }]],
+			["the id an object", (r: Record<string, any>) => [{ ...r, ...FINAL[3], ID: { id: IDS[3] } }]],
+		] as const) {
+			expect({ what, ...run(bears, both(off(1), off(2)), afterSend(3, (p) => ownPath(3, p), (body: Record<string, any>[]) => rows(body[0] ?? {}))) }).toEqual({ what, ...waits(3, "result without an id") });
+		}
+		expect(run(bears, both(off(1), off(2)), afterSend(3, (p) => ownPath(3, p), (body: Record<string, any>[]) => body.map((r) => ({ ...r, ...FINAL[3], ID: "00000000-0000-4000-8000-000000000000" }))))).toMatchObject({ action: "void", kind: 3 });
+		// The hint's row beside a row without an id: the refusal carries the hint's row's word.
+		expect(run(bears, both(off(1), off(2)), afterSend(3, (p) => ownPath(3, p), (body: Record<string, any>[]) => [...body, {}]))).toEqual(waits(3, 'result without an id; the hint\'s row says "NotFinished"'));
+	});
+
+	test("where scoring lives: two agreeing finals after n score over a third answer that is not a competing final, kind 2, and the game once scored is never read again; finals that differ, and a lone final against two votes, dispute; inside n, two finals beside anything wait", () => {
+		const final = (seat: Seat): Derive => rowsAt(seat, (r) => [{ ...r, ...FINAL[seat] }]);
+		const scored = (game: ChainGame, derive: Derive, around?: (send: Send) => Send) => {
+			const t = saved(derive, NOW);
+			const o = scoreGameSync(game, KEYS, PAYOUT, H24, around === undefined ? t.send : around(t.send));
+			expect(t.misses).toEqual([]);
+			return { action: o.decision.action, kind: o.report?.kind ?? null, points: o.decision.action === "score" ? [o.decision.home, o.decision.away] : null };
+		};
+		// The third seat's answers: in play in a word the reader knows, a word it does not, an answer it could
+		// not use, postponed, cancelled; and at each third seat, the other two counting seats final.
+		const thirds: [Seat, string, Record<string, unknown> | null][] = [
+			[1, "in play", { status_state: "in_progress" }],
+			[1, "unrecognized", { status_state: "Final" }],
+			[1, "unusable", NO_POINTS[1]],
+			[1, "postponed", { status_state: "postponed" }],
+			[1, "cancelled", { status_state: "canceled" }],
+			[2, "in play", { status: "in progress" }],
+			[2, "unrecognized", { status: "FINAL" }],
+			[2, "unusable", NO_POINTS[2]],
+			[2, "postponed", { status: "postponed" }],
+			[2, "cancelled", { status: "canceled" }],
+			[3, "in play", { Final: false, FinalType: "NotFinished" }],
+			[3, "unrecognized", { Final: true, FinalType: "Finished " }],
+			[3, "unusable", NO_POINTS[3]],
+			[3, "postponed", { FinalType: "Postponed" }],
+			[3, "cancelled", { FinalType: "Canceled" }],
+			[4, "in play", { completed: false }],
+			[4, "unrecognized", { completed: "true" }],
+			[4, "unusable", NO_POINTS[4]],
+		];
+		for (const [third, what, fields] of thirds) {
+			const game = third === 4 ? spareIn : bears;
+			const counting: Seat[] = third === 4 ? [1, 2, 4] : [1, 2, 3];
+			const finals = counting.filter((s) => s !== third).map((s) => final(s));
+			const derive = both(...finals, rowsAt(third, (r) => [{ ...r, ...(fields ?? {}) }]));
+			expect({ third, what, ...scored(game, derive) }).toEqual({ third, what, action: "score", kind: 2, points: [24, 17] });
+			// Once scored, the game has ended: the program reads nothing more of it, on day 7 or ever.
+			const t = saved(derive, NOW);
+			const later = scoreGameSync({ ...game, status: "scored" }, KEYS, PAYOUT, (game.start as number) + 8 * 86_400, t.send);
+			expect({ third, what, later: [later.decision.action, later.decision.why, later.report, t.asked.length] }).toEqual({ third, what, later: ["wait", "the game has ended", null, 0] });
+		}
+		// Two finals that differ: the record. A lone final against two votes: the record.
+		expect(scored(bears, both(final(1), rowsAt(2, (r) => [{ ...r, ...FINAL[2], ...OTHER[2] }])))).toEqual({ action: "dispute", kind: 4, points: null });
+		expect(scored(bears, both(final(1), off(2), off(3)))).toEqual({ action: "dispute", kind: 4, points: null });
+		// Inside n, two finals beside anything: no score.
+		const inside = (derive: Derive) => {
+			const t = saved(derive, NOW);
+			const o = scoreGameSync(bears, KEYS, PAYOUT, (bears.start as number) + bears.n - 600, t.send);
+			expect(t.misses).toEqual([]);
+			return [o.decision.action, o.decision.why, o.report];
+		};
+		expect(inside(both(final(1), final(2)))).toEqual(["wait", "inside n: not every counting seat has a final yet", null]);
+		expect(inside(both(final(1), final(2), rowsAt(3, () => [])))).toEqual(["wait", "inside n: a counting seat is silent", null]);
+		expect(inside(both(final(1), final(2), rowsAt(3, (r) => [{ ...r, ...NO_POINTS[3] }])))).toEqual(["wait", "inside n: a counting seat is silent", null]);
+		expect(inside(both(final(1), final(2), off(3)))).toEqual(["wait", "inside n: not every counting seat has a final yet", null]);
 	});
 });

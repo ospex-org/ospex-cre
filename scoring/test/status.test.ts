@@ -10,7 +10,10 @@ import { toRecord as seat1 } from "../src/readers/seat1";
 import { toRecord as seat2 } from "../src/readers/seat2";
 import { toRecord as seat4 } from "../src/readers/seat4";
 import { CASES, MID, NOW } from "./cases";
-import { at as at2, copy, readSaved, type Derive } from "./fixtures";
+import { KEY, at as at2, copy, locate, readSaved, saved, type Derive } from "./fixtures";
+import { readerFor } from "../src/index";
+import { runSync } from "../src/run";
+import type { HttpRequest, HttpResponse, Seat } from "../src/types";
 
 const byName = (prefix: string) => CASES.find((c) => c.name.startsWith(prefix))!;
 const lakers = byName("nba final");
@@ -314,5 +317,50 @@ describe("seat 4: completed is final; it records no postponed or cancelled state
 		}
 		// The control: an entry under another team's name is not this team's.
 		expect(readSaved(4, lakers.game, NOW, spaced((s) => `${s} B`)).reading).toMatchObject({ kind: "silent", detail: "final without points" });
+	});
+});
+
+describe("the word rides a refusal for a row the reader can't parse, whether the bad row came first or second", () => {
+	// New England at Chicago as saved before the game: the game's own row at each seat, given a status word,
+	// with a row the reader can't parse put before it or after it in the answer as sent (after the saved
+	// answers' filter, which the word test must not pass a null row through).
+	const OWN = { 1: 1392309, 2: 340175, 3: "edcfd41f-1773-4bc9-a349-aa50931a0278", 4: "ffebea881c1d7b2dfb85b3e590c35985" } as const;
+	const isOwn = (seat: Seat, r: Record<string, any>): boolean => (seat === 1 ? r.id === OWN[1] : seat === 2 ? r.gameId === OWN[2] : seat === 3 ? String(r.ID).toLowerCase() === OWN[3] : r.id === OWN[4]);
+	const ownPath = (seat: Seat, p: string): boolean => (seat === 1 ? p.includes("/nfl/v1/games") : seat === 2 ? p.includes("league=NFL") : seat === 3 ? p === `/results/${OWN[3]}` : p.includes("americanfootball_nfl/scores"));
+	const readWithBadRow = (seat: Seat, fields: Record<string, unknown>, badFirst: boolean) => {
+		const t = saved(undefined, NOW);
+		const send = (q: HttpRequest): HttpResponse => {
+			const res = t.send(q);
+			const at = locate(q);
+			if (at === null || at.seat !== seat || res.status !== 200 || !ownPath(seat, at.path)) return res;
+			const body = JSON.parse(res.body);
+			const rows: Record<string, any>[] = seat === 1 ? body.data : seat === 2 ? body.results : body;
+			const i = rows.findIndex((r) => isOwn(seat, r));
+			if (i >= 0) {
+				Object.assign(rows[i], fields);
+				rows.splice(badFirst ? i : i + 1, 0, null as unknown as Record<string, any>);
+			}
+			return { status: 200, body: JSON.stringify(body) };
+		};
+		const r = runSync(seat, readerFor(seat)({ game: bears.game, now: NOW, key: KEY }), send);
+		expect(t.misses).toEqual([]);
+		return { kind: r.kind, answer: r.answer, detail: r.detail };
+	};
+	test("each seat, the status row before and after the bad row: silent, unusable, and the line carries the word verbatim", () => {
+		const rows: [Seat, Record<string, unknown>, string][] = [
+			[1, { status_state: "FINAL" }, 'unreadable record; the game\'s row says "FINAL"'],
+			[1, { status_state: "postponed" }, 'unreadable record; the game\'s row says "postponed"'],
+			[2, { status: "final " }, 'unreadable record; the game\'s row says "final "'],
+			[2, { status: "in progress" }, 'unreadable record; the game\'s row says "in progress"'],
+			[3, { Final: true, FinalType: "Finished " }, 'unreadable record; the hint\'s row says "Finished "'],
+			[3, { Final: true, FinalType: "Postponed" }, 'unreadable record; the hint\'s row says "Postponed"'],
+			[4, { completed: "true" }, 'unreadable record; the game\'s row says "true"'],
+			[4, { completed: false }, 'unreadable record; the game\'s row says "not completed"'],
+		];
+		for (const [seat, fields, detail] of rows) {
+			for (const badFirst of [true, false]) {
+				expect({ seat, fields, badFirst, ...readWithBadRow(seat, fields, badFirst) }).toEqual({ seat, fields, badFirst, kind: "silent", answer: "unusable", detail });
+			}
+		}
 	});
 });

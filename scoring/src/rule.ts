@@ -13,9 +13,10 @@
 //              points for both teams. A silent counting seat blocks, and so does one that has not
 //              yet answered with a final: inside n that is a game still on, or a feed still
 //              catching up, and the run waits.
-//   After n    Two counting seats answer with the same final and the third is silent. A seat that
-//              answered without a final is not silent, so two finals beside an
-//              answer without one are not enough.
+//   After n    Two counting seats answer with the same final: a score, over any single answer at the
+//              third that is not a competing final (in play, a word the reader does not know, an
+//              answer it could not use, postponed, cancelled); that answer neither votes nor
+//              disputes.
 //   Void       Only from start + n, and held to the finals' count: two counting seats answer
 //              affirmatively that the game will not or did not play (a row of the game, bound by
 //              its ids or names and time, whose status in the feed's own words is postponed or
@@ -35,9 +36,10 @@
 //              listing without the game, and a row without a status are silence (pick.ts). Fewer
 //              than two affirmative answers: the run waits, its line saying what each seat gave.
 //   Disagree   Any two finals that differ, from any seat asked, the spare's included, inside n or
-//              after; and from start + n, finals beside answers without one, with at least two
-//              counting seats answering: neither a score nor a void. The first run that sees either
-//              posts the dispute record, with every seat's answer.
+//              after; and from start + n, a lone final against two counting seats that say the game
+//              will not or did not play: neither a score nor a void. A lone final beside anything
+//              else waits for a second. The first run that sees either posts the dispute record,
+//              with every seat's answer.
 //   After a record   The record is not a lock (decideDisputed). Each seat is open while the program
 //              still asks it and closed once it stops (OPEN_FOR), and each has a vote: its most
 //              recent answer while it is open, its last answer once it is closed (votesOf). Silence
@@ -155,7 +157,6 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 	const counted = counting.map(of);
 	const finalsCounted = counted.filter((r) => r.kind === "final").length;
 	const answeredCounted = counted.filter((r) => r.kind !== "silent").length;
-	const withoutFinal = answeredCounted - finalsCounted;
 	// The void's votes: the answers that say the game will not or did not play.
 	const affirmed = counted.filter(affirmsNoFinal).length;
 	// The seats whose silence is not clean, and the game's row chosen beside another: each holds the void.
@@ -169,22 +170,27 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 		return { action: "wait", readings, why };
 	}
 
-	// The void's silence is only clean silence. Only where no final can be weighed; beside a final the
-	// readings score or dispute as they would.
-	if (finals.length === 0 && held.length > 0) {
-		return { action: "wait", readings, why: `after n: ${held.map(holding).join("; ")}` };
+	// After n. Two counting seats with the same final score, over any single answer at the third that
+	// is not a competing final (two finals that differ disputed above): in play, a word the reader does
+	// not know, an answer it could not use, postponed, cancelled. That answer neither votes nor disputes.
+	if (finalsCounted >= AGREE.afterN) {
+		return { action: "score", home: first.home as number, away: first.away as number, readings, why: "after n: two counting seats or more, the same final" };
 	}
+	if (finals.length > 0) {
+		// A lone final against two counting seats that say the game will not or did not play: the record.
+		// Beside anything else it waits for a second, the line saying what each seat gave.
+		if (affirmed >= AGREE.afterN) return { action: "dispute", readings, why: "after n: a final against two counting seats that say the game will not or did not play" };
+		if (answeredCounted < AGREE.afterN) return { action: "wait", readings, why: "after n: fewer than two counting seats answer" };
+		return { action: "wait", readings, why: `after n: one final, no second, and the answers beside it neither vote nor dispute; ${gave(readings)}` };
+	}
+	// No final anywhere. The void's silence is only clean silence: a seat whose answer touched the game
+	// and could not be used, or whose hint chose the game's row beside another, holds the void.
+	if (held.length > 0) return { action: "wait", readings, why: `after n: ${held.map(holding).join("; ")}` };
 	if (answeredCounted < AGREE.afterN) return { action: "wait", readings, why: "after n: fewer than two counting seats answer" };
-	if (finalsCounted >= AGREE.afterN && withoutFinal === 0) {
-		return { action: "score", home: first.home as number, away: first.away as number, readings, why: "after n: two counting seats or more, the same final, the rest silent" };
-	}
-	if (finals.length === 0) {
-		// As a score after n: two or more affirm, and the rest of the counting seats are silent. A counting seat
-		// that answers the game is in play is not silent, so two affirmative answers beside it are not enough.
-		if (affirmed >= AGREE.afterN && answeredCounted === affirmed) return { action: "void", readings, why: "after n: two counting seats or more say the game will not or did not play, the rest silent, and no seat shows a final" };
-		return { action: "wait", readings, why: `after n: ${affirmed} counting seat${affirmed === 1 ? " says" : "s say"} the game will not or did not play, two needed; ${gave(readings)}` };
-	}
-	return { action: "dispute", readings, why: "after n: finals beside answers without a final" };
+	// As a score after n: two or more affirm, and the rest of the counting seats are silent. A counting seat
+	// that answers the game is in play is not silent, so two affirmative answers beside it are not enough.
+	if (affirmed >= AGREE.afterN && answeredCounted === affirmed) return { action: "void", readings, why: "after n: two counting seats or more say the game will not or did not play, the rest silent, and no seat shows a final" };
+	return { action: "wait", readings, why: `after n: ${affirmed} counting seat${affirmed === 1 ? " says" : "s say"} the game will not or did not play, two needed; ${gave(readings)}` };
 }
 
 /**

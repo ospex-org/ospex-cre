@@ -19,13 +19,19 @@ export function request(seat: Seat, path: string, key: string, body?: string): H
 	return { method: "POST", url, headers: { ...headers, "content-type": "application/json" }, body };
 }
 
-/** The body as JSON, when the answer was a 200 that parses; otherwise why not. */
-export function jsonOf(res: HttpResponse): { ok: true; value: unknown } | { ok: false; detail: string } {
-	if (res.status !== 200) return { ok: false, detail: `http ${res.status}` };
+/**
+ * The body as JSON, when the answer was a 200 that parses; otherwise why not, and whether a body
+ * arrived at all. A request that failed, or an empty body, brought nothing: clean silence to a reader
+ * that saw no rows yet. A body that is not JSON is a non-empty body that is not the feed's list, an
+ * answer the reader could not use (types.ts, answer).
+ */
+export function jsonOf(res: HttpResponse): { ok: true; value: unknown } | { ok: false; detail: string; arrived: boolean } {
+	if (res.status !== 200) return { ok: false, detail: `http ${res.status}`, arrived: false };
+	if (res.body.trim() === "") return { ok: false, detail: "empty body", arrived: false };
 	try {
 		return { ok: true, value: JSON.parse(res.body) };
 	} catch {
-		return { ok: false, detail: "unreadable" };
+		return { ok: false, detail: "unreadable", arrived: true };
 	}
 }
 

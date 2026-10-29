@@ -172,8 +172,8 @@ describe("never: an irreversible end never rests on fewer than two counting seat
 		};
 		const other = () => ({ ...knownFinal(), gameId: "other-team-game", schedule: { date: iso(start - 3600) }, teams: { home: { team: "Auburn", conference: "a conference" }, away: { team: asks[1][2], conference: "a conference" } } });
 
-		test("the intact control disputes: the away team's final beside seat 1 in play", () => {
-			expect(run([knownFinal()])).toEqual({ action: "dispute", why: "after n: finals beside answers without a final", report: 4 });
+		test("the intact control reads the final: the away team's final beside seat 1 in play, a lone final that waits for a second, the line naming it", () => {
+			expect(run([knownFinal()])).toEqual({ action: "wait", why: "after n: one final, no second, and the answers beside it neither vote nor dispute; seat 1 in_progress, seat 2 a final, seat 3 silence (silent for the game), seat 4 silence (http 500)", report: null });
 		});
 
 		test("the away team respelt, the one query answers empty: silence, and the run waits", () => {
@@ -205,11 +205,11 @@ describe("never: an irreversible end never rests on fewer than two counting seat
 			expect(run([{ gameId: "review-2", teams: { home: {}, away: {} } }])).toMatchObject({ action: "wait", report: null });
 		});
 
-		test("the delivered final with both conference keys missing binds by its names and time: the final reads, and the run disputes as the intact control does", () => {
+		test("the delivered final with both conference keys missing binds by its names and time: the final reads, and the run waits as the intact control does", () => {
 			const noConference = knownFinal();
 			delete (noConference.teams.home as { conference?: string }).conference;
 			delete (noConference.teams.away as { conference?: string }).conference;
-			expect(run([noConference])).toEqual({ action: "dispute", why: "after n: finals beside answers without a final", report: 4 });
+			expect(run([noConference])).toEqual({ action: "wait", why: "after n: one final, no second, and the answers beside it neither vote nor dispute; seat 1 in_progress, seat 2 a final, seat 3 silence (silent for the game), seat 4 silence (http 500)", report: null });
 		});
 
 		test("the delivered final without a time: no game time, silence, and the run waits", () => {
@@ -250,10 +250,10 @@ describe("never: an irreversible end never rests on fewer than two counting seat
 			expect([o.decision.action, o.decision.why, o.report]).toEqual(["wait", "after n: seat 3 answered but could not be used: no status", null]);
 		});
 
-		test("the controls: an empty result waits; a valid final disputes beside seat 1 in play", () => {
+		test("the controls: an empty result waits; a valid final reads, a lone final beside seat 1 in play, and waits for a second", () => {
 			expect([run([]).decision.action, run([]).report]).toEqual(["wait", null]);
 			const o = run([{ ID: HINT3, OddType: "Game", Final: true, FinalType: "Finished", HomeScore: 114, AwayScore: 106 }]);
-			expect([o.decision.action, o.report?.kind]).toEqual(["dispute", 4]);
+			expect([o.decision.action, o.decision.readings.find((r) => r.seat === 3)?.kind, o.report]).toEqual(["wait", "final", null]);
 		});
 	});
 
@@ -281,7 +281,7 @@ describe("never: an irreversible end never rests on fewer than two counting seat
 		const outside = (seat: Seat, recorded: "postponed" | null): Reading => ({ seat, kind: "no_final", home: null, away: null, recorded, detail: "outside window", record: { id: `o${seat}`, time: 5_000 }, answer: "the game" });
 		const quiet = (seat: Seat): Reading => ({ seat, kind: "silent", home: null, away: null, recorded: null, detail: "silent", record: null, answer: "nothing" });
 		const scored = decideVerified([final(1), final(2), outside(3, null), quiet(4)], [1, 2, 3], false, [1, 2, 3, 4], w);
-		expect([scored.action, scored.why]).toEqual(["score", "after n: two counting seats or more, the same final, the rest silent"]);
+		expect([scored.action, scored.why]).toEqual(["score", "after n: two counting seats or more, the same final"]);
 		const held = decideVerified([outside(1, "postponed"), outside(2, "postponed"), quiet(3), quiet(4)], [1, 2, 3], false, [1, 2, 3, 4], w);
 		expect([held.action, held.why]).toEqual(["wait", "after n: fewer than two counting seats answer"]);
 		// The control: the same rows inside the window are two affirmative answers, the void.

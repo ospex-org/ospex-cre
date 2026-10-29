@@ -110,7 +110,9 @@ game.
   carries none, an answer that is never a void's vote; a row without a readable status is silent, a
   partial row; and a status word the reader does not know is silent too, the word verbatim on the
   reading, so a feed's own word for a lesser case shows in the run's line the first time it happens
-  (`unrecognized status "PPD"`). Each reader's header says its feed's words.
+  (`unrecognized status "PPD"`); a row the reader can't parse refuses the answer with the game's own
+  row's word beside it, whether the bad row came first or second (`unreadable record; the game's row
+  says "FINAL"`). Each reader's header says its feed's words.
 * **One game under two dates.** A feed can list the same record under two of the dates asked for.
   Identical copies are one record; if the record changed between the two requests, the later answer
   stands when the copies agree on the game's state and differ in their points, a game in play;
@@ -130,8 +132,14 @@ game.
   words what became of the game: a final, or that it will not or did not play, postponed or
   cancelled and nothing else. Every reading says what the reader did with the answer (`answer` in
   [`src/types.ts`](src/types.ts)): a seat is silent to the void only when its answer held nothing of
-  the game, because it was empty, the game was absent from it or its record outside the window, the
-  request failed before any row arrived, or the seat is past its window by date arithmetic. Every
+  the game: the body was empty (an empty list, or no result for the id), or was a readable list of
+  rows none of which is the game by id or by its names and time, or the request failed before any
+  body arrived, or the seat was never asked or is past its window by date arithmetic. The class is
+  per seat and the worst of its reads, so the spare's id answer the reader could not use survives a
+  clean or empty slate. A non-empty body that is not the feed's list (a single object, a wrong
+  envelope), a by-id answer that is not the requested game (seat 3's row without an id, the spare's
+  row under another id where no slate stands behind it), and any row for the game of any shape are
+  answers the reader could not use. Every
   other reading that is not an affirmative row holds the void, whatever the word was: a row of the
   game the reader could not use for a score (no usable id, no status word, a word it does not
   recognize, a final without points, a short final, a finished part of the game), a row it could not
@@ -196,8 +204,9 @@ inside the fingerprint. For a game whose start is written:
 * **Inside n**, every counting seat answers with a final, and the finals are the same: the same
   points for both teams. A silent counting seat blocks. So does one that hasn't answered with a
   final yet: the run waits.
-* **After n**, two counting seats with the same final are enough when the third is silent. A seat
-  that answered without a final isn't silent, so that is a disagreement, not a score.
+* **After n**, two counting seats with the same final score, over any single answer at the third
+  that is not a competing final: in play, a word the reader does not know, an answer it could not
+  use, postponed, cancelled. That answer neither votes nor disputes.
 * **The hour-24 void** comes only from start + n, and is held to the finals' count: two counting
   seats or more answer affirmatively that the game will not or did not play (the game's own row,
   bound by its ids or names and time, whose status in the feed's own words is postponed or
@@ -214,8 +223,9 @@ inside the fingerprint. For a game whose start is written:
   waits every tick, its line saying what each seat gave; the program never ends a game on fewer,
   and the games set's own clocks end a game the feeds never settle.
 * **A disagreement** is either of two things. Any two finals that differ, from any seat. Or, after
-  n, finals beside answers without one. The first run that sees it posts the dispute record, with
-  every seat's answer, inside n or after.
+  n, a lone final against two counting seats that say the game will not or did not play; a lone
+  final beside anything else waits for a second. The first run that sees it posts the dispute
+  record, with every seat's answer, inside n or after.
 * **After the record** the game is not locked, and it is decided on every seat's vote. A seat's
   vote is its most recent answer while it is open, and its last answer once it is closed (above). An answer is a final, or the game's own record shown without one; silence, a
   listing without the game, or the game outside the window leaves a vote where it was, and a
@@ -239,7 +249,9 @@ inside the fingerprint. For a game whose start is written:
   * Its answer without a final never blocks a score.
   * It **stands in for seat 3 for a game whose seat 3 is silent for the whole game**: a game
     created without a usable seat 3 hint, or one whose start report doesn't show seat 3 passed its
-    board check. Then seats 1, 2 and 4 count, inside n and after.
+    board check. A hint the board no longer lists is read by its result at verification: no result
+    for it, or one the reader could not use, stands seat 3 down the same way, and a final there
+    writes no start. Then seats 1, 2 and 4 count, inside n and after.
   * A seat silent on one run is just silent on that run; the spare does not stand in for it.
 
 ## The start

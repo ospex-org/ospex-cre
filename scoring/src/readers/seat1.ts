@@ -28,11 +28,12 @@
 // A conference id missing or null on a college team says nothing about the team: the record binds
 // by its names and time (src/pick.ts).
 //
-// A request that fails, or an answer without rows, before any row arrived is clean silence; after rows
-// arrived it is partway through the seat's reads, and the void holds it, as it holds a row the reader
-// can't parse, which refuses the whole answer (types.ts, answer).
+// A request that fails, or an empty body, before any row arrived is clean silence; after rows arrived
+// it is partway through the seat's reads, and the void holds it, as it holds a body that is not the
+// feed's list of rows and a row the reader can't parse, which refuses the whole answer with the game's
+// own row's word beside it (types.ts, answer; src/pick.ts, refused).
 
-import { pick, points, type FeedRecord, type FeedTeam } from "../pick";
+import { pick, points, refused, type FeedRecord, type FeedTeam } from "../pick";
 import { clean, silent } from "../run";
 import { leagueRow } from "../table";
 import { asksOf } from "../teams";
@@ -187,20 +188,23 @@ export function* read(ask: Ask): ReaderRun {
 		const q = `?${[...dates, ...teams].join("&")}&per_page=100${cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`}`;
 		const res = yield request(SEAT, `${row[SEAT]}${q}`, ask.key);
 		const body = jsonOf(res);
-		// A failure, or an answer without rows, before any row arrived is clean silence; after rows
-		// arrived it is partway through the seat's reads, and the void holds it (types.ts, answer).
-		const quiet = listing.length === 0 ? clean : silent;
-		if (!body.ok) return quiet(SEAT, body.detail);
+		// A request that failed, or an empty body, before any row arrived at this seat: clean silence. A
+		// body that is not the feed's list of rows, or a failure after rows arrived: an answer the reader
+		// could not use, and the void holds it (types.ts, answer).
+		if (!body.ok) return !body.arrived && listing.length === 0 ? clean(SEAT, body.detail) : silent(SEAT, body.detail);
 		const page = obj(body.value);
 		const data = page?.data;
-		if (!Array.isArray(data)) return quiet(SEAT, "unreadable");
+		if (!Array.isArray(data)) return silent(SEAT, "unreadable");
+		// Every row that parses is read before a row that doesn't refuses the whole answer, so the refusal
+		// carries the game's own row's word (pick.ts, refused).
+		let unreadable = false;
 		for (const g of data) {
 			const o = obj(g);
 			const r = o === null ? null : toRecord(ask.game.league, o);
-			// A row the reader can't parse refuses the whole answer, and the void holds it.
-			if (r === null) return silent(SEAT, "unreadable record");
-			listing.push(r);
+			if (r === null) unreadable = true;
+			else listing.push(r);
 		}
+		if (unreadable) return silent(SEAT, refused(ask.game, listing));
 		const next = obj(page?.meta)?.next_cursor;
 		cursor = typeof next === "number" || (typeof next === "string" && next !== "") ? String(next) : null;
 	} while (cursor !== null);

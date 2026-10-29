@@ -119,7 +119,7 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 		expect(decisions).toBe(393_216);
 		expect(scores).toEqual({
 			"seat 3 counting, inside n": 2_750,
-			"seat 3 counting, after n": 3_500,
+			"seat 3 counting, after n": 7_250,
 			"seat 3 counting, day 7": 12_250,
 			"seat 3 silent, inside n": 4_000,
 			"seat 3 silent, after n": 4_000,

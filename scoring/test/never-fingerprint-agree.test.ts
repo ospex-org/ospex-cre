@@ -267,7 +267,7 @@ describe("never: how many must agree, or which seats count, from outside the fin
 		// The control: a feed that fails another way is silent on that run, and after n two finals beside it score.
 		for (const status of [404, 500, 503]) {
 			const o = run(lakers3, ALL, after, 2, status);
-			expect({ status, got: [o.action, o.why] }).toEqual({ status, got: ["score", "after n: two counting seats or more, the same final, the rest silent"] });
+			expect({ status, got: [o.action, o.why] }).toEqual({ status, got: ["score", "after n: two counting seats or more, the same final"] });
 		}
 	});
 
@@ -300,7 +300,7 @@ describe("never: how many must agree, or which seats count, from outside the fin
 		expect(sixersAt(afterN, ALL, seat2Off)).toEqual(["dispute", "two finals differ"]);
 		expect(sixersAt(afterN, without(2), seat2Off)).toEqual(["wait", "seat 2 has no key"]);
 		expect(sixersAt(afterN, ALL, seat2Off, 2)).toEqual(["wait", "seat 2's key was refused: http 401"]);
-		// After n, the same game not yet final at seats 1 and 2, and final at seat 3: a dispute, never a void.
+		// After n, the same game not yet final at seats 1 and 2, and final at seat 3: a lone final that waits for a second, never a void.
 		const notFinal = chainOf("nba not final");
 		const seat3Final: Derive = (s, p, b) =>
 			s === 3 && p === `/results/${SEAT3_ID}` ? (copy(b) as Record<string, unknown>[]).map((r) => ({ ...r, Final: true, FinalType: "Finished", HomeScore: "114", AwayScore: "106" })) : b;
@@ -310,7 +310,7 @@ describe("never: how many must agree, or which seats count, from outside the fin
 			expect(t.misses).toEqual([]);
 			return [o.decision.action, o.decision.why];
 		};
-		expect(at3(ALL)).toEqual(["dispute", "after n: finals beside answers without a final"]);
+		expect(at3(ALL)).toEqual(["wait", "after n: one final, no second, and the answers beside it neither vote nor dispute; seat 1 scheduled, seat 2 scheduled, seat 3 a final, seat 4 not completed"]);
 		expect(at3(without(3))).toEqual(["wait", "seat 3 has no key"]);
 	});
 

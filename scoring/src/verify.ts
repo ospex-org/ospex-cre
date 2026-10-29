@@ -35,8 +35,9 @@
 //     whole game, a result listed twice, a row that would not parse. The spare that does not count
 //     holds the start by a final alone: a doubleheader it lists both games of must start, and what
 //     it could not use is read at scoring, where it holds the void. Seat 3's board drops a
-//     finished game, so a hint missing from it is read by its result before seat 3 stands down. A
-//     game every seat shows still in play gets its start, late.
+//     finished game, so a hint missing from it is read by its result before seat 3 stands down: a
+//     result the reader could not use stands it down exactly as no result does, and only a final
+//     there holds the start. A game every seat shows still in play gets its start, late.
 //
 // As built:
 //
@@ -108,8 +109,9 @@ export const READ_BY_TEAM: readonly (1 | 2 | 4)[] = Object.freeze([1, 2, 4] as c
 /**
  * What seat 3's result says when the feed answered about the hint with nothing of the game: no row
  * for it, so a hint the board no longer lists then stands seat 3 down. An answer the reader could not
- * use (a result listed twice, a part of the game) writes no start (unusable, below); any other
- * silence of the result is a read that failed, and teaches nothing.
+ * use (a result listed twice, a part of the game, a row without points) stands it down the same way
+ * (unusable, in decideStart); any other silence of the result is a read that failed, and teaches
+ * nothing.
  */
 const RESULT_ANSWERED: ReadonlySet<string> = new Set(["no result for the hint"]);
 
@@ -176,12 +178,12 @@ export function decideStart(g: Verifying, seen: Seen): Decision {
 		if (seat !== 4 && unusable(seen[seat])) return wait(`seat ${seat} answered but could not be used: ${seen[seat].detail}`);
 	}
 	// The board drops a finished game: a hint it no longer lists is read by its result. One that shows
-	// the game over, or that the reader could not use, writes nothing; one whose read failed teaches
-	// nothing, and the run waits, as it does on a board it can't read.
+	// the game over writes nothing; one the reader could not use, or none for the hint, stands seat 3
+	// down for the spare below; one whose read failed teaches nothing, and the run waits, as it does on
+	// a board it can't read.
 	if (seen.result !== undefined) {
 		if (over(seen.result)) return wait("seat 3 shows the game final");
-		if (unusable(seen.result)) return wait(`seat 3 answered but could not be used: ${seen.result.detail}`);
-		if (seen.result.kind === "silent" && !RESULT_ANSWERED.has(seen.result.detail)) return wait(`seat 3's result is silent: ${seen.result.detail}`);
+		if (seen.result.kind === "silent" && !unusable(seen.result) && !RESULT_ANSWERED.has(seen.result.detail)) return wait(`seat 3's result is silent: ${seen.result.detail}`);
 	}
 	// The date names the game. A seat read by team that lists it, and whose hint names another record,
 	// waits. Not the spare: asked by its id, its record is the hint's own, or where the feed has nothing

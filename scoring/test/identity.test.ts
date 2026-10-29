@@ -354,9 +354,10 @@ describe("never a finished game", () => {
 		expect(t.misses).toEqual([]);
 		expect(t.asked.some((q) => q.url.includes(`/results/${BEARS}`))).toBe(true);
 		expect([o.decision.action, o.decision.why, o.report]).toEqual(["wait", "seat 3 shows the game final", null]);
-		// The same with the result finished but its points missing.
+		// The same with the result finished but its points missing: an answer the reader could not use stands
+		// seat 3 down exactly as no result does, and the spare stands in.
 		const noPoints = run(game, LATE, lagging((rows) => rows.map((r) => ({ ...r, HomeScore: null, AwayScore: null }))));
-		expect([noPoints.action, noPoints.why]).toEqual(["wait", "seat 3 answered but could not be used: final without points"]);
+		expect([noPoints.action, noPoints.why]).toEqual(["start", "seats 1 and 2 list the game within an hour, and the spare stands in for seat 3"]);
 		// A result that can't be read teaches nothing: the run waits.
 		const t503 = saved(lagging(), LATE);
 		const failed = scoreGameSync(game, KEYS, PAYOUT, LATE, (q) => (q.url.includes("/results/") ? { status: 503, body: "" } : t503.send(q)));

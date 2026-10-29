@@ -325,7 +325,7 @@ describe("seat 3's hint, checked against its board", () => {
 		const finished = (r: Record<string, unknown>): Record<string, unknown> => ({ ...r, Final: true, FinalType: "Finished", HomeScore: "24", AwayScore: "17" });
 		const said: [string, Derive, string][] = [
 			["the finished row twice", result((rs) => [...rs.map(finished), ...rs.map(finished)]), "duplicate result"],
-			["the finished row, then a row the reader can't parse", result((rs) => [...rs.map(finished), null]), "unreadable record"],
+			["the finished row, then a row the reader can't parse", result((rs) => [...rs.map(finished), null]), 'unreadable record; the hint\'s row says "Finished"'],
 		];
 		for (const [what, derive, detail] of said) {
 			const v = verify(unverified("nfl not final"), derive);
@@ -762,5 +762,40 @@ describe("finding the game near the creator's date", () => {
 			return [what, v.action, v.action === "start" ? v.start : v.why];
 		});
 		expect(got).toEqual(rows.map(([what, , , action, then]) => [what, action, then]));
+	});
+});
+
+describe("seat 3's result the reader could not use, at verification", () => {
+	test("the board without the hint's row and the result listed twice: seat 3 stands down exactly as it does for no result, the spare stands in, and the start is written; a final there holds the start; the spare ambiguous holds it too", () => {
+		const result = (change: (rows: Record<string, unknown>[]) => unknown): Derive => (s, p, b) => (s === 3 && p === `/results/${BEARS}` ? change(copy(b) as Record<string, unknown>[]) : b);
+		const stood = ["start", "seats 1 and 2 list the game within an hour, and the spare stands in for seat 3", "2026-10-23T00:15:00Z", "3:silent for the game: hint not on the board"];
+		for (const [what, change] of [
+			["the row twice", (rs: Record<string, unknown>[]) => [...rs, ...rs]],
+			["the row without points, finished", (rs: Record<string, unknown>[]) => rs.map((r) => ({ ...r, Final: true, FinalType: "Finished", HomeScore: null, AwayScore: null }))],
+			["a half's row", (rs: Record<string, unknown>[]) => rs.map((r) => ({ ...r, OddType: "FirstHalf" }))],
+			["no row for the hint", () => []],
+		] as const) {
+			const v = verify(unverified("nfl not final"), result(change), NOW, []);
+			expect({ what, got: [v.action, v.why, v.start, v.seats[2]] }).toEqual({ what, got: stood });
+		}
+		// A final there: the game is over, and nothing is written.
+		const finished = verify(unverified("nfl not final"), result((rs) => rs.map((r) => ({ ...r, Final: true, FinalType: "Finished", HomeScore: "24", AwayScore: "17" }))), NOW, []);
+		expect([finished.action, finished.why]).toEqual(["wait", "seat 3 shows the game final"]);
+		// A read that failed teaches nothing: the run waits.
+		const t = saved(result((rs) => [...rs, ...rs]), NOW);
+		const failed = scoreGameSync(unverified("nfl not final"), KEYS, PAYOUT, NOW, (q) => (q.method === "POST" ? { status: 200, body: "[]" } : q.url.includes("/results/") ? { status: 503, body: "" } : t.send(q)));
+		expect([failed.decision.action, failed.decision.why]).toEqual(["wait", "seat 3's result is silent: http 503"]);
+		// The spare's ambiguity rules still hold the start: a second row of the two teams at the same time under
+		// another id, and seat 3 stood down for a spare that cannot say which row is the game.
+		const twoRows: Derive = (s, p, b) => {
+			if (s === 3 && p === `/results/${BEARS}`) return [...(b as unknown[]), ...(b as unknown[])];
+			if (s !== 4 || !p.includes("americanfootball_nfl")) return b;
+			const rows = copy(b) as Record<string, any>[];
+			const own = rows.find((r) => r.id === "ffebea881c1d7b2dfb85b3e590c35985");
+			if (own) rows.push({ ...own, id: "0000000000000000000000000000000f" });
+			return rows;
+		};
+		const ambiguous = verify(unverified("nfl not final"), twoRows, NOW, []);
+		expect([ambiguous.action, ambiguous.why, ambiguous.report]).toEqual(["wait", "seat 3 is silent for the game and the spare is silent: ambiguous", null]);
 	});
 });

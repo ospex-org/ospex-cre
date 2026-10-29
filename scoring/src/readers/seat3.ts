@@ -23,10 +23,12 @@
 // `FinalType` is a partial row and reads silent; any other `FinalType`, or "Finished" under a final
 // flag the reader does not know, is unrecognized, silent too, the words verbatim on the reading. Only
 // the game's own "Game" row is read: a hint naming a row for halves or innings is a part of the game,
-// silent. Every silence here but a failed request, an answer without rows and the hint's rows absent
-// from it (no result for the hint) is an answer the reader could not use, and the void holds it
-// (types.ts, answer): the result listed twice, a row that would not parse, a part of the game, a row
-// without points, a status word or one it does not know.
+// silent. Every silence here but a failed request, an empty body and the hint's rows absent from a
+// readable list (no result for the hint: every row under another id) is an answer the reader could not
+// use, and the void holds it (types.ts, answer): a body that is not the feed's list, a row that would
+// not parse, a row with no id the reader can hold it to (missing, empty, not a string: it may be the
+// hint's), the result listed twice, a part of the game, a row without points, a status word or one it
+// does not know. A refusal for a bad row carries the hint's row's word beside it.
 
 import { points } from "../pick";
 import { clean, silent } from "../run";
@@ -58,18 +60,30 @@ export function* read(ask: Ask): ReaderRun {
 	if ("none" in hint) return clean(SEAT, hint.none);
 
 	const res = jsonOf(yield request(SEAT, `/results/${hint.id}`, ask.key));
-	// A failed request, or an answer without rows: clean silence, nothing of the game arrived.
-	if (!res.ok) return clean(SEAT, res.detail);
-	if (!Array.isArray(res.value)) return clean(SEAT, "unreadable");
+	// A request that failed, or an empty body: clean silence, nothing of the game arrived. A body that is
+	// not the feed's list: an answer the reader could not use.
+	if (!res.ok) return res.arrived ? silent(SEAT, res.detail) : clean(SEAT, res.detail);
+	if (!Array.isArray(res.value)) return silent(SEAT, "unreadable");
 
+	// Every row is read before any refusal, so a refusal carries the hint's row's word. A row that would
+	// not parse, or one with no id the reader can hold it to, may be the hint's: an answer the reader
+	// could not use. A row under another id is not the game.
 	const rows: Record<string, unknown>[] = [];
+	let unreadable = false;
+	let unidentified = false;
 	for (const item of res.value) {
 		const r = obj(item);
-		// A row the reader can't parse refuses the whole answer, and the void holds it.
-		if (r === null) return silent(SEAT, "unreadable record");
+		if (r === null) {
+			unreadable = true;
+			continue;
+		}
 		const id = str(r.ID);
-		if (id !== null && id.toLowerCase() === hint.id) rows.push(r);
+		if (id === null) unidentified = true;
+		else if (id.toLowerCase() === hint.id) rows.push(r);
 	}
+	const word = rows.length === 0 ? "" : `; the hint's row says ${JSON.stringify(typeof rows[0].FinalType === "string" ? rows[0].FinalType : "")}`;
+	if (unreadable) return silent(SEAT, `unreadable record${word}`);
+	if (unidentified) return silent(SEAT, `result without an id${word}`);
 	// The hint's rows absent from the answer: clean silence. Listed twice, or naming a row for a half or
 	// for innings, a part of the game: an answer the reader could not use, and the void holds it.
 	if (rows.length === 0) return clean(SEAT, "no result for the hint");

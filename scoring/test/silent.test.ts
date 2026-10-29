@@ -33,7 +33,7 @@ describe("silent", () => {
 				[429, "{}", "http 429"],
 				[500, "", "http 500"],
 				[200, "<html>busy</html>", "unreadable"],
-				[200, "", "unreadable"],
+				[200, "", "empty body"],
 				[200, "null", "unreadable"],
 				[200, '"a string"', "unreadable"],
 			] as const) {
@@ -76,8 +76,10 @@ describe("silent", () => {
 			if (seat === 3) (b as unknown[])[0] = 5;
 			return b;
 		};
+		// The refusal carries the game's own row's word where that row parsed: at the spare the bad row is
+		// another game's, and the game's own row says completed.
 		for (const seat of SEATS) {
-			expect({ seat, ...detailOf(seat, gameFor(seat), badRecord) }).toEqual({ seat, kind: "silent", detail: "unreadable record" });
+			expect({ seat, ...detailOf(seat, gameFor(seat), badRecord) }).toEqual({ seat, kind: "silent", detail: seat === 4 ? 'unreadable record; the game\'s row says "completed"' : "unreadable record" });
 		}
 	});
 
