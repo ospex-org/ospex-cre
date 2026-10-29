@@ -99,7 +99,13 @@ game.
   old answered nothing (the feed says five days). With no team names or time to read, seat 3's
   points are the feed's own home and away, bound to the game by the hint; checking that binding
   against the feed's board while the game is listed belongs to verification. No hint, two
-  different hints, or a hint that is not a seat 3 id, and seat 3 is silent without asking.
+  different hints, or a hint that is not a seat 3 id, and seat 3 is silent without asking. A
+  result's id is held to the same shape, the feed's UUID: a result whose id is not a seat 3 id
+  (missing, empty, a number, `"0"`) is a result without a usable id, an answer the reader could not
+  use, the line carrying the id (`result without a usable id: "0"`); a result under another seat 3
+  id is absence, by design: with no team names or time in a result, a row under another valid id
+  cannot be told from another game, and the hint is the binding, so a void through seat 3 needs the
+  other two counting seats stale beside seat 3 re-keyed.
 * **Final or not.** Each reader maps its feed's status to final or not final, and a final also
   needs the feed's own sign of a whole game: at seats 1 and 2 the period count reached the league's
   regulation (or, where seat 1 fills in no period count, every quarter scored); at seat 3
@@ -112,7 +118,8 @@ game.
   reading, so a feed's own word for a lesser case shows in the run's line the first time it happens
   (`unrecognized status "PPD"`); a row the reader can't parse refuses the answer with the game's own
   row's word beside it, whether the bad row came first or second (`unreadable record; the game's row
-  says "FINAL"`). Each reader's header says its feed's words.
+  says "FINAL"`; at seat 3 the hint's row's `FinalType` and its final flag, `the hint's row says
+  "Finished", Final "TRUE"`). Each reader's header says its feed's words.
 * **One game under two dates.** A feed can list the same record under two of the dates asked for.
   Identical copies are one record; if the record changed between the two requests, the later answer
   stands when the copies agree on the game's state and differ in their points, a game in play;
@@ -133,13 +140,19 @@ game.
   cancelled and nothing else. Every reading says what the reader did with the answer (`answer` in
   [`src/types.ts`](src/types.ts)): a seat is silent to the void only when its answer held nothing of
   the game: the body was empty (an empty list, or no result for the id), or was a readable list of
-  rows none of which is the game by id or by its names and time, or the request failed before any
-  body arrived, or the seat was never asked or is past its window by date arithmetic. The class is
+  rows none of which is the game by id or by its names and time, or the request failed, whatever
+  its status, with no list holding the game's row in its body, or the seat was never asked or is
+  past its window by date arithmetic. Status decides nothing; the body does
+  ([`src/readers/request.ts`](src/readers/request.ts)): a 2xx body is read by these rules whatever
+  its status; a status outside 2xx is a failure, clean, unless its body is the feed's list holding
+  the game's row, an answer the reader could not use (`after n: seat 3 answered but could not be
+  used: the game's row in a 503`); an error body, a page or an empty body on any status is a
+  failure, so a rate limit does not turn a rainout into a seven-day wait. The class is
   per seat and the worst of its reads, so the spare's id answer the reader could not use survives a
   clean or empty slate. A non-empty body that is not the feed's list (a single object, a wrong
-  envelope), a by-id answer that is not the requested game (seat 3's row without an id, the spare's
-  row under another id where no slate stands behind it), and any row for the game of any shape are
-  answers the reader could not use. Every
+  envelope), a by-id answer that is not the requested game (seat 3's row without a usable id, the
+  spare's row under another id where no slate stands behind it), and any row for the game of any
+  shape are answers the reader could not use. Every
   other reading that is not an affirmative row holds the void, whatever the word was: a row of the
   game the reader could not use for a score (no usable id, no status word, a word it does not
   recognize, a final without points, a short final, a finished part of the game), a row it could not
@@ -153,8 +166,10 @@ game.
   with its breaks in the header: absence read as an answer again in [`src/pick.ts`](src/pick.ts),
   the void's count taken from any answer in [`src/rule.ts`](src/rule.ts), a bare result read as an
   answer in `src/readers/seat3.ts`; and in [`test/never-void.test.ts`](test/never-void.test.ts), the
-  class ignored by the void in `src/rule.ts`, and a reader's cap or a throw after rows arrived read
-  as clean silence in `src/run.ts`). So a spelling seat 2 no longer uses for a team leaves the seat
+  class ignored by the void in `src/rule.ts`, a reader's cap or a throw after rows arrived read as
+  clean silence in `src/run.ts`, a failed answer holding the game's row declared clean in
+  `src/readers/request.ts`, and a result id of any shape accepted in `src/readers/seat3.ts`). So a
+  spelling seat 2 no longer uses for a team leaves the seat
   silent for that team's games until the lists are regenerated, while one team respelt still
   reaches the seat through the other team's answer and reads as a name the lists don't know. The
   spare past the feed's three-day window is silent by its own date arithmetic, with no request
@@ -414,7 +429,7 @@ different finals, which only a dispute record, an update or a day-7 void can car
 bun shapes.ts           # rebuild it after any change to what the program decides
 bun shapes.ts --check   # exit 1 if it is stale; the suite fails too (test/shapes.test.ts)
 bun shapes.ts --sweep   # and the sweep of a disputed game, every fresh state beside every record a
-                        # seat could hold: 393,216 decisions, some on records no run writes
+                        # seat could hold: 1,500,000 decisions, some on records no run writes
 ```
 
 ## Fixtures

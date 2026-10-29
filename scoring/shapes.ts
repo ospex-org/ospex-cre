@@ -5,7 +5,7 @@
 //   bun shapes.ts           writes shapes/emitted.json, then prints the counts
 //   bun shapes.ts --check   writes nothing, and exits 1 if the file isn't what the program sends now
 //   bun shapes.ts --sweep   also runs the sweep of a disputed game, every fresh state beside every
-//                           record a seat could hold (393,216 decisions), and checks that each
+//                           record a seat could hold (1,500,000 decisions), and checks that each
 //                           disputed shape here is one of its shapes
 //
 // Where the shapes come from, each by the program's own functions:
@@ -26,7 +26,7 @@
 // every seat is still open for a while after the window (seat 4 to 66 hours from the start, seat 3 to
 // five days), so it adds no shape. The program's tests pin both (never-day7.test.ts, dispute.test.ts).
 //
-// The states a seat can read: the sweep's four, and one more.
+// The states a seat can read: four from test/rule-helpers.ts, and one more (freshStates, below).
 //   silent   the feed gives no answer about the game: nothing, a listing without the game, the
 //            game's record outside the window, or a row without a status (all silence, pick.ts)
 //   none     an answer without a final: the game's own record, still on, at 27-20, final A's points,
@@ -48,7 +48,7 @@ import { countingFor, decideDisputed, decideVerified, lastRecorded } from "./src
 import { clean } from "./src/run";
 import type { Game, Reading, Seat } from "./src/types";
 import { confirmStart, decideStart, type Seen } from "./src/verify";
-import { LIVE, PAYOUT, PAYOUT_REFUSED, POINTS, SEATS4, STATES, W, reading, reportReading, type State } from "./test/rule-helpers";
+import { LIVE, PAYOUT, PAYOUT_REFUSED, POINTS, SEATS4, W, reading, reportReading, type State } from "./test/rule-helpers";
 
 export const FILE = join(import.meta.dir, "shapes", "emitted.json");
 
@@ -349,15 +349,24 @@ export function render(e: Emitted): string {
 
 function sweep(): Collected {
 	const out = new Collected();
-	const pairs: [State, State][] = [];
-	for (const f of STATES) for (const r of STATES) pairs.push([f, r]);
+	// Each seat's states as the walk reads them (freshStates: five, the spare's four), each fresh state
+	// beside every record the seat could hold; the record of the affirmative row is its zero-point
+	// report row, as the program writes it.
+	const recordOf = (seat: Seat, s: Fresh): ReportReading => (s === "off" ? { seat, kind: 1, homeScore: 0, awayScore: 0 } : reportReading(seat, s));
+	const pairsOf = (seat: Seat): [Fresh, Fresh][] => {
+		const states = freshStates(seat, null, "after");
+		const pairs: [Fresh, Fresh][] = [];
+		for (const f of states) for (const r of states) pairs.push([f, r]);
+		return pairs;
+	};
+	const [P1, P2, P3, P4] = SEATS4.map(pairsOf);
 	for (const down of GAMES) {
 		const counting = countingFor(down);
 		for (const phase of ["inside", "after", "day7"] as const) {
-			for (const p1 of pairs) for (const p2 of pairs) for (const p3 of pairs) for (const p4 of pairs) {
+			for (const p1 of P1) for (const p2 of P2) for (const p3 of P3) for (const p4 of P4) {
 				const ps = [p1, p2, p3, p4];
-				const fresh = SEATS4.map((s, i) => reading(s, ps[i][0]));
-				const recorded = SEATS4.map((s, i) => reportReading(s, ps[i][1]));
+				const fresh = SEATS4.map((s, i) => freshReading(s, ps[i][0]));
+				const recorded = SEATS4.map((s, i) => recordOf(s, ps[i][1]));
 				out.add(phase, "disputed", decideDisputed(fresh, recorded, counting, phase === "inside", phase === "day7", SEATS4, down, W));
 			}
 		}

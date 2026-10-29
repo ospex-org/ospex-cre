@@ -31,15 +31,18 @@
 // A request that fails, or an empty body, before any row arrived is clean silence; after rows arrived
 // it is partway through the seat's reads, and the void holds it, as it holds a body that is not the
 // feed's list of rows and a row the reader can't parse, which refuses the whole answer with the game's
-// own row's word beside it (types.ts, answer; src/pick.ts, refused).
+// own row's word beside it (types.ts, answer; src/pick.ts, refused). Status decides nothing; the body
+// does: a failed request (a status outside 2xx) is that clean silence unless its body is the feed's
+// list holding the game's row, an answer the reader could not use (the game's row in a 503); an error
+// body, a page or an empty body on any status is a failure (readers/request.ts, failed).
 
-import { pick, points, refused, type FeedRecord, type FeedTeam } from "../pick";
+import { inFailure, pick, points, refused, type FeedRecord, type FeedTeam } from "../pick";
 import { clean, silent } from "../run";
 import { leagueRow } from "../table";
 import { asksOf } from "../teams";
 import type { Ask, ReaderRun, Seat } from "../types";
 import { filingDates, parseIsoSeconds, windowOf } from "../window";
-import { jsonOf, obj, request, str } from "./request";
+import { failed, jsonOf, obj, request, str } from "./request";
 
 const SEAT: Seat = 1;
 
@@ -188,10 +191,11 @@ export function* read(ask: Ask): ReaderRun {
 		const q = `?${[...dates, ...teams].join("&")}&per_page=100${cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`}`;
 		const res = yield request(SEAT, `${row[SEAT]}${q}`, ask.key);
 		const body = jsonOf(res);
-		// A request that failed, or an empty body, before any row arrived at this seat: clean silence. A
-		// body that is not the feed's list of rows, or a failure after rows arrived: an answer the reader
-		// could not use, and the void holds it (types.ts, answer).
-		if (!body.ok) return !body.arrived && listing.length === 0 ? clean(SEAT, body.detail) : silent(SEAT, body.detail);
+		// Status decides nothing; the body does (request.ts, failed): a failed request is clean silence
+		// before any row arrived at this seat, unless its body is the feed's list holding the game's row
+		// (pick.ts, inFailure); a 2xx body that is not the feed's list, or any failure after rows arrived:
+		// an answer the reader could not use, and the void holds it (types.ts, answer).
+		if (!body.ok) return failed(SEAT, body, body.http === null ? null : inFailure(SEAT, ask.game, body.http.status, obj(body.http.json)?.data, (o) => toRecord(ask.game.league, o), ask.near), listing.length > 0);
 		const page = obj(body.value);
 		const data = page?.data;
 		if (!Array.isArray(data)) return silent(SEAT, "unreadable");

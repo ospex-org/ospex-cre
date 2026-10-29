@@ -325,7 +325,7 @@ describe("seat 3's hint, checked against its board", () => {
 		const finished = (r: Record<string, unknown>): Record<string, unknown> => ({ ...r, Final: true, FinalType: "Finished", HomeScore: "24", AwayScore: "17" });
 		const said: [string, Derive, string][] = [
 			["the finished row twice", result((rs) => [...rs.map(finished), ...rs.map(finished)]), "duplicate result"],
-			["the finished row, then a row the reader can't parse", result((rs) => [...rs.map(finished), null]), 'unreadable record; the hint\'s row says "Finished"'],
+			["the finished row, then a row the reader can't parse", result((rs) => [...rs.map(finished), null]), 'unreadable record; the hint\'s row says "Finished", Final true'],
 		];
 		for (const [what, derive, detail] of said) {
 			const v = verify(unverified("nfl not final"), derive);

@@ -320,7 +320,7 @@ describe("seat 4: completed is final; it records no postponed or cancelled state
 	});
 });
 
-describe("the word rides a refusal for a row the reader can't parse, whether the bad row came first or second", () => {
+describe("the word rides a refusal for a row the reader can't parse, whether the bad row came first or second; at seat 3 the final flag's word too", () => {
 	// New England at Chicago as saved before the game: the game's own row at each seat, given a status word,
 	// with a row the reader can't parse put before it or after it in the answer as sent (after the saved
 	// answers' filter, which the word test must not pass a null row through).
@@ -352,8 +352,9 @@ describe("the word rides a refusal for a row the reader can't parse, whether the
 			[1, { status_state: "postponed" }, 'unreadable record; the game\'s row says "postponed"'],
 			[2, { status: "final " }, 'unreadable record; the game\'s row says "final "'],
 			[2, { status: "in progress" }, 'unreadable record; the game\'s row says "in progress"'],
-			[3, { Final: true, FinalType: "Finished " }, 'unreadable record; the hint\'s row says "Finished "'],
-			[3, { Final: true, FinalType: "Postponed" }, 'unreadable record; the hint\'s row says "Postponed"'],
+			[3, { Final: true, FinalType: "Finished " }, 'unreadable record; the hint\'s row says "Finished ", Final true'],
+			[3, { Final: true, FinalType: "Postponed" }, 'unreadable record; the hint\'s row says "Postponed", Final true'],
+			[3, { Final: "TRUE", FinalType: "Finished", HomeScore: "24", AwayScore: "17" }, 'unreadable record; the hint\'s row says "Finished", Final "TRUE"'],
 			[4, { completed: "true" }, 'unreadable record; the game\'s row says "true"'],
 			[4, { completed: false }, 'unreadable record; the game\'s row says "not completed"'],
 		];

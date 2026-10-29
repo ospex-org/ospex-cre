@@ -1,8 +1,9 @@
 // Building a request for a seat: the host, the fixed headers and where the key goes all come from
 // the feed table, so no reader names a host or a header of its feed.
 
+import { clean, silent } from "../run";
 import { seatRow } from "../table";
-import type { HttpRequest, HttpResponse, Seat } from "../types";
+import type { HttpRequest, HttpResponse, Reading, Seat } from "../types";
 
 /**
  * A GET to `path` (with its query, already encoded) at the seat's host, carrying the seat's key, or a
@@ -19,20 +20,60 @@ export function request(seat: Seat, path: string, key: string, body?: string): H
 	return { method: "POST", url, headers: { ...headers, "content-type": "application/json" }, body };
 }
 
+/** What a request brought: the body as JSON when the status was 2xx and the body parses, or why not. */
+export type Body = { readonly ok: true; readonly value: unknown } | Failure;
+
+/** A request that brought no 2xx JSON body. */
+export interface Failure {
+	readonly ok: false;
+	/** Why: `http N` for a status outside 2xx; `empty body` or `unreadable` (not JSON) for a 2xx. */
+	readonly detail: string;
+	/** Whether a body arrived, whatever the status. */
+	readonly arrived: boolean;
+	/**
+	 * The status outside 2xx, with the body as JSON when it parses (`json` undefined when it does not):
+	 * the reader looks there for the game's row (failed, below). Null for a 2xx.
+	 */
+	readonly http: { readonly status: number; readonly json: unknown } | null;
+}
+
 /**
- * The body as JSON, when the answer was a 200 that parses; otherwise why not, and whether a body
- * arrived at all. A request that failed, or an empty body, brought nothing: clean silence to a reader
- * that saw no rows yet. A body that is not JSON is a non-empty body that is not the feed's list, an
- * answer the reader could not use (types.ts, answer).
+ * The body as JSON when the status was 2xx and the body parses; otherwise why not. Status decides
+ * nothing; the body does: a 2xx body is read by the readers' rules whatever its status, an empty body
+ * brought nothing, and a status outside 2xx is a failure whose body the reader still reads for the
+ * game's row (failed, below).
  */
-export function jsonOf(res: HttpResponse): { ok: true; value: unknown } | { ok: false; detail: string; arrived: boolean } {
-	if (res.status !== 200) return { ok: false, detail: `http ${res.status}`, arrived: false };
-	if (res.body.trim() === "") return { ok: false, detail: "empty body", arrived: false };
-	try {
-		return { ok: true, value: JSON.parse(res.body) };
-	} catch {
-		return { ok: false, detail: "unreadable", arrived: true };
+export function jsonOf(res: HttpResponse): Body {
+	const arrived = res.body.trim() !== "";
+	let json: unknown;
+	let parses = false;
+	if (arrived) {
+		try {
+			json = JSON.parse(res.body);
+			parses = true;
+		} catch {
+			parses = false;
+		}
 	}
+	if (res.status < 200 || res.status >= 300) return { ok: false, detail: `http ${res.status}`, arrived, http: { status: res.status, json: parses ? json : undefined } };
+	if (!arrived) return { ok: false, detail: "empty body", arrived: false, http: null };
+	if (!parses) return { ok: false, detail: "unreadable", arrived: true, http: null };
+	return { ok: true, value: json };
+}
+
+/**
+ * The reading for a request that brought no 2xx JSON body. A status outside 2xx is a failure, clean
+ * silence before any row arrived at the seat, unless its body was the feed's list holding the game's
+ * row, which the reader names in `held` as it would find it in a 2xx body: then it is an answer the
+ * reader could not use (`the game's row in a 503`), and holds the void. An error body, a page or an
+ * empty body on any status is a failure. A 2xx body that is empty brought nothing; one that is not
+ * JSON is an answer the reader could not use. After rows arrived at the seat, any failure is partway
+ * through its reads, and holds the void (types.ts, answer).
+ */
+export function failed(seat: Seat, body: Failure, held: string | null, rowsBefore: boolean): Reading {
+	if (held !== null) return silent(seat, held);
+	if (rowsBefore || (body.http === null && body.arrived)) return silent(seat, body.detail);
+	return clean(seat, body.detail);
 }
 
 /** A plain object, or null. */
