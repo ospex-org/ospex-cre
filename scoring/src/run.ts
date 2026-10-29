@@ -1,7 +1,9 @@
 // Drives a reader's run against a transport. A transport that throws, for any reason but one, makes
 // the feed silent: nothing a transport does can turn into a final or a "no final". The one exception
 // is a cut (below): the caller's own count of requests for the run is used up, and the reader raises
-// it rather than read the seat silent.
+// it rather than read the seat silent. Silence here is clean only before any response reached the
+// reader; a throw, or the reader's own cap, after one is partway through the seat's reads, and the
+// void holds it (types.ts, answer).
 
 import type { HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
 
@@ -35,23 +37,36 @@ export function isCut(e: unknown): boolean {
  */
 export const MAX_REQUESTS = 12;
 
+/**
+ * A silent reading the void holds: an answer the reader could not use (types.ts, answer). The default
+ * for any silence, so a reader that gives up somewhere new holds the void until it says otherwise.
+ */
 export function silent(seat: Seat, detail: string): Reading {
-	return { seat, kind: "silent", home: null, away: null, recorded: null, detail, record: null };
+	return { seat, kind: "silent", home: null, away: null, recorded: null, detail, record: null, answer: "unusable" };
+}
+
+/** Clean silence: nothing of the game arrived, and the void is silent to it (types.ts, answer). */
+export function clean(seat: Seat, detail: string): Reading {
+	return { ...silent(seat, detail), answer: "nothing" };
 }
 
 /** Runs a reader with a synchronous transport, as the Chainlink workflow does. A cut is raised, not read silent. */
 export function runSync(seat: Seat, run: ReaderRun, send: (req: HttpRequest) => HttpResponse): Reading {
 	let step: IteratorResult<HttpRequest, Reading>;
+	let delivered = 0;
+	// Before any response reached the reader, clean silence; after one, partway through the seat's reads.
+	const dropped = (detail: string): Reading => (delivered > 0 ? silent(seat, detail) : clean(seat, detail));
 	try {
 		step = run.next(undefined as unknown as HttpResponse);
 		for (let asked = 0; !step.done; asked++) {
-			if (asked >= MAX_REQUESTS) return silent(seat, "request bound");
+			if (asked >= MAX_REQUESTS) return dropped("request bound");
 			const res = send(step.value);
+			delivered++;
 			step = run.next(res);
 		}
 	} catch (e) {
 		if (isCut(e)) throw e;
-		return silent(seat, "transport");
+		return dropped("transport");
 	}
 	return step.value;
 }
@@ -67,16 +82,19 @@ export async function runAsync(
 	send: (req: HttpRequest) => Promise<HttpResponse>,
 ): Promise<Reading> {
 	let step: IteratorResult<HttpRequest, Reading>;
+	let delivered = 0;
+	const dropped = (detail: string): Reading => (delivered > 0 ? silent(seat, detail) : clean(seat, detail));
 	try {
 		step = run.next(undefined as unknown as HttpResponse);
 		for (let asked = 0; !step.done; asked++) {
-			if (asked >= MAX_REQUESTS) return silent(seat, "request bound");
+			if (asked >= MAX_REQUESTS) return dropped("request bound");
 			const res = await send(step.value);
+			delivered++;
 			step = run.next(res);
 		}
 	} catch (e) {
 		if (isCut(e)) throw e;
-		return silent(seat, "transport");
+		return dropped("transport");
 	}
 	return step.value;
 }

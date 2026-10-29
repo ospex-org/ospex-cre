@@ -11,10 +11,12 @@
 // and `canceled` are the feed's own words that the game will not or did not play, and a void may rest
 // on them (rule.ts); `scheduled`, `in_progress`, `delayed`, `suspended` and `abandoned` are not final,
 // an answer that is never a void's vote; `unknown`, or no word at all, is no status, a partial row that
-// reads silent. Where a record lacks `status_state`, the reader falls back to the league's older
-// field: only that field's own unambiguous final, postponed and cancelled words count (see `older`),
-// any other word is not final, and none is no status. College's older field says "post" for a final,
-// a postponed and a cancelled game alike, so a college record without `status_state` is never final.
+// reads silent; any other word is one the reader does not recognize, silent too, the word verbatim on
+// the reading, and the void holds both (src/pick.ts). Where a record lacks `status_state`, the reader
+// falls back to the league's older field: only that field's own unambiguous final, postponed and
+// cancelled words count (see `older`), none is no status, and any other word is unrecognized.
+// College's older field says "post" for a final, a postponed and a cancelled game alike, so a college
+// record without `status_state` is never final.
 //
 // A final also needs the feed's own count of the game's parts to show a whole game: the period
 // reached, at least the league's regulation (four quarters, four in basketball, three in hockey,
@@ -26,15 +28,15 @@
 // A conference id missing or null on a college team says nothing about the team: the record binds
 // by its names and time (src/pick.ts).
 //
-// A row the reader can't parse refuses the whole answer, after every row that parses is read: the
-// game's own final among them rides on the refusal (src/pick.ts, listsFinal), so a feed that said final
-// holds the void.
+// A request that fails, or an answer without rows, before any row arrived is clean silence; after rows
+// arrived it is partway through the seat's reads, and the void holds it, as it holds a row the reader
+// can't parse, which refuses the whole answer (types.ts, answer).
 
-import { listsFinal, pick, points, saidFinal, type FeedRecord, type FeedTeam } from "../pick";
-import { silent } from "../run";
+import { pick, points, type FeedRecord, type FeedTeam } from "../pick";
+import { clean, silent } from "../run";
 import { leagueRow } from "../table";
 import { asksOf } from "../teams";
-import type { Ask, Reading, ReaderRun, Seat } from "../types";
+import type { Ask, ReaderRun, Seat } from "../types";
 import { filingDates, parseIsoSeconds, windowOf } from "../window";
 import { jsonOf, obj, request, str } from "./request";
 
@@ -145,13 +147,13 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 	let state: FeedRecord["state"];
 	let status: string;
 	if (typeof raw === "string") {
-		// A word the nine states don't name is the feed saying something short of a final; no word is no status.
-		state = Object.prototype.hasOwnProperty.call(STATE, raw) ? STATE[raw] : raw.trim() === "" ? "no_status" : "not_final";
+		// The nine states; no word is no status; a word they don't name is unrecognized, kept verbatim.
+		state = Object.prototype.hasOwnProperty.call(STATE, raw) ? STATE[raw] : raw.trim() === "" ? "no_status" : "unrecognized";
 		status = raw;
 	} else {
-		const word = String(g.status ?? g.game_state ?? "").trim();
-		state = f.older(g) ?? (word === "" ? "no_status" : "not_final");
-		status = `no status_state; ${word}`.trim();
+		const word = String(g.status ?? g.game_state ?? "");
+		state = f.older(g) ?? (word.trim() === "" ? "no_status" : "unrecognized");
+		status = state === "unrecognized" ? word : `no status_state; ${word.trim()}`.trim();
 	}
 	if (state === "final") {
 		const short = f.short(g);
@@ -171,9 +173,9 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 
 export function* read(ask: Ask): ReaderRun {
 	const row = leagueRow(ask.game.league);
-	if (row === null || !Object.prototype.hasOwnProperty.call(FIELDS, ask.game.league)) return silent(SEAT, "league not offered");
+	if (row === null || !Object.prototype.hasOwnProperty.call(FIELDS, ask.game.league)) return clean(SEAT, "league not offered");
 	const asks = asksOf(ask.game.league, ask.game.home, ask.game.away);
-	if (asks === null) return silent(SEAT, "game teams unknown");
+	if (asks === null) return clean(SEAT, "game teams unknown");
 	// One request for the game: the two teams' games (team_ids[], the feed's own ids for them) on every
 	// filing date the window touches (dates[]), a hundred to a page, following the feed's cursor should
 	// the teams' games on those dates ever run past one.
@@ -185,20 +187,20 @@ export function* read(ask: Ask): ReaderRun {
 		const q = `?${[...dates, ...teams].join("&")}&per_page=100${cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`}`;
 		const res = yield request(SEAT, `${row[SEAT]}${q}`, ask.key);
 		const body = jsonOf(res);
-		// A refusal from here on carries the game's own final among the rows read so far (listsFinal).
-		const refuse = (detail: string): Reading => saidFinal(silent(SEAT, detail), listsFinal(ask.game, [listing]));
-		if (!body.ok) return refuse(body.detail);
+		// A failure, or an answer without rows, before any row arrived is clean silence; after rows
+		// arrived it is partway through the seat's reads, and the void holds it (types.ts, answer).
+		const quiet = listing.length === 0 ? clean : silent;
+		if (!body.ok) return quiet(SEAT, body.detail);
 		const page = obj(body.value);
 		const data = page?.data;
-		if (!Array.isArray(data)) return refuse("unreadable");
-		let unreadable = false;
+		if (!Array.isArray(data)) return quiet(SEAT, "unreadable");
 		for (const g of data) {
 			const o = obj(g);
 			const r = o === null ? null : toRecord(ask.game.league, o);
-			if (r === null) unreadable = true;
-			else listing.push(r);
+			// A row the reader can't parse refuses the whole answer, and the void holds it.
+			if (r === null) return silent(SEAT, "unreadable record");
+			listing.push(r);
 		}
-		if (unreadable) return refuse("unreadable record");
 		const next = obj(page?.meta)?.next_cursor;
 		cursor = typeof next === "number" || (typeof next === "string" && next !== "") ? String(next) : null;
 	} while (cursor !== null);

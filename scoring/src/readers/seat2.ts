@@ -6,22 +6,24 @@
 // Never the day's slate: a slate page of college games is past the size a run's answer may be, and
 // one game's read costs one request whatever the league. Status, in the feed's own words: `final`
 // is final; `canceled` and `postponed` say the game will not or did not play, and a void may rest on
-// them (rule.ts); `scheduled` and any other word short of a final are not final, an answer that is
-// never a void's vote; no word is no status, a partial row that reads silent. A final also needs the
+// them (rule.ts); `scheduled`, `in progress`, `delayed` and `suspended` are not final, an answer that
+// is never a void's vote; no word is no status, a partial row that reads silent; any other word is one
+// the reader does not recognize, silent too, the word verbatim on the reading, and the void holds
+// both (src/pick.ts). A final also needs the
 // feed's own period count to have reached the
 // league's regulation (four quarters, three periods, nine innings, two halves in college basketball):
 // a record that says final short of it reads silent. A conference missing or null on a college team
 // says nothing about the team: the record binds by its names and time (src/pick.ts). A game whose
 // start the feed marks "to be announced" carries a placeholder time, so it has no game time the
-// window can hold it to. A row the reader can't parse refuses the whole answer, after every row that
-// parses is read: the game's own final among them rides on the refusal (src/pick.ts, listsFinal), so
-// a feed that said final holds the void.
+// window can hold it to. A request that fails, or an answer without rows, before any row arrived is
+// clean silence; after rows arrived it is partway through the seat's reads, and the void holds it, as
+// it holds a row the reader can't parse, which refuses the whole answer (types.ts, answer).
 
-import { listsFinal, pick, points, saidFinal, type FeedRecord, type FeedTeam, type Listing } from "../pick";
-import { silent } from "../run";
+import { pick, points, type FeedRecord, type FeedTeam, type Listing } from "../pick";
+import { clean, silent } from "../run";
 import { leagueRow } from "../table";
 import { asksOf } from "../teams";
-import type { Ask, Reading, ReaderRun, Seat } from "../types";
+import type { Ask, ReaderRun, Seat } from "../types";
 import { filingDates, parseIsoSeconds, windowOf } from "../window";
 import { jsonOf, obj, request, str } from "./request";
 
@@ -30,6 +32,9 @@ const PAGE = 100;
 
 /** The periods a whole game reaches, by league: overtime only adds to them. */
 const REGULATION: Readonly<Record<string, number>> = { nfl: 4, nba: 4, nhl: 3, mlb: 9, ncaaf: 4, ncaab: 2 };
+
+/** The feed's words for a game short of a final: an answer, never a void's vote. Any other word is unrecognized. */
+const NOT_FINAL: ReadonlySet<string> = new Set(["scheduled", "in progress", "delayed", "suspended"]);
 
 function team(t: unknown, pts: unknown): FeedTeam {
 	const o = obj(t);
@@ -51,9 +56,11 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 				? "canceled"
 				: status === "postponed"
 					? "postponed"
-					: status.trim() === ""
-						? "no_status"
-						: "not_final";
+					: NOT_FINAL.has(status)
+						? "not_final"
+						: status.trim() === ""
+							? "no_status"
+							: "unrecognized";
 	if (state === "final") {
 		const least = Object.prototype.hasOwnProperty.call(REGULATION, league) ? REGULATION[league] : null;
 		const p = board?.currentPeriod;
@@ -75,9 +82,9 @@ export function toRecord(league: string, g: Record<string, unknown>): FeedRecord
 
 export function* read(ask: Ask): ReaderRun {
 	const row = leagueRow(ask.game.league);
-	if (row === null) return silent(SEAT, "league not offered");
+	if (row === null) return clean(SEAT, "league not offered");
 	const asks = asksOf(ask.game.league, ask.game.home, ask.game.away);
-	if (asks === null) return silent(SEAT, "game teams unknown");
+	if (asks === null) return clean(SEAT, "game teams unknown");
 	// One request per team of the game: its games (team=, the feed's own spelling of it) over the filing
 	// dates the window touches as one range (date=first,last: the feed takes one or two dates, Eastern),
 	// a hundred to a page, stepping skip should a team's games on those dates ever fill one. Both
@@ -86,29 +93,29 @@ export function* read(ask: Ask): ReaderRun {
 	// never as the game's absence; an answer that comes back empty is silence, never absence (pick.ts).
 	// A team the seat's list lacks is not asked for; neither on it, and the seat is silent without asking.
 	const names = [...new Set(asks.map((a) => a[2]).filter((n): n is string => n !== null))];
-	if (names.length === 0) return silent(SEAT, "neither team on the seat's list");
+	if (names.length === 0) return clean(SEAT, "neither team on the seat's list");
 	const dates = filingDates(windowOf(ask.game));
 	const date = dates.length === 1 ? dates[0] : `${dates[0]},${dates[dates.length - 1]}`;
 	const listings: Listing[] = [];
 	for (const team of names) {
 		const listing: FeedRecord[] = [];
-		// A refusal from here on carries the game's own final among the rows read so far (listsFinal).
-		const refuse = (detail: string): Reading => saidFinal(silent(SEAT, detail), listsFinal(ask.game, [...listings, listing]));
 		for (let skip = 0; ; skip += PAGE) {
 			const q = `?league=${encodeURIComponent(row[SEAT])}&team=${encodeURIComponent(team)}&date=${date}${skip === 0 ? "" : `&skip=${skip}`}`;
 			const res = yield request(SEAT, `/games${q}`, ask.key);
 			const body = jsonOf(res);
-			if (!body.ok) return refuse(body.detail);
+			// A failure, or an answer without rows, before any row arrived is clean silence; after rows
+			// arrived it is partway through the seat's reads, and the void holds it (types.ts, answer).
+			const quiet = listings.every((l) => l.length === 0) && listing.length === 0 ? clean : silent;
+			if (!body.ok) return quiet(SEAT, body.detail);
 			const results = obj(body.value)?.results;
-			if (!Array.isArray(results)) return refuse("unreadable");
-			let unreadable = false;
+			if (!Array.isArray(results)) return quiet(SEAT, "unreadable");
 			for (const g of results) {
 				const o = obj(g);
 				const r = o === null ? null : toRecord(ask.game.league, o);
-				if (r === null) unreadable = true;
-				else listing.push(r);
+				// A row the reader can't parse refuses the whole answer, and the void holds it.
+				if (r === null) return silent(SEAT, "unreadable record");
+				listing.push(r);
 			}
-			if (unreadable) return refuse("unreadable record");
 			if (results.length < PAGE) break;
 		}
 		listings.push(listing);

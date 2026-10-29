@@ -1,6 +1,7 @@
 // Each seat's status, mapped. Postponed and cancelled, in the feed's own words, ride on the reading's
 // `recorded`, and after n a void may rest on two of them (rule.ts); they never make a final. Scheduled
-// and any other word short of a final is an answer, never a void's vote; no word is no status, which
+// and the words each feed names for a game short of a final are an answer, never a void's vote; a word
+// the reader does not know is silent, kept verbatim on the reading; no word is no status, which
 // reads silent.
 
 import { describe, expect, test } from "bun:test";
@@ -26,8 +27,8 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 		["suspended", "not_final"],
 		["abandoned", "not_final"],
 		["unknown", "no_status"],
-		["cancelled", "not_final"], // not one of the nine: a word short of a final
-		["FINAL", "not_final"],
+		["cancelled", "unrecognized"], // not one of the nine: a word the reader does not know, kept verbatim
+		["FINAL", "unrecognized"],
 	];
 	test("each state, over a real record whose older field says Final", () => {
 		const derive = (state: string): Derive => (seat, _p, body) => {
@@ -37,11 +38,13 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 		};
 		for (const [state, want] of states) {
 			const r = readSaved(1, lakers.game, NOW, derive(state)).reading;
-			// A final is a final; postponed and canceled ride on `recorded`; any other word short of a final,
-			// scheduled included, is an answer that carries none; no status is silence.
-			const kind = want === "final" ? "final" : want === "no_status" ? "silent" : "no_final";
+			// A final is a final; postponed and canceled ride on `recorded`; the five other words the feed
+			// names are an answer that carries none; no status is silence, and so is a word the reader does
+			// not know, the word verbatim on the reading.
+			const kind = want === "final" ? "final" : want === "no_status" || want === "unrecognized" ? "silent" : "no_final";
 			const recorded = want === "postponed" || want === "canceled" ? want : null;
-			expect({ state, kind: r.kind, recorded: r.recorded }).toEqual({ state, kind, recorded });
+			const detail = want === "unrecognized" ? `unrecognized status ${JSON.stringify(state)}` : r.detail;
+			expect({ state, kind: r.kind, recorded: r.recorded, detail: r.detail }).toEqual({ state, kind, recorded, detail });
 		}
 	});
 
@@ -59,7 +62,8 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 		expect(readSaved(1, rays, NOW, drop).reading).toMatchObject({ kind: "final", home: 7, away: 3 });
 		const rainout = byName("mlb postponed").game;
 		expect(readSaved(1, rainout, NOW, drop).reading).toMatchObject({ kind: "no_final", recorded: "postponed" });
-		expect(readSaved(1, bears.game, NOW, drop).reading).toMatchObject({ kind: "no_final", detail: "no status_state; 10/22 - 8:15 PM EDT" });
+		// The older field's word for a game not yet played is one the reader does not know: silent, verbatim.
+		expect(readSaved(1, bears.game, NOW, drop).reading).toMatchObject({ kind: "silent", detail: 'unrecognized status "10/22 - 8:15 PM EDT"' });
 	});
 
 	test("the feed's postponed flag, as a boolean and as the word: either is postponed, beside a status that says Final", () => {
@@ -95,12 +99,12 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 			for (const g of b.data) g.game_state = "LIVE";
 			return b;
 		};
-		expect(readSaved(1, bruins.game, bruins.now, live).reading).toMatchObject({ kind: "no_final", detail: "no status_state; LIVE" });
+		expect(readSaved(1, bruins.game, bruins.now, live).reading).toMatchObject({ kind: "silent", detail: 'unrecognized status "LIVE"' });
 		// College's older field says "post" for a final, a postponed and a cancelled game alike, so
-		// without status_state even "post" is not final.
+		// without status_state even "post" is not final: a word the reader does not know, verbatim.
 		for (const prefix of ["ncaaf final, read the next afternoon", "ncaab final, read with seat 1"]) {
 			const c = byName(prefix);
-			expect({ prefix, ...readSaved(1, c.game, c.now, drop).reading }).toMatchObject({ prefix, kind: "no_final", detail: "no status_state; post" });
+			expect({ prefix, ...readSaved(1, c.game, c.now, drop).reading }).toMatchObject({ prefix, kind: "silent", detail: 'unrecognized status "post"' });
 			// The control: with status_state present, college reads like every league.
 			expect({ prefix, kind: readSaved(1, c.game, c.now).reading.kind }).toEqual({ prefix, kind: "final" });
 		}
@@ -121,7 +125,7 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 			expect({ word, ...readSaved(1, sf, NOW, drop(word)).reading }).toMatchObject({ word, kind: "final", home: 23, away: 17 });
 		}
 		for (const word of ["Final/", "Final/OTT", "final", "Final OT", "Final/2", "Final/5"]) {
-			expect({ word, kind: readSaved(1, lakers.game, NOW, drop(word)).reading.kind }).toEqual({ word, kind: "no_final" });
+			expect({ word, ...readSaved(1, lakers.game, NOW, drop(word)).reading }).toMatchObject({ word, kind: "silent", detail: `unrecognized status ${JSON.stringify(word)}` });
 		}
 	});
 
@@ -194,7 +198,7 @@ describe("seat 2: final is final once its period count shows a whole game; cance
 			["in progress", "not_final"],
 			["delayed", "not_final"],
 			["suspended", "not_final"],
-			["Final", "not_final"],
+			["Final", "unrecognized"],
 			["", "no_status"],
 		]) {
 			expect({ status, state: seat2("nba", { ...base, status })?.state }).toEqual({ status, state });
@@ -249,9 +253,10 @@ describe("seat 3: final only when Final is true and FinalType is Finished", () =
 		[{ Final: "True", FinalType: "Finished", HomeScore: "24", AwayScore: "20" }, "final", null],
 		[{ Final: true, FinalType: "Postponed", HomeScore: null, AwayScore: null }, "no_final", "postponed"],
 		[{ Final: true, FinalType: "Canceled", HomeScore: "0", AwayScore: "0" }, "no_final", "canceled"],
-		[{ Final: true, FinalType: "Abandoned", HomeScore: "10", AwayScore: "7" }, "no_final", null],
-		[{ Final: false, FinalType: "Finished", HomeScore: "24", AwayScore: "20" }, "no_final", null],
-		[{ Final: "false", FinalType: "Finished", HomeScore: "24", AwayScore: "20" }, "no_final", null],
+		// A FinalType the reader does not know, or Finished under a final flag it does not know: silent, verbatim.
+		[{ Final: true, FinalType: "Abandoned", HomeScore: "10", AwayScore: "7" }, "silent", null],
+		[{ Final: false, FinalType: "Finished", HomeScore: "24", AwayScore: "20" }, "silent", null],
+		[{ Final: "false", FinalType: "Finished", HomeScore: "24", AwayScore: "20" }, "silent", null],
 		[{ Final: true, FinalType: "NotFinished", HomeScore: "24", AwayScore: "20" }, "no_final", null],
 	];
 	test("each combination", () => {
@@ -260,6 +265,10 @@ describe("seat 3: final only when Final is true and FinalType is Finished", () =
 			expect({ fields, kind: r.kind, recorded: r.recorded }).toEqual({ fields, kind, recorded });
 			if (kind === "final") expect([r.home, r.away]).toEqual([24, 20]);
 		}
+		const words = (fields: Record<string, unknown>) => readSaved(3, bears.game, NOW, withResult(fields)).reading.detail;
+		expect(words({ Final: true, FinalType: "Abandoned" })).toBe('unrecognized status "Abandoned"');
+		expect(words({ Final: "TRUE", FinalType: "Finished", HomeScore: "24", AwayScore: "20" })).toBe('unrecognized final flag "TRUE"');
+		expect(words({ Final: false, FinalType: "Finished", HomeScore: "24", AwayScore: "20" })).toBe("unrecognized final flag false");
 	});
 
 	test("a final whose points do not read is silent", () => {
@@ -276,7 +285,7 @@ describe("seat 4: completed is final; it records no postponed or cancelled state
 		for (const [completed, state] of [
 			[true, "final"],
 			[false, "not_final"],
-			["true", "no_status"],
+			["true", "unrecognized"],
 			[null, "no_status"],
 			[undefined, "no_status"],
 		] as const) {

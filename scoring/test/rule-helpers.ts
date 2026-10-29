@@ -29,10 +29,11 @@ export const POINTS: Readonly<Record<"A" | "B", readonly [number, number]>> = { 
 export const LIVE: readonly [number, number] = POINTS.A;
 
 export function reading(seat: Seat, s: State): Reading {
-	if (s === "silent") return { seat, kind: "silent", home: null, away: null, recorded: null, detail: "silent", record: null };
-	if (s === "none") return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: { id: `r${seat}`, time: null } };
+	// The sweeps' silence is clean silence (types.ts, answer): a feed with nothing of the game.
+	if (s === "silent") return { seat, kind: "silent", home: null, away: null, recorded: null, detail: "silent", record: null, answer: "nothing" };
+	if (s === "none") return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: { id: `r${seat}`, time: null }, answer: "the game" };
 	const [home, away] = POINTS[s];
-	return { seat, kind: "final", home, away, recorded: null, detail: "final", record: null };
+	return { seat, kind: "final", home, away, recorded: null, detail: "final", record: null, answer: "the game" };
 }
 
 export function reportReading(seat: Seat, s: State): ReportReading {

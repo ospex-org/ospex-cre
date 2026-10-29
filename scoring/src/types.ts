@@ -59,15 +59,23 @@ export interface Reading {
 	 */
 	readonly record: { readonly id: string; readonly time: number | null } | null;
 	/**
-	 * Set on a silent reading whose feed said the game is final all the same: the game's own row,
-	 * bound by its ids or names and time, whose status says final, which the reader could not score
-	 * (a final without points, one the feed's own count shows short of a whole game, seat 3's result
-	 * listed twice, a final beside a row the reader can't parse), set before the rejection. Silent,
-	 * it is never a scoring vote; verification writes no start on it (verify.ts, over), and after n
-	 * the hour-24 void waits on it (rule.ts, decide): for an irreversible end the veto is the word,
-	 * not the score.
+	 * What the reader did with the feed's answer: the one class the void reads (rule.ts), since the
+	 * void's silence is only clean silence.
+	 *   "nothing"   The answer held nothing of the game: it was empty, the game was absent from it or
+	 *               its record outside the window, the request failed before any row arrived, the seat
+	 *               is past its window by date arithmetic, or it was never asked. Clean silence: silent
+	 *               to the void.
+	 *   "the game"  The game's own row, read: a final, or an answer without one.
+	 *   "unusable"  The answer touched the game and the reader could not use it: a row of the game
+	 *               without a usable id, a status word or points, a status word the reader does not
+	 *               recognize (the word verbatim on `detail`), a final short of a whole game, a part of
+	 *               the game, a row that would not parse, a failure or the reader's own cap partway
+	 *               through the seat's reads after rows arrived, two rows that could be the game, two
+	 *               answers that disagree about it. Silent to a score; it holds the void.
+	 *   "chosen"    The game's own row, read by its hint beside another row that could be the game: an
+	 *               answer to a score, and it holds the void.
 	 */
-	readonly saysFinal?: true;
+	readonly answer: "nothing" | "the game" | "unusable" | "chosen";
 }
 
 /** One HTTP request a reader asks for. The key sits where the feed table says. */

@@ -309,25 +309,27 @@ describe("seat 3's hint, checked against its board", () => {
 
 	test("with seat 3 counting, its result read again must read: silent, a part of the game, or no result, and nothing is written", () => {
 		const result = (change: (rows: Record<string, unknown>[]) => unknown): Derive => (s, p, b) => (s === 3 && p === `/results/${BEARS}` ? change(copy(b) as Record<string, unknown>[]) : b);
+		// An answer the reader could not use (a part of the game, the row twice) and clean silence (no row
+		// for the hint) alike write nothing; the line says which.
 		const rows: [string, Derive, string][] = [
-			["a half's row", result((rs) => rs.map((r) => ({ ...r, OddType: "FirstHalf" }))), "hint names a part of the game"],
-			["no row for the hint", result(() => []), "no result for the hint"],
-			["the row twice", result((rs) => [...rs, ...rs]), "duplicate result"],
+			["a half's row", result((rs) => rs.map((r) => ({ ...r, OddType: "FirstHalf" }))), "seat 3 answered but could not be used: hint names a part of the game"],
+			["no row for the hint", result(() => []), "seat 3 can't be read as scoring will: no result for the hint"],
+			["the row twice", result((rs) => [...rs, ...rs]), "seat 3 answered but could not be used: duplicate result"],
 		];
-		for (const [what, derive, detail] of rows) {
+		for (const [what, derive, why] of rows) {
 			const v = verify(unverified("nfl not final"), derive);
-			expect({ what, got: [v.action, v.why] }).toEqual({ what, got: ["wait", `seat 3 can't be read as scoring will: ${detail}`] });
+			expect({ what, got: [v.action, v.why] }).toEqual({ what, got: ["wait", why] });
 		}
-		// The hint's finished row twice, or beside a row the reader can't parse: the feed said final, and no
-		// start is written for a game already over (types.ts, saysFinal), as for a finished row without points.
+		// The hint's finished row twice, or beside a row the reader can't parse: an answer the reader could
+		// not use, and no start is written (types.ts, answer), as for a finished row without points.
 		const finished = (r: Record<string, unknown>): Record<string, unknown> => ({ ...r, Final: true, FinalType: "Finished", HomeScore: "24", AwayScore: "17" });
-		const said: [string, Derive][] = [
-			["the finished row twice", result((rs) => [...rs.map(finished), ...rs.map(finished)])],
-			["the finished row, then a row the reader can't parse", result((rs) => [...rs.map(finished), null])],
+		const said: [string, Derive, string][] = [
+			["the finished row twice", result((rs) => [...rs.map(finished), ...rs.map(finished)]), "duplicate result"],
+			["the finished row, then a row the reader can't parse", result((rs) => [...rs.map(finished), null]), "unreadable record"],
 		];
-		for (const [what, derive] of said) {
+		for (const [what, derive, detail] of said) {
 			const v = verify(unverified("nfl not final"), derive);
-			expect({ what, got: [v.action, v.why, v.report] }).toEqual({ what, got: ["wait", "seat 3 shows the game final", null] });
+			expect({ what, got: [v.action, v.why, v.report] }).toEqual({ what, got: ["wait", `seat 3 answered but could not be used: ${detail}`, null] });
 		}
 		const t = saved(undefined, NOW);
 		const o = scoreGameSync(unverified("nfl not final"), KEYS, PAYOUT, NOW, (q) => (q.url.includes("/results/") ? { status: 503, body: "" } : t.send(q)));
@@ -606,7 +608,7 @@ describe("finding the game near the creator's date", () => {
 			["1:2026-10-23T04:15:00Z", "2:2026-10-23T04:15:00Z", "3:silent for the game: no hint", "4:2026-10-23T04:15:00Z"],
 		]);
 		const between = verify(unverified("nfl not final", { date: at("2026-10-23T02:15:00Z"), hints: [] }), dh);
-		expect([between.action, between.why]).toEqual(["wait", "seat 1 is silent: ambiguous"]);
+		expect([between.action, between.why]).toEqual(["wait", "seat 1 answered but could not be used: ambiguous"]);
 	});
 
 	test("the nearest decides among the two teams' records; one of the game's teams beside an unknown name counts only where scoring would see it", () => {
@@ -631,8 +633,8 @@ describe("finding the game near the creator's date", () => {
 		const rows: [string, Derive, string, string | null][] = [
 			["the doubleheader alone", dh, "start", "2026-10-23T04:15:00Z"],
 			["beside one team and an unknown name, at 22:15 the evening before", unknownAt("2026-10-22T22:15:00.000Z"), "start", "2026-10-23T04:15:00Z"],
-			["beside one team and an unknown name, at 06:00, inside the window", unknownAt("2026-10-23T06:00:00.000Z"), "wait", "seat 1 can't read the game as scoring will: ambiguous"],
-			["beside the two teams with no time", beside((g) => ({ ...g, date: null })), "wait", "seat 1 is silent: ambiguous"],
+			["beside one team and an unknown name, at 06:00, inside the window", unknownAt("2026-10-23T06:00:00.000Z"), "wait", "seat 1 answered but could not be used: ambiguous"],
+			["beside the two teams with no time", beside((g) => ({ ...g, date: null })), "wait", "seat 1 answered but could not be used: ambiguous"],
 		];
 		const got = rows.map(([what, derive]) => {
 			const v = verify(game, derive);
@@ -737,7 +739,7 @@ describe("finding the game near the creator's date", () => {
 			for (const g of c.data) if (g.id === 1392309) g.date = "2026-10-23T00:20:00.000Z";
 			return c;
 		};
-		const WAIT = "seat 1 can't read the game as scoring will: ambiguous";
+		const WAIT = "seat 1 answered but could not be used: ambiguous";
 		const rows: [string, ChainGame, Derive | undefined, string, string][] = [
 			["one game, as saved", one, undefined, "start", "2026-10-23T00:15:00Z"],
 			["one game, an unplaced record at 22:15 the evening before, before the window", one, unplacedAt(undefined, "2026-10-22T22:15:00.000Z"), "start", "2026-10-23T00:15:00Z"],

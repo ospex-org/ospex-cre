@@ -174,27 +174,6 @@ export function requestsFor(why: "verification" | "day 7" | "scoring"): number {
 	return why === "verification" ? VERIFYING_REQUESTS : why === "day 7" ? 0 : SCORING_REQUESTS;
 }
 
-/** The chain reads one full read makes: the identity, the readings, the reporters, the coin, the approved list, the payout's record. */
-export const READS_PER_FULL_READ = 6;
-
-/**
- * The chain reads one probe makes: the game's identity (its hints, and its teams for the spare) and its
- * readings (the start report, which says which seat the probe asks; a disputed game's votes). A full
- * read on the probe's final has both in hand.
- */
-export const READS_PER_PROBE = 2;
-
-/**
- * The most of the open list's pages one shard reads in a tick: its first page every tick; the page the
- * other ticks' count names every tick, the turn of the probes and the clocks' windows (tick.ts,
- * otherCount); and on the hour's first two ticks the page the hour's count names, the turn of the
- * verification (the first tick) and the hour's reads (the second). Each count names a place on the
- * shard (chain.ts, placeNamed), and the page that holds it is the one read, so the game at that place
- * is read on that count; the reads for the probes and the full read stay in hand: 1 for the header, up
- * to 3 here, 6 for a full read, the rest for probes.
- */
-export const MOST_PAGES_PER_TICK = 3;
-
 /**
  * When the tick verifies a game the creation trigger's run left unverified (the feeds list a game
  * days ahead, a creator may create it months ahead): from seven days before its date, on the hour's
@@ -639,13 +618,14 @@ export function counted(send: (req: HttpRequest) => HttpResponse, limit: number)
  * rule is the program's own (silentForGame): a game created without a usable seat 3 hint, or whose
  * hint failed the board check at verification, has seat 3 silent for the whole game, and the program
  * never asks it, so a probe there would ask a seat the full read will not read. The probe asks only
- * whether the game is over. A reading says final when it carries a final, or when the feed says the
- * game is over without points the program could take.
+ * whether the game is over. It calls for the full read on a final, and on an answer the reader could
+ * not use (scoring/src/types.ts, answer): the full read then scores on the other seats' finals, or
+ * waits, and never on the probe's own reading.
  */
 export function probeSeatFor(game: Pick<ChainGame, "hints" | "startReadings">): Seat {
 	return silentForGame(game) === 3 ? SPARE : 3;
 }
 
-export function saysFinal(r: Reading): boolean {
-	return r.kind === "final" || r.saysFinal === true;
+export function callsForFullRead(r: Reading): boolean {
+	return r.kind === "final" || r.answer === "unusable";
 }

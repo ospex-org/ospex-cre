@@ -300,9 +300,9 @@ describe("one tick", () => {
 		expect([f.result.reads, f.result.requests]).toEqual([8, 1]);
 	});
 
-	test("a feed that says the game is over without points is a final for the probe", () => {
+	test("a feed that says the game is over without points is an answer the reader could not use: no final at the probe, and it calls for the full read all the same", () => {
 		const f = tick([gameOf(1)], PROBING, { says: () => "over without points" });
-		expect(f.result.probes[0]).toMatchObject({ kind: "silent", final: true });
+		expect(f.result.probes[0]).toMatchObject({ kind: "silent", final: false });
 		expect(f.result.fullRead).not.toBeNull();
 	});
 

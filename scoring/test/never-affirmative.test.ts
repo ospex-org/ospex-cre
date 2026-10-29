@@ -1,5 +1,5 @@
-// Never: "An irreversible end never rests on fewer than two counting seats' affirmative answers;
-// absence and a partial row are silence, and no answering seat said final, scorable or not."
+// Never: "An irreversible end never rests on fewer than two counting seats' affirmative answers, and
+// the void's silence is only clean silence."
 //
 // An affirmative answer is the game's own row, bound by its ids or names and time, that says in the
 // feed's own words what became of the game: a final, or that the game will not or did not play
@@ -12,15 +12,15 @@
 // beside one of the game's teams; a row that says the game is in play. A missing or null conference,
 // or any missing metadata, is unknown, never a mark against a team: the row still binds by its names
 // and time. The spare past the feed's three-day window is silent by its own date arithmetic, before
-// any request. And a seat that said the word final without a final its reader could score (its result
-// listed twice, its final without points, its final beside a row the reader can't parse) holds the
-// void all the same: silent to the score, marked saysFinal, with the hour-24 void and its break in
-// never-void.test.ts.
+// any request. Silence to a score is not silence to the void: a seat is silent to the void only when
+// its answer held nothing of the game (empty, absent, outside the window, a failure before any row,
+// the seat past its window), and every other reading that is not an affirmative row holds it (the
+// class on the reading, types.ts; the hour-24 void and its breaks in never-void.test.ts).
 //
 // The breaks that turn this red:
 //   pick.ts, the end of pick: absence read as an answer again,
-//     return silent(seat, "absent");
-//     ->  return { seat, kind: "no_final", home: null, away: null, recorded: null, detail: "absent", record: null };
+//     return clean(seat, "absent");
+//     ->  return { seat, kind: "no_final", home: null, away: null, recorded: null, detail: "absent", record: null, answer: "the game" };
 //   with which a listing of the teams' other games says the game has no final at the reader;
 //   rule.ts, decide: the void's count taken from any answer,
 //     const affirmed = counted.filter(affirmsNoFinal).length;
@@ -28,8 +28,8 @@
 //   with which two rows in play void the game at hour 24 (never-void.test.ts);
 //   seat3.ts, readingOf: a row without a status read as an answer,
 //     if (type.trim() === "") return silent(SEAT, "no status");
-//     ->  deleted
-//   with which the hint's bare row counts beside a row in play, and the one-queryable run below waits no more.
+//     ->  if (type.trim() === "") return { seat: SEAT, kind: "no_final", home, away, recorded: null, detail: "no status", record, answer: "the game" };
+//   with which the hint's bare row counts beside a row in play, and the one-queryable run below waits on another line.
 
 import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../src/chain";
@@ -58,7 +58,7 @@ function readWith(seat: Seat, game: ChainGame | typeof lakers, send: (req: HttpR
 
 const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
 
-describe("never: an irreversible end never rests on fewer than two counting seats' affirmative answers; absence and a partial row are silence, and no answering seat said final, scorable or not", () => {
+describe("never: an irreversible end never rests on fewer than two counting seats' affirmative answers, and the void's silence is only clean silence", () => {
 	test("an empty answer reads silent at every seat: seat 1's data, seat 2's results, seat 3's result, the spare by its id and by its slate", () => {
 		expect(readWith(1, lakers, () => json({ data: [], meta: {} }))).toMatchObject({ kind: "silent", detail: "empty listing" });
 		expect(readWith(2, lakers, () => json({ results: [] }))).toMatchObject({ kind: "silent", detail: "empty listing" });
@@ -245,9 +245,9 @@ describe("never: an irreversible end never rests on fewer than two counting seat
 				return { status: 500, body: "unavailable" };
 			});
 
-		test("the hint's row with no status and no points beside seat 1 in play: a partial row, silence, and the run waits with nothing written", () => {
+		test("the hint's row with no status and no points beside seat 1 in play: a partial row, silence to a score, and the run waits with nothing written, its line naming the seat", () => {
 			const o = run([{ ID: HINT3, OddType: "Game" }]);
-			expect([o.decision.action, o.decision.why, o.report]).toEqual(["wait", "after n: fewer than two counting seats answer", null]);
+			expect([o.decision.action, o.decision.why, o.report]).toEqual(["wait", "after n: seat 3 answered but could not be used: no status", null]);
 		});
 
 		test("the controls: an empty result waits; a valid final disputes beside seat 1 in play", () => {
@@ -277,9 +277,9 @@ describe("never: an irreversible end never rests on fewer than two counting seat
 
 	test("to the rule, a reading that is not an answer about the game is silence: a record outside the window handed to it beside two finals scores after n, and a postponed row outside the window is no void's vote", () => {
 		const w = { from: 1_000, to: 2_000 };
-		const final = (seat: Seat): Reading => ({ seat, kind: "final", home: 27, away: 20, recorded: null, detail: "final", record: { id: `f${seat}`, time: 1_500 } });
-		const outside = (seat: Seat, recorded: "postponed" | null): Reading => ({ seat, kind: "no_final", home: null, away: null, recorded, detail: "outside window", record: { id: `o${seat}`, time: 5_000 } });
-		const quiet = (seat: Seat): Reading => ({ seat, kind: "silent", home: null, away: null, recorded: null, detail: "silent", record: null });
+		const final = (seat: Seat): Reading => ({ seat, kind: "final", home: 27, away: 20, recorded: null, detail: "final", record: { id: `f${seat}`, time: 1_500 }, answer: "the game" });
+		const outside = (seat: Seat, recorded: "postponed" | null): Reading => ({ seat, kind: "no_final", home: null, away: null, recorded, detail: "outside window", record: { id: `o${seat}`, time: 5_000 }, answer: "the game" });
+		const quiet = (seat: Seat): Reading => ({ seat, kind: "silent", home: null, away: null, recorded: null, detail: "silent", record: null, answer: "nothing" });
 		const scored = decideVerified([final(1), final(2), outside(3, null), quiet(4)], [1, 2, 3], false, [1, 2, 3, 4], w);
 		expect([scored.action, scored.why]).toEqual(["score", "after n: two counting seats or more, the same final, the rest silent"]);
 		const held = decideVerified([outside(1, "postponed"), outside(2, "postponed"), quiet(3), quiet(4)], [1, 2, 3], false, [1, 2, 3, 4], w);

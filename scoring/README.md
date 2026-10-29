@@ -104,17 +104,19 @@ game.
   needs the feed's own sign of a whole game: at seats 1 and 2 the period count reached the league's
   regulation (or, where seat 1 fills in no period count, every quarter scored); at seat 3
   `FinalType` "Finished"; at seat 4 `completed`. A record that says final short of that reads
-  silent: neither a final the reader can take nor a game the feed calls unfinished. A final the
-  reader could not score, that one, a final without points, seat 3's result listed twice, or a
-  final beside a row the reader can't parse, leaves the reading silent but marked (`saysFinal`):
-  never a scoring vote, no start at verification, and after n the void waits on it (below). Postponed and
+  silent: neither a final the reader can take nor a game the feed calls unfinished. Postponed and
   cancelled, in the feed's own words, ride on the reading, and after n a void rests on two counting
-  seats' rows that carry one (below); a row scheduled or in play carries none, an answer that is
-  never a void's vote; a row without a readable status is silent, a partial row. Each reader's
-  header says its feed's words.
+  seats' rows that carry one (below); a row scheduled or in play, in a word the reader knows,
+  carries none, an answer that is never a void's vote; a row without a readable status is silent, a
+  partial row; and a status word the reader does not know is silent too, the word verbatim on the
+  reading, so a feed's own word for a lesser case shows in the run's line the first time it happens
+  (`unrecognized status "PPD"`). Each reader's header says its feed's words.
 * **One game under two dates.** A feed can list the same record under two of the dates asked for.
   Identical copies are one record; if the record changed between the two requests, the later answer
-  stands, unless the copies name different teams or the earlier was already final.
+  stands when the copies agree on the game's state and differ in their points, a game in play;
+  copies that name different teams, or disagree on the state, or where the earlier already said
+  final or short of a whole game, are two answers that disagree about the game, and the feed is
+  silent.
 * **Silent.** A feed is silent when it can't answer about the game: no key, a refused or failed
   request (a 401 from a league the seat's plan does not cover reads `http 401`, so the reason
   travels with the reading), an answer that doesn't parse, a record with no game time, a final
@@ -123,23 +125,33 @@ game.
   from it, or the two teams' record outside the window), a row without a readable status, a closed
   seat (below), a clock that isn't a number, and, at seat 3, no usable hint, no result for it, or a
   hint naming a row for part of the game. **An irreversible end never rests on fewer than two
-  counting seats' affirmative answers; absence and a partial row are silence, and no answering seat
-  said final, scorable or not.** An affirmative
+  counting seats' affirmative answers, and the void's silence is only clean silence.** An affirmative
   answer is the game's own row, bound by its ids or names and time, that says in the feed's own
   words what became of the game: a final, or that it will not or did not play, postponed or
-  cancelled and nothing else. Absence is silence
+  cancelled and nothing else. Every reading says what the reader did with the answer (`answer` in
+  [`src/types.ts`](src/types.ts)): a seat is silent to the void only when its answer held nothing of
+  the game, because it was empty, the game was absent from it or its record outside the window, the
+  request failed before any row arrived, or the seat is past its window by date arithmetic. Every
+  other reading that is not an affirmative row holds the void, whatever the word was: a row of the
+  game the reader could not use for a score (no usable id, no status word, a word it does not
+  recognize, a final without points, a short final, a finished part of the game), a row it could not
+  read at all, a failure or its own cap partway through the seat's reads after rows arrived, two rows
+  that could be the game (a hint picks which to score, and does not clear the anomaly for the void),
+  two answers at one seat that disagree about the game; the run waits, its line naming the seat and
+  the class (`after n: seat 3 answered but could not be used: duplicate result`). Absence is silence
   everywhere: a game not in an answer, empty or not, says nothing, since a spelling the feed no
   longer uses, a filter it did not apply or a list that stops short answers that way too; and a row
-  without a status says nothing of the game's end ([`test/never-affirmative.test.ts`](test/never-affirmative.test.ts),
+  without a status says nothing of the game's end, silence to a score ([`test/never-affirmative.test.ts`](test/never-affirmative.test.ts),
   with its breaks in the header: absence read as an answer again in [`src/pick.ts`](src/pick.ts),
   the void's count taken from any answer in [`src/rule.ts`](src/rule.ts), a bare result read as an
   answer in `src/readers/seat3.ts`; and in [`test/never-void.test.ts`](test/never-void.test.ts), the
-  void ignoring a seat that said final). So a spelling seat 2 no longer uses for a team leaves the seat
+  class ignored by the void in `src/rule.ts`, and a reader's cap or a throw after rows arrived read
+  as clean silence in `src/run.ts`). So a spelling seat 2 no longer uses for a team leaves the seat
   silent for that team's games until the lists are regenerated, while one team respelt still
   reaches the seat through the other team's answer and reads as a name the lists don't know. The
   spare past the feed's three-day window is silent by its own date arithmetic, with no request
-  sent. Silent is never turned into "no final". A final without points, or one short of a whole game, is silent and marked as the feed
-  saying the game is over: scoring never counts it, and verification writes no start on it.
+  sent. Silent is never turned into "no final". A final without points, or one short of a whole game, is silent, an answer the reader
+  could not use: scoring never counts it, verification writes no start on it, and the void waits on it.
 
 ## Open and closed: how long each seat is asked
 
@@ -191,12 +203,12 @@ inside the fingerprint. For a game whose start is written:
   bound by its ids or names and time, whose status in the feed's own words is postponed or
   cancelled, and nothing else: seat 1's flag and its `postponed` and `canceled`, seat 2's
   `postponed` and `canceled`, seat 3's `FinalType` Postponed and Canceled), the rest of the
-  counting seats are silent, and no seat asked said final, scorable or not: a final the reader
-  could not score (seat 3's result listed twice, a final without points, a final beside a row the
-  reader can't parse) is silent to the score and holds the void all the same, the run waiting with
-  its line naming the seat and why (`after n: seat 3 says final, unscorable: duplicate result`);
-  the veto is the word, not the score, and a game whose feeds say final but cannot score waits for
-  a second final or day 7, the clock made for it. A row that says the game is
+  counting seats are silent, and the void's silence is only clean silence (above): a seat whose
+  answer touched the game and could not be used, or whose hint chose the game's row beside another
+  that could be it, holds the void, the run waiting with its line naming the seat and the class
+  (`after n: seat 3 answered but could not be used: duplicate result`); a game a feed lists with a
+  row the reader cannot use waits for a second feed's word, a final, or the games set's own clocks.
+  A row that says the game is
   scheduled or in play is not a void's vote, and beside two affirmative answers it holds the void as
   it would hold a score. Fewer than two affirmative answers: the run
   waits every tick, its line saying what each seat gave; the program never ends a game on fewer,

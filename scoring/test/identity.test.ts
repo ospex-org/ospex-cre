@@ -151,7 +151,7 @@ describe("the date says which game", () => {
 describe("verify the way you'll score", () => {
 	test("the doubleheader's first game, created without hints at seats 1, 2 and 4: its window holds both games, so nothing is written", () => {
 		const v = run(unverified("nfl not final", { date: at("2026-10-23T00:15:00Z") }), NOW, dh);
-		expect([v.action, v.why, v.report]).toEqual(["wait", "seat 1 can't read the game as scoring will: ambiguous", null]);
+		expect([v.action, v.why, v.report]).toEqual(["wait", "seat 1 answered but could not be used: ambiguous", null]);
 		// The second game's window holds only it, so it starts without hints.
 		const second = run(unverified("nfl not final", { date: at("2026-10-23T04:00:00Z"), hints: [] }), NOW, dh);
 		expect([second.action, second.start]).toEqual(["start", "2026-10-23T04:15:00Z"]);
@@ -184,7 +184,7 @@ describe("verify the way you'll score", () => {
 			return body;
 		};
 		const v = run(unverified("nfl not final", { date: at("2026-10-23T00:39:00Z") }), NOW, opposite);
-		expect([v.action, v.why, v.report]).toEqual(["wait", "seat 1 can't read the game as scoring will: ambiguous", null]);
+		expect([v.action, v.why, v.report]).toEqual(["wait", "seat 1 answered but could not be used: ambiguous", null]);
 	});
 
 	test("the spare standing in, listing the game a second before the start written: scoring reads it outside the window, so nothing is written", () => {
@@ -356,7 +356,7 @@ describe("never a finished game", () => {
 		expect([o.decision.action, o.decision.why, o.report]).toEqual(["wait", "seat 3 shows the game final", null]);
 		// The same with the result finished but its points missing.
 		const noPoints = run(game, LATE, lagging((rows) => rows.map((r) => ({ ...r, HomeScore: null, AwayScore: null }))));
-		expect([noPoints.action, noPoints.why]).toEqual(["wait", "seat 3 shows the game final"]);
+		expect([noPoints.action, noPoints.why]).toEqual(["wait", "seat 3 answered but could not be used: final without points"]);
 		// A result that can't be read teaches nothing: the run waits.
 		const t503 = saved(lagging(), LATE);
 		const failed = scoreGameSync(game, KEYS, PAYOUT, LATE, (q) => (q.url.includes("/results/") ? { status: 503, body: "" } : t503.send(q)));
@@ -391,16 +391,21 @@ describe("never a finished game", () => {
 		};
 		const also = (a: Derive, b: Derive): Derive => (s, p, x) => b(s, p, a(s, p, x));
 		const game = unverified("nfl final, read after the game", { hints: [SEAT3] });
-		const rows: [string, Derive, string][] = [
+		// An answer a counting seat's reader could not use writes no start; the spare that does not count
+		// holds the start by a final alone, and what it could not use is read at scoring, where it holds the
+		// void (never-void.test.ts).
+		const rows: [string, Derive, string, string | null][] = [
 			[
 				"seat 3's result finished, its points missing, read again with seat 3 counting",
 				also(inPlay(3), (s, p, b) => (s === 3 && p === `/results/${BEARS}` ? (b as Record<string, unknown>[]).map((r) => ({ ...r, HomeScore: null, AwayScore: undefined })) : b)),
-				"seat 3 shows the game final",
+				"wait",
+				"seat 3 answered but could not be used: final without points",
 			],
 			[
-				"the spare completed, its scores missing, near the date",
+				"the spare completed, its scores missing, near the date: it does not count, and the start is written",
 				also(inPlay(4), (s, p, b) => (s === 4 && p.includes("americanfootball_nfl") ? (b as Record<string, any>[]).map((g) => (g.id === "ffebea881c1d7b2dfb85b3e590c35985" ? { ...g, completed: true, scores: null } : g)) : b)),
-				"seat 4 shows the game final",
+				"start",
+				null,
 			],
 			[
 				"seat 1 final, a quarter's points missing",
@@ -410,12 +415,13 @@ describe("never a finished game", () => {
 					for (const g of c.data) if (g.id === 1392309) g.home_team_q4 = null;
 					return c;
 				}),
-				"seat 1 shows the game final",
+				"wait",
+				"seat 1 answered but could not be used: final; not every quarter scored",
 			],
 		];
-		for (const [what, derive, why] of rows) {
+		for (const [what, derive, action, why] of rows) {
 			const v = run(game, LATE, derive);
-			expect({ what, got: [v.action, v.why, v.report] }).toEqual({ what, got: ["wait", why, null] });
+			expect({ what, action: v.action, why: v.action === "wait" ? v.why : null, written: v.report !== null }).toEqual({ what, action, why, written: action === "start" });
 		}
 		// The control: every feed in play, and the start is written, late.
 		const late = run(game, LATE, inPlay(0));
@@ -620,7 +626,8 @@ describe("the re-read, each of its checks on its own", () => {
 	test("each way a re-read differs writes nothing", () => {
 		const rows: [string, Partial<Record<1 | 2 | 4, Reading | null>>, string][] = [
 			["final by now", { 2: { ...listed(2, "b"), kind: "final", home: 24, away: 17, detail: "final" } }, "seat 2 shows the game final"],
-			["silent", { 1: { seat: 1, kind: "silent", home: null, away: null, recorded: null, detail: "ambiguous", record: null } }, "seat 1 can't read the game as scoring will: ambiguous"],
+			["silent, an answer the reader could not use", { 1: { seat: 1, kind: "silent", home: null, away: null, recorded: null, detail: "ambiguous", record: null, answer: "unusable" } }, "seat 1 answered but could not be used: ambiguous"],
+			["clean silence", { 1: { seat: 1, kind: "silent", home: null, away: null, recorded: null, detail: "http 503", record: null, answer: "nothing" } }, "seat 1 can't read the game as scoring will: http 503"],
 			["another record, inside the window", { 4: listed(4, "e", game.start + 3600) }, "seat 4 reads another record, or none, in the game's window: scheduled"],
 			["the same record, a second before the window", { 4: listed(4, "d", game.start - 1) }, "seat 4 reads another record, or none, in the game's window: scheduled"],
 			["the same record, at the window's end", { 1: listed(1, "a", game.start + game.n) }, "seat 1 reads another record, or none, in the game's window: scheduled"],

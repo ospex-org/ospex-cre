@@ -37,7 +37,7 @@ import { checkBoard, type BoardCheck, type BoardRun } from "./readers/board3";
 import { hintOf } from "./readers/seat3";
 import { toReport } from "./report";
 import { OPEN_FOR, countingFor, decideDisputed, decideVerified, lastRecorded, silentForGame } from "./rule";
-import { MAX_REQUESTS, isCut, runAsync, runSync, silent } from "./run";
+import { MAX_REQUESTS, clean, isCut, runAsync, runSync } from "./run";
 import { leagueRow } from "./table";
 import type { Game, HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
 import { START_BOUND, confirmStart, decideStart } from "./verify";
@@ -187,7 +187,7 @@ function* readAll(game: ChainGame, start: number, keys: Held, now: number, skip:
 	for (const seat of seatsFor(game.league)) {
 		const why = skip(seat);
 		if (why !== null) {
-			out.push(silent(seat, why));
+			out.push(clean(seat, why));
 			continue;
 		}
 		out.push((yield { kind: "read", seat, run: readerFor(seat)({ game: g, now, key: keyOf(keys, seat) }) }) as Reading);

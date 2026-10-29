@@ -52,8 +52,8 @@ import {
 	counted,
 	memoized,
 	probeSeatFor,
+	callsForFullRead,
 	requestsFor,
-	saysFinal,
 } from "./lib";
 import { runGame, summarize, type Deps, type Run } from "./run";
 
@@ -346,13 +346,13 @@ export function runTick(deps: TickDeps): TickResult {
 		const game: Game = { league: identity.league, home: identity.home, away: identity.away, start: row.start as number, n: row.window, hints: identity.hints };
 		const reading = runSync(seat, readerFor(seat)({ game, now, key }), send);
 		let changed: boolean | null = null;
-		let read = saysFinal(reading);
+		let read = callsForFullRead(reading);
 		if (row.status === "disputed") {
 			// A change against the seat's vote on record is what calls for the full read.
 			changed = !sameVote(held.votes.find((v) => v.seat === seat), reading);
 			read = changed;
 		}
-		probes.push({ gameId: row.gameId.toString(), seat, kind: reading.kind, final: saysFinal(reading), changed });
+		probes.push({ gameId: row.gameId.toString(), seat, kind: reading.kind, final: reading.kind === "final", changed });
 		if (!read) return;
 		fullReadOrWait(row, changed === null ? `final at seat ${seat}` : `a change at seat ${seat}`);
 	};

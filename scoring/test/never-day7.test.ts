@@ -309,7 +309,7 @@ describe("never: a disputed game settles on fewer than three agreeing recorded s
 			[reading(1, "A"), reading(2, "A"), reading(3, "A"), reading(4, "silent")],
 			[reportReading(1, "silent"), reportReading(2, "silent"), reportReading(3, "silent"), { seat: 4, kind: 1, homeScore: 14, awayScore: 10 }],
 		);
-		expect([d.action, d.readings[3]]).toEqual(["score", { seat: 4, kind: "no_final", home: 14, away: 10, recorded: null, detail: "its vote on record", record: null }]);
+		expect([d.action, d.readings[3]]).toEqual(["score", { seat: 4, kind: "no_final", home: 14, away: 10, recorded: null, detail: "its vote on record", record: null, answer: "the game" }]);
 	});
 
 	test("end to end: the same game created without a seat 3 hint voids on day 7, as a league with three feeds does", () => {

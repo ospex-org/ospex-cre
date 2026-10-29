@@ -45,7 +45,7 @@ import type { Decision, Report, ReportReading } from "./src/chain";
 import type { BoardCheck } from "./src/readers/board3";
 import { toReport } from "./src/report";
 import { countingFor, decideDisputed, decideVerified, lastRecorded } from "./src/rule";
-import { silent } from "./src/run";
+import { clean } from "./src/run";
 import type { Game, Reading, Seat } from "./src/types";
 import { confirmStart, decideStart, type Seen } from "./src/verify";
 import { LIVE, PAYOUT, PAYOUT_REFUSED, POINTS, SEATS4, STATES, W, reading, reportReading, type State } from "./test/rule-helpers";
@@ -151,7 +151,7 @@ function order(a: Shape, b: Shape): number {
 type Fresh = State | "off";
 
 function freshReading(seat: Seat, s: Fresh): Reading {
-	if (s === "off") return { seat, kind: "no_final", home: null, away: null, recorded: "postponed", detail: "postponed", record: { id: `r${seat}`, time: null } };
+	if (s === "off") return { seat, kind: "no_final", home: null, away: null, recorded: "postponed", detail: "postponed", record: { id: `r${seat}`, time: null }, answer: "the game" };
 	return reading(seat, s);
 }
 
@@ -220,17 +220,17 @@ function near(seat: Seat, s: Near): Reading {
 	const record = (time: number) => ({ id: `r${seat}`, time });
 	switch (s) {
 		case "silent":
-			return silent(seat, "silent");
+			return clean(seat, "silent");
 		case "listed":
-			return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: record(DATE) };
+			return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: record(DATE), answer: "the game" };
 		case "later":
-			return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: record(DATE + 2 * HOUR) };
+			return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: record(DATE + 2 * HOUR), answer: "the game" };
 		case "absent":
-			return silent(seat, "absent");
+			return clean(seat, "absent");
 		case "outside":
-			return { ...silent(seat, "outside window"), record: record(DATE + 3 * 86_400) };
+			return { ...clean(seat, "outside window"), record: record(DATE + 3 * 86_400) };
 		case "final":
-			return { seat, kind: "final", home: POINTS.A[0], away: POINTS.A[1], recorded: null, detail: "final", record: record(DATE) };
+			return { seat, kind: "final", home: POINTS.A[0], away: POINTS.A[1], recorded: null, detail: "final", record: record(DATE), answer: "the game" };
 	}
 }
 
@@ -260,13 +260,13 @@ function result(s: Result): Reading {
 	const record = { id: HINT, time: null };
 	switch (s) {
 		case "nothing":
-			return silent(3, "no result for the hint");
+			return clean(3, "no result for the hint");
 		case "on":
-			return { seat: 3, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record };
+			return { seat: 3, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record, answer: "the game" };
 		case "final":
-			return { seat: 3, kind: "final", home: POINTS.A[0], away: POINTS.A[1], recorded: null, detail: "final", record };
+			return { seat: 3, kind: "final", home: POINTS.A[0], away: POINTS.A[1], recorded: null, detail: "final", record, answer: "the game" };
 		case "failed":
-			return silent(3, "http 503");
+			return clean(3, "http 503");
 	}
 }
 
@@ -282,7 +282,7 @@ function verification(out: Collected): void {
 				// Read again as scoring's first run will: the same records, inside the window from the
 				// start; seat 3 by its result when it counts, and not at all when it doesn't.
 				const down = chosen.readings.find((x) => x.seat === 3)?.kind === "silent";
-				const again = [seen[1], seen[2], down ? silent(3, "silent for the game") : result("on"), seen[4]];
+				const again = [seen[1], seen[2], down ? clean(3, "silent for the game") : result("on"), seen[4]];
 				const game: Game = { league: "nba", home: "home", away: "away", start: chosen.start, n: 86_400, hints };
 				d = confirmStart(chosen, game, again);
 			}
