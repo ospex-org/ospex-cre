@@ -50,7 +50,6 @@
 // row to score; beside another row that could be the game it does not clear the anomaly for the void,
 // and the reading says so ("chosen").
 
-import { obj } from "./readers/request";
 import { resolveTeam } from "./teams";
 import { clean, silent } from "./run";
 import type { Game, Reading, Seat } from "./types";
@@ -127,28 +126,6 @@ export function refused(game: Game, records: readonly FeedRecord[]): string {
 		return (a === home && b === away) || (a === away && b === home);
 	});
 	return own === undefined ? "unreadable record" : `unreadable record; the game's row says ${JSON.stringify(own.status)}`;
-}
-
-/**
- * Whether a failed answer (a status outside 2xx) holds the game's row. Status decides nothing; the body
- * does (readers/request.ts, failed): the rows of its body that parse are read as a 2xx body's would be
- * (pick), and where that reading is anything but clean silence, the body touched the game: the game's
- * row by id or by its names and time, or a row that could be it. The detail of the reading such an
- * answer makes (`the game's row in a 503`, the pick's own word beside it where the row could not be
- * read), or null when the body holds nothing of the game, and the failure is clean.
- */
-export function inFailure(seat: Seat, game: Game, status: number, list: unknown, parse: (o: Record<string, unknown>) => FeedRecord | null, near?: number): string | null {
-	if (!Array.isArray(list)) return null;
-	const records: FeedRecord[] = [];
-	for (const item of list) {
-		const o = obj(item);
-		const r = o === null ? null : parse(o);
-		if (r !== null) records.push(r);
-	}
-	if (records.length === 0) return null;
-	const r = pick(seat, game, [records], near);
-	if (r.answer === "nothing") return null;
-	return `the game's row in a ${status}${r.kind === "silent" ? `; ${r.detail}` : ""}`;
 }
 
 /**

@@ -33,6 +33,7 @@
 import { READING_KIND, type ChainGame, type Decision, type Report, type ReportReading } from "./chain";
 import { readerFor, seatsFor } from "./index";
 import { keyFor, type Keys } from "./keys";
+import { cleanLine, secretsOf } from "./line";
 import { checkBoard, type BoardCheck, type BoardRun } from "./readers/board3";
 import { hintOf } from "./readers/seat3";
 import { toReport } from "./report";
@@ -67,6 +68,16 @@ const REFUSED: ReadonlySet<number> = new Set([400, 401, 402, 403, 429]);
 
 function nothing(why: string): Decision {
 	return { action: "wait", readings: [], why };
+}
+
+/**
+ * The run's outcome: its decision with the line through the one function every line goes through before
+ * it is written (line.ts: the configured secret values redacted, a feed's word that is not a word marked),
+ * and the report it builds, which carries no line.
+ */
+function outcomeOf(game: ChainGame, decision: Decision, payout: string, keys: Keys): Outcome {
+	const cleaned: Decision = { ...decision, why: cleanLine(decision.why, secretsOf(keys)) };
+	return { decision: cleaned, report: toReport(game.id, cleaned, payout, game.payoutRefused) };
 }
 
 function wholeSeconds(v: unknown): v is number {
@@ -309,7 +320,7 @@ export function scoreGameSync(
 		if (status !== null) return refusedKey(job, status);
 		step = p.next(done);
 	}
-	return { decision: step.value, report: toReport(game.id, step.value, payout, game.payoutRefused) };
+	return outcomeOf(game, step.value, payout, keys);
 }
 
 /** Decides one game with an asynchronous transport (a sealed machine's fetch), and builds its report. */
@@ -330,5 +341,5 @@ export async function scoreGameAsync(
 		if (status !== null) return refusedKey(job, status);
 		step = p.next(done);
 	}
-	return { decision: step.value, report: toReport(game.id, step.value, payout, game.payoutRefused) };
+	return outcomeOf(game, step.value, payout, keys);
 }

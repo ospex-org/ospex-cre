@@ -12,8 +12,11 @@ import { toRecord as seat4 } from "../src/readers/seat4";
 import { CASES, MID, NOW } from "./cases";
 import { KEY, at as at2, copy, locate, readSaved, saved, type Derive } from "./fixtures";
 import { readerFor } from "../src/index";
+import { NOT_A_WORD, REDACTED } from "../src/line";
+import { scoreGameSync } from "../src/program";
 import { runSync } from "../src/run";
 import type { HttpRequest, HttpResponse, Seat } from "../src/types";
+import { PAYOUT, chainOf } from "./rule-helpers";
 
 const byName = (prefix: string) => CASES.find((c) => c.name.startsWith(prefix))!;
 const lakers = byName("nba final");
@@ -363,5 +366,76 @@ describe("the word rides a refusal for a row the reader can't parse, whether the
 				expect({ seat, fields, badFirst, ...readWithBadRow(seat, fields, badFirst) }).toEqual({ seat, fields, badFirst, kind: "silent", answer: "unusable", detail });
 			}
 		}
+	});
+});
+
+describe("a word on a line is a word: a feed string that is not a status word becomes the marker, and a configured secret never reaches a line", () => {
+	// New England at Chicago at hour 24, the other two counting seats postponed and cancelled, the seat under
+	// test given a status word of the test's choosing: the run waits, and its line carries the word, or the
+	// marker, or the redaction, through the one function every line goes through (src/line.ts).
+	const game = chainOf("nfl not final");
+	const spareIn = chainOf("nfl not final", { hints: [] });
+	const H24 = (game.start as number) + game.n + 600;
+	const OWN = { 1: 1392309, 2: 340175, 3: "edcfd41f-1773-4bc9-a349-aa50931a0278", 4: "ffebea881c1d7b2dfb85b3e590c35985" } as const;
+	const isOwn = (seat: Seat, r: Record<string, any>): boolean => (seat === 1 ? r.id === OWN[1] : seat === 2 ? r.gameId === OWN[2] : seat === 3 ? String(r.ID).toLowerCase() === OWN[3] : r.id === OWN[4]);
+	const ownPath = (seat: Seat, p: string): boolean => (seat === 1 ? p.includes("/nfl/v1/games") : seat === 2 ? p.includes("league=NFL") : seat === 3 ? p === `/results/${OWN[3]}` : p.includes("americanfootball_nfl/scores"));
+	const STATUS_FIELD: Readonly<Record<Seat, string>> = { 1: "status_state", 2: "status", 3: "FinalType", 4: "completed" };
+	const OFF: Readonly<Record<1 | 2 | 3, Record<string, unknown>>> = { 1: { status_state: "postponed" }, 2: { status: "canceled" }, 3: { FinalType: "Postponed" } };
+	/** The game's own row at a seat, given fields. */
+	const own = (seat: Seat, fields: Record<string, unknown>): Derive => (s, p, body) => {
+		if (s !== seat || !ownPath(seat, p)) return body;
+		const b = copy(body) as any;
+		for (const r of seat === 1 ? b.data : seat === 2 ? b.results : b) if (isOwn(seat, r)) Object.assign(r, fields);
+		return b;
+	};
+	const both = (...ds: Derive[]): Derive => (s, p, b) => ds.reduce((acc, f) => f(s, p, acc), b);
+	const others = (seat: Seat): Derive => (seat === 1 ? both(own(2, OFF[2]), own(3, OFF[3])) : seat === 2 ? both(own(1, OFF[1]), own(3, OFF[3])) : both(own(1, OFF[1]), own(2, OFF[2])));
+	const KEYS: Record<Seat, string> = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
+	/** The run's line, the seat's own answer sent back under `status`, the keys as given (a key in a query is put back to the saved one for the lookup alone). */
+	const lineOf = (seat: Seat, fields: Record<string, unknown>, status = 200, keys: Record<Seat, string> = KEYS): string => {
+		const t = saved(both(others(seat), own(seat, fields)), NOW);
+		const send = (q: HttpRequest): HttpResponse => {
+			const asSaved = { ...q, url: q.url.split(keys[4]).join(KEY) };
+			const res = t.send(asSaved);
+			const at = locate(asSaved);
+			return at !== null && at.seat === seat && ownPath(seat, at.path) ? { status, body: res.body } : res;
+		};
+		const o = scoreGameSync(seat === 4 ? spareIn : game, keys, PAYOUT, H24, send);
+		expect(t.misses).toEqual([]);
+		return o.decision.why;
+	};
+	const held = (seat: Seat, status: number, detail: string): string => `after n: seat ${seat} answered but could not be used: ${status >= 300 ? `the game's row in a ${status}; ` : ""}${detail}`;
+
+	test("a status field that echoes a request URL with a fake key, at each seat under 200, 201, 500 and 503: the line carries the marker and never the key", () => {
+		const FAKE = "FAKE-KEY-FOR-THIS-TEST-0123456789abcdef";
+		const url = `https://feed.example/v1/games?team=Chicago&apiKey=${FAKE}`;
+		for (const seat of [1, 2, 3, 4] as const) {
+			for (const status of [200, 201, 500, 503]) {
+				const why = lineOf(seat, { [STATUS_FIELD[seat]]: url }, status);
+				expect({ seat, status, why }).toEqual({ seat, status, why: held(seat, status, `unrecognized status ${NOT_A_WORD}`) });
+			}
+		}
+	});
+
+	test("a word of 40 characters is the marker; one of 32 stands verbatim, and so does a real word; a short word carrying a query's marks is no word", () => {
+		expect(lineOf(1, { status_state: "w".repeat(40) })).toBe(held(1, 200, `unrecognized status ${NOT_A_WORD}`));
+		expect(lineOf(1, { status_state: "w".repeat(32) })).toBe(held(1, 200, `unrecognized status "${"w".repeat(32)}"`));
+		expect(lineOf(1, { status_state: "PPD" })).toBe(held(1, 200, 'unrecognized status "PPD"'));
+		for (const word of ["a=b", "x?y", "h://"]) {
+			expect({ word, why: lineOf(2, { status: word }) }).toEqual({ word, why: held(2, 200, `unrecognized status ${NOT_A_WORD}`) });
+		}
+	});
+
+	test("a configured secret planted in a feed's field, a canary per seat: never on a line, under 200 and 503, in a status field and in seat 3's id", () => {
+		const CANARY: Record<Seat, string> = { 1: "CANARY-SEAT-1-KEY-2f8c1e", 2: "CANARY-SEAT-2-KEY-9a4d7b", 3: "CANARY-SEAT-3-KEY-5e0b3c", 4: "CANARY-SEAT-4-KEY-71d6f2" };
+		for (const seat of [1, 2, 3, 4] as const) {
+			for (const status of [200, 503]) {
+				const why = lineOf(seat, { [STATUS_FIELD[seat]]: CANARY[seat] }, status, CANARY);
+				expect({ seat, status, why }).toEqual({ seat, status, why: held(seat, status, `unrecognized status "${REDACTED}"`) });
+				for (const c of Object.values(CANARY)) expect({ seat, status, c, carried: why.includes(c) }).toEqual({ seat, status, c, carried: false });
+			}
+		}
+		// The board's key is seat 3's: planted as the result's id, it is redacted on that line too.
+		expect(lineOf(3, { ID: CANARY[3] }, 200, CANARY)).toBe(held(3, 200, `result without a usable id: "${REDACTED}"`));
 	});
 });

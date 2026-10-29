@@ -33,14 +33,15 @@
 // feed's list of rows and a row the reader can't parse, which refuses the whole answer with the game's
 // own row's word beside it (types.ts, answer; src/pick.ts, refused). Status decides nothing; the body
 // does: a failed request (a status outside 2xx) is that clean silence unless its body is the feed's
-// list holding the game's row, an answer the reader could not use (the game's row in a 503); an error
-// body, a page or an empty body on any status is a failure (readers/request.ts, failed).
+// list, read by the one reading a 2xx list gets (its rows, then the pick): a row that would not parse,
+// or any row for the game, makes it an answer the reader could not use (the game's row in a 503); an
+// error object, a page or an empty body on any status is a failure (readers/request.ts, failed).
 
-import { inFailure, pick, points, refused, type FeedRecord, type FeedTeam } from "../pick";
+import { pick, points, refused, type FeedRecord, type FeedTeam } from "../pick";
 import { clean, silent } from "../run";
 import { leagueRow } from "../table";
 import { asksOf } from "../teams";
-import type { Ask, ReaderRun, Seat } from "../types";
+import type { Ask, Reading, ReaderRun, Seat } from "../types";
 import { filingDates, parseIsoSeconds, windowOf } from "../window";
 import { failed, jsonOf, obj, request, str } from "./request";
 
@@ -186,29 +187,43 @@ export function* read(ask: Ask): ReaderRun {
 	const dates = filingDates(windowOf(ask.game)).map((d) => `dates[]=${d}`);
 	const teams = asks.map((a) => `team_ids[]=${a[1]}`);
 	const listing: FeedRecord[] = [];
+	// The rows of one page as the feed's records, every row that parses read first, or the refusal of the
+	// whole answer for a row that would not parse, the game's own row's word beside it (pick.ts, refused).
+	const rowsOf = (data: readonly unknown[]): FeedRecord[] | Reading => {
+		const rows: FeedRecord[] = [];
+		let unreadable = false;
+		for (const g of data) {
+			const o = obj(g);
+			const r = o === null ? null : toRecord(ask.game.league, o);
+			if (r === null) unreadable = true;
+			else rows.push(r);
+		}
+		return unreadable ? silent(SEAT, refused(ask.game, [...listing, ...rows])) : rows;
+	};
+	// A failed answer's body, when it is the feed's list, read by the one path a 2xx list takes
+	// (request.ts, failed): its rows, then the pick; null when it is not the list.
+	const inList = (json: unknown): Reading | null => {
+		const data = obj(json)?.data;
+		if (!Array.isArray(data)) return null;
+		const rows = rowsOf(data);
+		return Array.isArray(rows) ? pick(SEAT, ask.game, [rows], ask.near) : rows;
+	};
 	let cursor: string | null = null;
 	do {
 		const q = `?${[...dates, ...teams].join("&")}&per_page=100${cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`}`;
 		const res = yield request(SEAT, `${row[SEAT]}${q}`, ask.key);
 		const body = jsonOf(res);
 		// Status decides nothing; the body does (request.ts, failed): a failed request is clean silence
-		// before any row arrived at this seat, unless its body is the feed's list holding the game's row
-		// (pick.ts, inFailure); a 2xx body that is not the feed's list, or any failure after rows arrived:
-		// an answer the reader could not use, and the void holds it (types.ts, answer).
-		if (!body.ok) return failed(SEAT, body, body.http === null ? null : inFailure(SEAT, ask.game, body.http.status, obj(body.http.json)?.data, (o) => toRecord(ask.game.league, o), ask.near), listing.length > 0);
+		// before any row arrived at this seat, unless its body is the feed's list, read as a 2xx list is
+		// (inList); a 2xx body that is not the feed's list, or any failure after rows arrived: an answer
+		// the reader could not use, and the void holds it (types.ts, answer).
+		if (!body.ok) return failed(SEAT, body, inList, listing.length > 0);
 		const page = obj(body.value);
 		const data = page?.data;
 		if (!Array.isArray(data)) return silent(SEAT, "unreadable");
-		// Every row that parses is read before a row that doesn't refuses the whole answer, so the refusal
-		// carries the game's own row's word (pick.ts, refused).
-		let unreadable = false;
-		for (const g of data) {
-			const o = obj(g);
-			const r = o === null ? null : toRecord(ask.game.league, o);
-			if (r === null) unreadable = true;
-			else listing.push(r);
-		}
-		if (unreadable) return silent(SEAT, refused(ask.game, listing));
+		const rows = rowsOf(data);
+		if (!Array.isArray(rows)) return rows;
+		listing.push(...rows);
 		const next = obj(page?.meta)?.next_cursor;
 		cursor = typeof next === "number" || (typeof next === "string" && next !== "") ? String(next) : null;
 	} while (cursor !== null);

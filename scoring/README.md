@@ -144,10 +144,13 @@ game.
   its status, with no list holding the game's row in its body, or the seat was never asked or is
   past its window by date arithmetic. Status decides nothing; the body does
   ([`src/readers/request.ts`](src/readers/request.ts)): a 2xx body is read by these rules whatever
-  its status; a status outside 2xx is a failure, clean, unless its body is the feed's list holding
-  the game's row, an answer the reader could not use (`after n: seat 3 answered but could not be
-  used: the game's row in a 503`); an error body, a page or an empty body on any status is a
-  failure, so a rate limit does not turn a rainout into a seven-day wait. The class is
+  its status; a status outside 2xx is a failure, clean, unless its body is the feed's list and that
+  list, read by the one reading a 2xx list gets (its rows, then the pick; there is no second
+  parser), is anything but clean silence: a row the reading cannot parse, or any row for the game,
+  makes it an answer the reader could not use, exactly as under a 200 (`after n: seat 3 answered
+  but could not be used: the game's row in a 503; result without an id`); an error object, a page
+  or an empty body on any status is a failure, so a rate limit does not turn a rainout into a
+  seven-day wait. The class is
   per seat and the worst of its reads, so the spare's id answer the reader could not use survives a
   clean or empty slate. A non-empty body that is not the feed's list (a single object, a wrong
   envelope), a by-id answer that is not the requested game (seat 3's row without a usable id, the
@@ -168,13 +171,28 @@ game.
   answer in `src/readers/seat3.ts`; and in [`test/never-void.test.ts`](test/never-void.test.ts), the
   class ignored by the void in `src/rule.ts`, a reader's cap or a throw after rows arrived read as
   clean silence in `src/run.ts`, a failed answer holding the game's row declared clean in
-  `src/readers/request.ts`, and a result id of any shape accepted in `src/readers/seat3.ts`). So a
+  `src/readers/request.ts`, a failed body's unusable reading dropped to clean there, a result id of
+  any shape accepted in `src/readers/seat3.ts`, and a line written without the redaction in
+  `src/line.ts`). So a
   spelling seat 2 no longer uses for a team leaves the seat
   silent for that team's games until the lists are regenerated, while one team respelt still
   reaches the seat through the other team's answer and reads as a name the lists don't know. The
   spare past the feed's three-day window is silent by its own date arithmetic, with no request
   sent. Silent is never turned into "no final". A final without points, or one short of a whole game, is silent, an answer the reader
   could not use: scoring never counts it, verification writes no start on it, and the void waits on it.
+* **The line.** A word on a line is a word ([`src/line.ts`](src/line.ts), the one function every
+  line goes through before it is written, and every `why` before it leaves the program; the
+  wrapper's lines go through it too). A feed's own word rides a reading verbatim, in double quotes,
+  so the run's line shows it the first time it happens; a feed can put anything in that field, a
+  request URL with its key included. So before any line is written, a quoted word longer than 32
+  characters or carrying `://`, `?` or `=` becomes `[not a status word]`, and every configured
+  secret value (the seat keys; the board's key is seat 3's) is redacted from any line and any `why`,
+  wherever it appears. A status word is never a URL; the line keeps its diagnostic value for every
+  real word and cannot carry a key ([`test/status.test.ts`](test/status.test.ts): a status field
+  echoing a request URL with a fake key, at each seat under 200, 201, 500 and 503, and a word of 40
+  characters, each the marker, a word of 32 verbatim; a canary key planted in a feed's field, never
+  on a line; the break in [`test/never-void.test.ts`](test/never-void.test.ts)'s header: a line
+  written without the redaction).
 
 ## Open and closed: how long each seat is asked
 

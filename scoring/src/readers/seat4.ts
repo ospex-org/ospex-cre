@@ -17,9 +17,10 @@
 // holds it, as it holds a body that is not the feed's list and a row the reader can't parse, which
 // refuses the whole answer with the game's own row's word beside it (types.ts, answer; src/pick.ts,
 // refused). Status decides nothing; the body does: a failed request (a status outside 2xx) is that
-// clean silence unless its body is the feed's list holding the game's row, an answer the reader could
-// not use (the game's row in a 503); an error body, a page or an empty body on any status is a failure
-// (readers/request.ts, failed). The class is the worst of the seat's reads: an id answer the reader could not use (the
+// clean silence unless its body is the feed's list, read by the one reading a 2xx list gets (its rows,
+// then the pick): a row that would not parse, or any row for the game, makes it an answer the reader
+// could not use (the game's row in a 503); an error object, a page or an empty body on any status is a
+// failure (readers/request.ts, failed). The class is the worst of the seat's reads: an id answer the reader could not use (the
 // game's row it could not read, or the game's row under another id, a by-id answer that is not the
 // requested record) survives a clean or empty slate; a slate that answers the game stands in its place.
 //
@@ -28,7 +29,7 @@
 // three days from the start, from the end or by calendar day; past it the feed is silent, because a
 // missing game then could be age, not absence.
 
-import { inFailure, pick, points, refused, type FeedRecord, type FeedTeam } from "../pick";
+import { pick, points, refused, type FeedRecord, type FeedTeam } from "../pick";
 import { clean, silent } from "../run";
 import { leagueRow } from "../table";
 import { normalise } from "../teams";
@@ -99,25 +100,37 @@ export function* read(ask: Ask): ReaderRun {
 	// Whether any row has arrived in this run: a failure before one is clean silence, after one it is
 	// partway through the seat's reads, and the void holds it (types.ts, answer).
 	let arrived = false;
-	const listing = function* (path: string): Generator<HttpRequest, FeedRecord[] | Reading, HttpResponse> {
-		const res = jsonOf(yield request(SEAT, path, ask.key));
-		// Status decides nothing; the body does (request.ts, failed): a failed request is clean silence
-		// before any row arrived, unless its body is the feed's list holding the game's row (pick.ts,
-		// inFailure); a 2xx body that is not the feed's list, or any failure after rows arrived: an answer
-		// the reader could not use.
-		if (!res.ok) return failed(SEAT, res, res.http === null ? null : inFailure(SEAT, ask.game, res.http.status, res.http.json, toRecord, ask.near), arrived);
-		if (!Array.isArray(res.value)) return silent(SEAT, "unreadable");
-		// Every row that parses is read before a row that doesn't refuses the whole answer, so the refusal
-		// carries the game's own row's word (pick.ts, refused).
+	// The rows of one answer as the feed's records, every row that parses read first, or the refusal of
+	// the whole answer for a row that would not parse, the game's own row's word beside it (pick.ts,
+	// refused).
+	const rowsOf = (items: readonly unknown[]): FeedRecord[] | Reading => {
 		const records: FeedRecord[] = [];
 		let unreadable = false;
-		for (const item of res.value) {
+		for (const item of items) {
 			const o = obj(item);
 			const r = o === null ? null : toRecord(o);
 			if (r === null) unreadable = true;
 			else records.push(r);
 		}
-		if (unreadable) return silent(SEAT, refused(ask.game, records));
+		return unreadable ? silent(SEAT, refused(ask.game, records)) : records;
+	};
+	// A failed answer's body, when it is the feed's list, read by the one path a 2xx list takes
+	// (request.ts, failed): its rows, then the pick; null when it is not the list.
+	const inList = (json: unknown): Reading | null => {
+		if (!Array.isArray(json)) return null;
+		const rows = rowsOf(json);
+		return Array.isArray(rows) ? pick(SEAT, ask.game, [rows], ask.near) : rows;
+	};
+	const listing = function* (path: string): Generator<HttpRequest, FeedRecord[] | Reading, HttpResponse> {
+		const res = jsonOf(yield request(SEAT, path, ask.key));
+		// Status decides nothing; the body does (request.ts, failed): a failed request is clean silence
+		// before any row arrived, unless its body is the feed's list, read as a 2xx list is (inList); a 2xx
+		// body that is not the feed's list, or any failure after rows arrived: an answer the reader could
+		// not use.
+		if (!res.ok) return failed(SEAT, res, inList, arrived);
+		if (!Array.isArray(res.value)) return silent(SEAT, "unreadable");
+		const records = rowsOf(res.value);
+		if (!Array.isArray(records)) return records;
 		if (records.length > 0) arrived = true;
 		return records;
 	};

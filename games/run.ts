@@ -11,6 +11,7 @@
 import type { Address, Hex } from "viem";
 import type { Decision, ChainGame, Report } from "../scoring/src/chain";
 import type { Keys } from "../scoring/src/keys";
+import { cleanLine } from "../scoring/src/line";
 import { scoreGameSync } from "../scoring/src/program";
 import type { HttpRequest, HttpResponse } from "../scoring/src/types";
 import { readPayoutRefused, type Evm } from "./chain";
@@ -61,14 +62,18 @@ export function runGame(deps: Deps, game: Omit<ChainGame, "payoutRefused">, repo
 	return { game: held, now, decision: outcome.decision, report: outcome.report, written, txHash };
 }
 
-/** The run's one line for the log. */
-export function summarize(run: Run): string {
+/**
+ * The run's one line for the log, its `why` through the one function every line goes through before it is
+ * written (scoring/src/line.ts), with the configured secret values to redact; the program cleaned the
+ * `why` already, and the line is made here.
+ */
+export function summarize(run: Run, secrets: readonly string[]): string {
 	return JSON.stringify({
 		gameId: run.game.id,
 		status: run.game.status,
 		now: run.now,
 		action: run.decision.action,
-		why: run.decision.why,
+		why: cleanLine(run.decision.why, secrets),
 		kind: run.report?.kind ?? null,
 		written: run.written !== null,
 		txHash: run.txHash,

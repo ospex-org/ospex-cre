@@ -12,9 +12,13 @@
 // id), or was a readable list of rows none of which is the game by id or by its names and time, or the
 // request failed, whatever its status, with no list holding the game's row in its body, or the seat was
 // never asked or is past its window by date arithmetic; the class is per seat and the worst of its
-// reads. Status decides nothing; the body does: a 2xx body is read by these rules whatever its status, a
-// status outside 2xx is a failure, clean, unless its body is the feed's list holding the game's row, and
-// an error body, a page or an empty body on any status is a failure. Every other reading that is not an
+// reads. Status decides nothing; the body does: a 2xx body is read by these rules whatever its status; a
+// status outside 2xx is a failure, clean, unless its body is the feed's list and that list, read by the one
+// reading a 2xx list gets (one path, no second parser), is anything but clean silence: a row the reading
+// cannot parse or any row for the game makes it an answer the reader could not use, exactly as under a
+// 200; an error object, a page or an empty body on any status is a failure. A word on a line is a word
+// (line.ts): a quoted feed word longer than 32 characters or carrying "://", "?" or "=" becomes [not a
+// status word], and a configured secret never reaches a line. Every other reading that is not an
 // affirmative row holds the void, whatever the word was: a non-empty body that is not the feed's list
 // (a single object, a wrong envelope, not a list), a by-id answer that is not the requested game (seat
 // 3's row without a usable id, the spare's row under another id where no slate stands behind it), and
@@ -48,9 +52,18 @@
 //
 // The breaks that turn this red:
 //   request.ts, failed: a failed answer holding the game's row declared clean,
-//     if (held !== null) return silent(seat, held);
+//     if (r !== null && r.answer !== "nothing") return silent(seat, `the game's row in a ${body.http.status}...`);
 //     ->  deleted
 //   with which the game's intact final in a 500 or 503 body voids beside two affirmative rows, at every seat;
+//   request.ts, failed: a failed body's reading that is not clean but shows no row of the game dropped to clean,
+//     if (r !== null && r.answer !== "nothing") return silent(seat, ...);
+//     ->  if (r !== null && r.kind !== "silent") return silent(seat, ...);
+//   with which the game's final without its id, or with an object id, alone or beside the normal row, in a 500
+//   or 503 body voids beside two affirmative rows (one path: under a 200 the same rows wait);
+//   line.ts, cleanLine: a line written without the redaction,
+//     for (const s of secrets) out = out.split(s).join(REDACTED);
+//     ->  deleted
+//   with which a canary key planted in a feed's field reaches the line (status.test.ts);
 //   seat3.ts, read: a result id of any shape accepted,
 //     if (id === null || !ID.test(id)) {
 //     ->  if (id === null) {
@@ -542,7 +555,8 @@ describe("never: the hour-24 void beside a reading that is neither clean silence
 			["an empty object", () => [{}], "result without an id"],
 			["the id missing", (r: Record<string, any>) => [{ ...r, ...FINAL[3], ID: undefined }], "result without an id"],
 			["the id empty", (r: Record<string, any>) => [{ ...r, ...FINAL[3], ID: "" }], 'result without a usable id: ""'],
-			["the id an object", (r: Record<string, any>) => [{ ...r, ...FINAL[3], ID: { id: IDS[3] } }], `result without a usable id: {"id":"${IDS[3]}"}`],
+			// The id inside the object, 36 characters, is not a word on a line (line.ts): the marker.
+			["the id an object", (r: Record<string, any>) => [{ ...r, ...FINAL[3], ID: { id: IDS[3] } }], 'result without a usable id: {"id":[not a status word]}'],
 		] as const) {
 			expect({ what, ...run(bears, both(off(1), off(2)), afterSend(3, (p) => ownPath(3, p), (body: Record<string, any>[]) => rows(body[0] ?? {}))) }).toEqual({ what, ...waits(3, detail) });
 		}
@@ -616,10 +630,49 @@ describe("never: the hour-24 void beside a reading that is neither clean silence
 			expect({ id, ...run(bears, both(off(1), off(2)), resultId(id)) }).toEqual({ id, ...waits(3, detail) });
 		}
 		expect(run(bears, both(off(1), off(2)), resultId("00000000-0000-4000-8000-000000000000"))).toMatchObject(VOIDS);
-		// A failed answer at seat 3 whose rows are under another seat 3 id, or under no usable id: no row of the
-		// hint's, a clean failure, and the void posts; the hint's row in it holds (above).
-		expect(run(bears, both(off(1), off(2)), wrap(resultId("0"), coded(3, 503)))).toMatchObject(VOIDS);
+		// A failed answer at seat 3, read by the one path a 2xx list takes: rows under another seat 3 id are no
+		// row of the hint's, a clean failure, and the void posts; a row under no usable id holds, as under a 200.
+		expect(run(bears, both(off(1), off(2)), wrap(resultId("0"), coded(3, 503)))).toEqual(waits(3, 'the game\'s row in a 503; result without a usable id: "0"'));
 		expect(run(bears, both(off(1), off(2)), wrap(resultId("00000000-0000-4000-8000-000000000000"), coded(3, 503)))).toMatchObject(VOIDS);
+	});
+
+	test("one path, not two: a failed body is read as a 2xx body is, so the game's final without its id or with an object id, alone or beside the normal row, holds the void in a 500 or 503 at seats 1, 2 and the spare in either role, as under a 200", () => {
+		const recoded = (seat: Seat, status: number) => (send: Send): Send => (q) => {
+			const res = send(q);
+			const at = locate(q);
+			return at !== null && at.seat === seat && ownPath(seat, at.path) ? { status, body: res.body } : res;
+		};
+		const roles: [string, Seat, ChainGame, Derive][] = [
+			["seat 1", 1, bears, both(off(2), off(3))],
+			["seat 2", 2, bears, both(off(1), off(3))],
+			["the spare standing in", 4, spareIn, both(off(1), off(2))],
+			["the spare not counting", 4, bears, both(off(1), off(2), rowsAt(3, () => []))],
+		];
+		for (const [role, seat, game, others] of roles) {
+			const key = ID_KEY[seat];
+			const shapes: [string, (r: Record<string, any>) => Record<string, any>][] = [
+				["without its id", (r) => ({ ...r, ...FINAL[seat], [key]: undefined })],
+				["with an object id", (r) => ({ ...r, ...FINAL[seat], [key]: { id: r[key] } })],
+			];
+			for (const [shape, bad] of shapes) {
+				const placements: [string, (r: Record<string, any>) => Record<string, any>[]][] = [
+					["alone", (r) => [bad(r)]],
+					["beside the normal row", (r) => [bad(r), r]],
+				];
+				for (const [placement, change] of placements) {
+					const derive = both(others, rowsAt(seat, change));
+					const line = (status: number | null) => `after n: seat ${seat} answered but could not be used: ${status === null ? "" : `the game's row in a ${status}; `}unreadable record`;
+					// Under a 200: a row the reader could not parse refuses the answer, and the void waits.
+					const as200 = run(game, derive);
+					expect({ role, shape, placement, action: as200.action, kind: as200.kind, line: as200.why.startsWith(line(null)) }).toEqual({ role, shape, placement, action: "wait", kind: null, line: true });
+					// In a 500 or 503 body: the same rows, the same reading, the status on the line.
+					for (const status of [500, 503]) {
+						const o = run(game, derive, recoded(seat, status));
+						expect({ role, shape, placement, status, action: o.action, kind: o.kind, line: o.why.startsWith(line(status)) }).toEqual({ role, shape, placement, status, action: "wait", kind: null, line: true });
+					}
+				}
+			}
+		}
 	});
 
 	test("where scoring lives: two agreeing finals after n score over a third answer that is not a competing final, kind 2, and the game once scored is never read again; finals that differ, and a lone final against two votes, dispute; inside n, two finals beside anything wait", () => {

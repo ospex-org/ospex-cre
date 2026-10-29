@@ -37,6 +37,7 @@ import type { ChainGame, ReportReading } from "../scoring/src/chain";
 import { readerFor } from "../scoring/src/index";
 import { keyFor } from "../scoring/src/keys";
 import { OPEN_FOR } from "../scoring/src/rule";
+import { cleanLine, secretsOf } from "../scoring/src/line";
 import { isCut, runSync } from "../scoring/src/run";
 import type { Game, HttpRequest, HttpResponse, Reading, Seat } from "../scoring/src/types";
 import { NO_READINGS, gameOfState, placeNamed, readIdentity, readOpenGames, readReadings, readReporters, type Evm, type Identity, type OpenGame, type PlacedGame, type Readings, type Shard } from "./chain";
@@ -191,6 +192,9 @@ export function runTick(deps: TickDeps): TickResult {
 	const readsLimit = deps.readsLimit ?? READS_PER_EXECUTION;
 	const requestsLimit = deps.requestsLimit ?? REQUESTS_PER_EXECUTION;
 	const lines: string[] = [];
+	// Every line through the one function before it is written (scoring/src/line.ts): the configured
+	// secret values redacted, a feed's word that is not a word marked.
+	const secrets = secretsOf(deps.keys);
 	let reads = 0;
 	const evm: Evm = {
 		call(to, data) {
@@ -270,13 +274,13 @@ export function runTick(deps: TickDeps): TickResult {
 			const reporters = readReporters(evm, deps.games, row.gameId);
 			const run = runGame(runDeps, gameOfState(row, identity, held), reporters, now);
 			fullRead = { gameId: row.gameId.toString(), why, run, error: null, cut: false };
-			lines.push(`full read, ${why}: ${summarize(run)}`);
+			lines.push(`full read, ${why}: ${summarize(run, secrets)}`);
 		} catch (e) {
 			// The run is over and nothing was written; the game's next tick or turn reads it afresh. A cut is
 			// the tick's own count of requests used up, raised by the readers so the program never decides
 			// on the part it saw; the rest is a read past the count or the write refused. The count is what
 			// stops a run, never the platform's refusal.
-			const error = e instanceof Error ? e.message : String(e);
+			const error = cleanLine(e instanceof Error ? e.message : String(e), secrets);
 			const cut = isCut(e);
 			fullRead = { gameId: row.gameId.toString(), why, run: null, error, cut };
 			lines.push(`full read, ${why}: game ${row.gameId} ${cut ? "cut" : "failed"}: ${error}`);

@@ -62,10 +62,11 @@ export interface Reading {
 	 * What the reader did with the feed's answer: the one class the void reads (rule.ts), since the
 	 * void's silence is only clean silence.
 	 *   "nothing"   The answer held nothing of the game: it was empty, the game was absent from it or
-	 *               its record outside the window, the request failed (a status outside 2xx) with no
-	 *               list holding the game's row in its body, before any row arrived, the seat is past
-	 *               its window by date arithmetic, or it was never asked. Clean silence: silent to the
-	 *               void. Status decides nothing; the body does (readers/request.ts).
+	 *               its record outside the window, the request failed (a status outside 2xx) with a
+	 *               body that is not the feed's list, or a list every row of which reads and none of
+	 *               which is the game, before any row arrived, the seat is past its window by date
+	 *               arithmetic, or it was never asked. Clean silence: silent to the void. Status decides
+	 *               nothing; the body does, read by one path (readers/request.ts).
 	 *   "the game"  The game's own row, read: a final, or an answer without one.
 	 *   "unusable"  The answer touched the game and the reader could not use it: a row of the game
 	 *               without a usable id, a status word or points, a status word the reader does not

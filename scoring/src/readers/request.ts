@@ -63,17 +63,23 @@ export function jsonOf(res: HttpResponse): Body {
 
 /**
  * The reading for a request that brought no 2xx JSON body. A status outside 2xx is a failure, clean
- * silence before any row arrived at the seat, unless its body was the feed's list holding the game's
- * row, which the reader names in `held` as it would find it in a 2xx body: then it is an answer the
- * reader could not use (`the game's row in a 503`), and holds the void. An error body, a page or an
- * empty body on any status is a failure. A 2xx body that is empty brought nothing; one that is not
- * JSON is an answer the reader could not use. After rows arrived at the seat, any failure is partway
- * through its reads, and holds the void (types.ts, answer).
+ * silence before any row arrived at the seat, unless its body is the feed's list and that list, read by
+ * `read`, the one reading the reader gives a 2xx list (its rows, then the pick; null when the body is
+ * not the feed's list), is anything but clean silence: a row the reading cannot parse, or any row for
+ * the game, makes it an answer the reader could not use, exactly as under a 200, and it holds the void
+ * (`the game's row in a 503`, the reading's own word beside it: `the game's row in a 503; result without
+ * an id`). One path, not two: there is no parser of a failed body's own. An error object, a page or an
+ * empty body on any status is a failure. A 2xx body that is empty brought nothing; one that is not JSON
+ * is an answer the reader could not use. After rows arrived at the seat, any failure is partway through
+ * its reads, and holds the void (types.ts, answer).
  */
-export function failed(seat: Seat, body: Failure, held: string | null, rowsBefore: boolean): Reading {
-	if (held !== null) return silent(seat, held);
-	if (rowsBefore || (body.http === null && body.arrived)) return silent(seat, body.detail);
-	return clean(seat, body.detail);
+export function failed(seat: Seat, body: Failure, read: (json: unknown) => Reading | null, rowsBefore: boolean): Reading {
+	if (body.http !== null) {
+		const r = read(body.http.json);
+		if (r !== null && r.answer !== "nothing") return silent(seat, `the game's row in a ${body.http.status}${r.kind === "silent" ? `; ${r.detail}` : ""}`);
+		return rowsBefore ? silent(seat, body.detail) : clean(seat, body.detail);
+	}
+	return rowsBefore || body.arrived ? silent(seat, body.detail) : clean(seat, body.detail);
 }
 
 /** A plain object, or null. */
