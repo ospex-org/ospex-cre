@@ -31,7 +31,8 @@
 //   * No start is written for a game already over. While any reading verification takes shows the
 //     game final, by team near the date or at the re-read, seat 3's result and the spare read by
 //     its hint included, nothing is written; and so does a feed that says the game is finished but
-//     gives no points, or a count short of a whole game (types.ts, saysFinal). Seat 3's board drops a
+//     gives no points, a count short of a whole game, or a finished row its reader refused, listed
+//     twice or beside a row it can't parse (types.ts, saysFinal). Seat 3's board drops a
 //     finished game, so a hint missing from it is read by its result before seat 3 stands down. A
 //     game every seat shows still in play gets its start, late.
 //

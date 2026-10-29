@@ -11,14 +11,17 @@
 // vote; a row without the flag is a partial row and reads silent. The feed records no postponed or
 // cancelled state. Its game time is
 // the scheduled start until the game begins and the actual start after; it serves only this
-// seat's own window check, never the game's start.
+// seat's own window check, never the game's start. A row the reader can't parse refuses the whole
+// answer, after every row that parses is read: the game's own final among them rides on the refusal,
+// as the game's row by its id that says completed without points the reader can take rides on
+// whatever the slate then gives (src/pick.ts, listsFinal), so a feed that said final holds the void.
 //
 // Retention: the feed keeps completed games for three days. The reader stops asking 66 hours after
 // the game's start, three days less six hours, a margin that holds whether the feed counts its
 // three days from the start, from the end or by calendar day; past it the feed is silent, because a
 // missing game then could be age, not absence.
 
-import { pick, points, type FeedRecord, type FeedTeam } from "../pick";
+import { listsFinal, pick, points, saidFinal, type FeedRecord, type FeedTeam } from "../pick";
 import { silent } from "../run";
 import { leagueRow } from "../table";
 import { normalise } from "../teams";
@@ -88,12 +91,15 @@ export function* read(ask: Ask): ReaderRun {
 		if (!res.ok) return silent(SEAT, res.detail);
 		if (!Array.isArray(res.value)) return silent(SEAT, "unreadable");
 		const records: FeedRecord[] = [];
+		let unreadable = false;
 		for (const item of res.value) {
 			const o = obj(item);
 			const r = o === null ? null : toRecord(o);
-			if (r === null) return silent(SEAT, "unreadable record");
-			records.push(r);
+			if (r === null) unreadable = true;
+			else records.push(r);
 		}
+		// Every row that parses is read before the refusal: the game's own final among them rides on it.
+		if (unreadable) return saidFinal(silent(SEAT, "unreadable record"), listsFinal(ask.game, [records]));
 		return records;
 	};
 	// One game, one request, when the game was created with the feed's id for it: the hinted record is
@@ -102,16 +108,21 @@ export function* read(ask: Ask): ReaderRun {
 	// the slate then decides as it would without the id, where the league's slate fits the size an
 	// answer may be; where it does not, the seat is silent. An empty answer is never a reading.
 	const hint = hintOf(ask.game.hints);
+	// The game's own row by its id that says completed, without a final the reader can take: silent and
+	// marked (types.ts, saysFinal), and the mark rides on whatever the slate then gives.
+	let said = false;
 	if (hint !== null) {
 		const one = yield* listing(`${slate}&eventIds=${hint}`);
 		if (!Array.isArray(one)) return one;
+		said = listsFinal(ask.game, [one]);
 		if (one.length > 0) {
 			const r = pick(SEAT, ask.game, [one], ask.near);
 			if (r.kind !== "silent" && r.record !== null && r.record.id === hint && r.record.time !== null && inWindow(r.record.time, windowOf(ask.game))) return r;
+			if (r.kind === "silent" && r.saysFinal === true) return r;
 		}
-		if (!SLATE_FITS.has(ask.game.league)) return silent(SEAT, one.length === 0 ? "nothing for the id, and the slate is past the size" : "the id's row is not the game, and the slate is past the size");
+		if (!SLATE_FITS.has(ask.game.league)) return saidFinal(silent(SEAT, one.length === 0 ? "nothing for the id, and the slate is past the size" : "the id's row is not the game, and the slate is past the size"), said);
 	} else if (!SLATE_FITS.has(ask.game.league)) return silent(SEAT, "no id, and the slate is past the size");
 	const records = yield* listing(slate);
-	if (!Array.isArray(records)) return records;
-	return pick(SEAT, ask.game, [records], ask.near);
+	if (!Array.isArray(records)) return saidFinal(records, said);
+	return saidFinal(pick(SEAT, ask.game, [records], ask.near), said);
 }

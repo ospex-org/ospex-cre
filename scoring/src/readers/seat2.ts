@@ -13,13 +13,15 @@
 // a record that says final short of it reads silent. A conference missing or null on a college team
 // says nothing about the team: the record binds by its names and time (src/pick.ts). A game whose
 // start the feed marks "to be announced" carries a placeholder time, so it has no game time the
-// window can hold it to.
+// window can hold it to. A row the reader can't parse refuses the whole answer, after every row that
+// parses is read: the game's own final among them rides on the refusal (src/pick.ts, listsFinal), so
+// a feed that said final holds the void.
 
-import { pick, points, type FeedRecord, type FeedTeam, type Listing } from "../pick";
+import { listsFinal, pick, points, saidFinal, type FeedRecord, type FeedTeam, type Listing } from "../pick";
 import { silent } from "../run";
 import { leagueRow } from "../table";
 import { asksOf } from "../teams";
-import type { Ask, ReaderRun, Seat } from "../types";
+import type { Ask, Reading, ReaderRun, Seat } from "../types";
 import { filingDates, parseIsoSeconds, windowOf } from "../window";
 import { jsonOf, obj, request, str } from "./request";
 
@@ -90,19 +92,23 @@ export function* read(ask: Ask): ReaderRun {
 	const listings: Listing[] = [];
 	for (const team of names) {
 		const listing: FeedRecord[] = [];
+		// A refusal from here on carries the game's own final among the rows read so far (listsFinal).
+		const refuse = (detail: string): Reading => saidFinal(silent(SEAT, detail), listsFinal(ask.game, [...listings, listing]));
 		for (let skip = 0; ; skip += PAGE) {
 			const q = `?league=${encodeURIComponent(row[SEAT])}&team=${encodeURIComponent(team)}&date=${date}${skip === 0 ? "" : `&skip=${skip}`}`;
 			const res = yield request(SEAT, `/games${q}`, ask.key);
 			const body = jsonOf(res);
-			if (!body.ok) return silent(SEAT, body.detail);
+			if (!body.ok) return refuse(body.detail);
 			const results = obj(body.value)?.results;
-			if (!Array.isArray(results)) return silent(SEAT, "unreadable");
+			if (!Array.isArray(results)) return refuse("unreadable");
+			let unreadable = false;
 			for (const g of results) {
 				const o = obj(g);
 				const r = o === null ? null : toRecord(ask.game.league, o);
-				if (r === null) return silent(SEAT, "unreadable record");
-				listing.push(r);
+				if (r === null) unreadable = true;
+				else listing.push(r);
 			}
+			if (unreadable) return refuse("unreadable record");
 			if (results.length < PAGE) break;
 		}
 		listings.push(listing);

@@ -25,12 +25,16 @@
 //
 // A conference id missing or null on a college team says nothing about the team: the record binds
 // by its names and time (src/pick.ts).
+//
+// A row the reader can't parse refuses the whole answer, after every row that parses is read: the
+// game's own final among them rides on the refusal (src/pick.ts, listsFinal), so a feed that said final
+// holds the void.
 
-import { pick, points, type FeedRecord, type FeedTeam } from "../pick";
+import { listsFinal, pick, points, saidFinal, type FeedRecord, type FeedTeam } from "../pick";
 import { silent } from "../run";
 import { leagueRow } from "../table";
 import { asksOf } from "../teams";
-import type { Ask, ReaderRun, Seat } from "../types";
+import type { Ask, Reading, ReaderRun, Seat } from "../types";
 import { filingDates, parseIsoSeconds, windowOf } from "../window";
 import { jsonOf, obj, request, str } from "./request";
 
@@ -181,16 +185,20 @@ export function* read(ask: Ask): ReaderRun {
 		const q = `?${[...dates, ...teams].join("&")}&per_page=100${cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`}`;
 		const res = yield request(SEAT, `${row[SEAT]}${q}`, ask.key);
 		const body = jsonOf(res);
-		if (!body.ok) return silent(SEAT, body.detail);
+		// A refusal from here on carries the game's own final among the rows read so far (listsFinal).
+		const refuse = (detail: string): Reading => saidFinal(silent(SEAT, detail), listsFinal(ask.game, [listing]));
+		if (!body.ok) return refuse(body.detail);
 		const page = obj(body.value);
 		const data = page?.data;
-		if (!Array.isArray(data)) return silent(SEAT, "unreadable");
+		if (!Array.isArray(data)) return refuse("unreadable");
+		let unreadable = false;
 		for (const g of data) {
 			const o = obj(g);
 			const r = o === null ? null : toRecord(ask.game.league, o);
-			if (r === null) return silent(SEAT, "unreadable record");
-			listing.push(r);
+			if (r === null) unreadable = true;
+			else listing.push(r);
 		}
+		if (unreadable) return refuse("unreadable record");
 		const next = obj(page?.meta)?.next_cursor;
 		cursor = typeof next === "number" || (typeof next === "string" && next !== "") ? String(next) : null;
 	} while (cursor !== null);

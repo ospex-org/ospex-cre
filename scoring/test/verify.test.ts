@@ -318,6 +318,17 @@ describe("seat 3's hint, checked against its board", () => {
 			const v = verify(unverified("nfl not final"), derive);
 			expect({ what, got: [v.action, v.why] }).toEqual({ what, got: ["wait", `seat 3 can't be read as scoring will: ${detail}`] });
 		}
+		// The hint's finished row twice, or beside a row the reader can't parse: the feed said final, and no
+		// start is written for a game already over (types.ts, saysFinal), as for a finished row without points.
+		const finished = (r: Record<string, unknown>): Record<string, unknown> => ({ ...r, Final: true, FinalType: "Finished", HomeScore: "24", AwayScore: "17" });
+		const said: [string, Derive][] = [
+			["the finished row twice", result((rs) => [...rs.map(finished), ...rs.map(finished)])],
+			["the finished row, then a row the reader can't parse", result((rs) => [...rs.map(finished), null])],
+		];
+		for (const [what, derive] of said) {
+			const v = verify(unverified("nfl not final"), derive);
+			expect({ what, got: [v.action, v.why, v.report] }).toEqual({ what, got: ["wait", "seat 3 shows the game final", null] });
+		}
 		const t = saved(undefined, NOW);
 		const o = scoreGameSync(unverified("nfl not final"), KEYS, PAYOUT, NOW, (q) => (q.url.includes("/results/") ? { status: 503, body: "" } : t.send(q)));
 		expect([o.decision.action, o.decision.why]).toEqual(["wait", "seat 3 can't be read as scoring will: http 503"]);

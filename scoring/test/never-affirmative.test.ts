@@ -1,5 +1,5 @@
 // Never: "An irreversible end never rests on fewer than two counting seats' affirmative answers;
-// absence and a partial row are silence."
+// absence and a partial row are silence, and no answering seat said final, scorable or not."
 //
 // An affirmative answer is the game's own row, bound by its ids or names and time, that says in the
 // feed's own words what became of the game: a final, or that the game will not or did not play
@@ -12,7 +12,10 @@
 // beside one of the game's teams; a row that says the game is in play. A missing or null conference,
 // or any missing metadata, is unknown, never a mark against a team: the row still binds by its names
 // and time. The spare past the feed's three-day window is silent by its own date arithmetic, before
-// any request.
+// any request. And a seat that said the word final without a final its reader could score (its result
+// listed twice, its final without points, its final beside a row the reader can't parse) holds the
+// void all the same: silent to the score, marked saysFinal, with the hour-24 void and its break in
+// never-void.test.ts.
 //
 // The breaks that turn this red:
 //   pick.ts, the end of pick: absence read as an answer again,
@@ -55,7 +58,7 @@ function readWith(seat: Seat, game: ChainGame | typeof lakers, send: (req: HttpR
 
 const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
 
-describe("never: an irreversible end never rests on fewer than two counting seats' affirmative answers; absence and a partial row are silence", () => {
+describe("never: an irreversible end never rests on fewer than two counting seats' affirmative answers; absence and a partial row are silence, and no answering seat said final, scorable or not", () => {
 	test("an empty answer reads silent at every seat: seat 1's data, seat 2's results, seat 3's result, the spare by its id and by its slate", () => {
 		expect(readWith(1, lakers, () => json({ data: [], meta: {} }))).toMatchObject({ kind: "silent", detail: "empty listing" });
 		expect(readWith(2, lakers, () => json({ results: [] }))).toMatchObject({ kind: "silent", detail: "empty listing" });

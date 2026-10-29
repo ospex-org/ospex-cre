@@ -20,7 +20,11 @@
 //              affirmatively that the game will not or did not play (a row of the game, bound by
 //              its ids or names and time, whose status in the feed's own words is postponed or
 //              cancelled, and nothing else: affirmsNoFinal), the rest of the counting seats silent,
-//              and no seat that answers shows a final. A row that says the game is scheduled or in
+//              and no seat asked said final, scorable or not: a final its reader could not score
+//              (saysFinal: the game's own row that says final, listed twice, without points or
+//              beside a row the reader can't parse) is silent to the score and holds the void all
+//              the same, the run waiting with its line naming the seat and why; the veto is the
+//              word, not the score. A row that says the game is scheduled or in
 //              play is an answer, not a void's vote, and beside two affirmative answers it holds the
 //              void as it would hold a score; absence, a
 //              listing without the game, and a row without a status are silence (pick.ts). Fewer
@@ -138,6 +142,8 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 	const withoutFinal = answeredCounted - finalsCounted;
 	// The void's votes: the answers that say the game will not or did not play.
 	const affirmed = counted.filter(affirmsNoFinal).length;
+	// The seats that said the word final without a final the reader could score (types.ts, saysFinal).
+	const unscorable = readings.filter((r) => r.saysFinal === true);
 
 	if (inside) {
 		if (finalsCounted === AGREE.insideN) {
@@ -147,6 +153,11 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 		return { action: "wait", readings, why };
 	}
 
+	// A seat that said final, scorable or not, holds the void: the veto is the word, not the score. Only
+	// where no final can be weighed; beside a final the readings score or dispute as they would.
+	if (finals.length === 0 && unscorable.length > 0) {
+		return { action: "wait", readings, why: `after n: ${unscorable.map((r) => `seat ${r.seat} says final, unscorable: ${r.detail}`).join("; ")}` };
+	}
 	if (answeredCounted < AGREE.afterN) return { action: "wait", readings, why: "after n: fewer than two counting seats answer" };
 	if (finalsCounted >= AGREE.afterN && withoutFinal === 0) {
 		return { action: "score", home: first.home as number, away: first.away as number, readings, why: "after n: two counting seats or more, the same final, the rest silent" };

@@ -38,6 +38,15 @@
 // the feed's own words, rides on the reading: postponed or cancelled on `recorded`, the word itself on
 // `detail`; rule.ts decides what each is worth, and a row scheduled or in play is an answer that is
 // never a void's vote.
+//
+// A row of the game that says final rides on the reading even where the pick can't read it: a listing
+// holding the game's own row, bound by its two teams and a time inside the window, whose status says
+// final (final, or short of a whole game by the feed's own count), leaves a silent reading marked
+// saysFinal (listsFinal, saidFinal; types.ts), whether the pick stopped on two records that differ or
+// on two that could be the game, or the reader on a row it could not parse. The mark is never a
+// scoring vote; after n the void waits on it (rule.ts). A hint that names the game's row by id binds
+// that row alone: another row of the two teams in the window is another game, and its final marks
+// nothing.
 
 import { resolveTeam } from "./teams";
 import { silent } from "./run";
@@ -98,6 +107,32 @@ export function resolveFeedTeam(league: string, team: FeedTeam): string | null {
 }
 
 /**
+ * Whether a listing holds the game's own row, bound by its two teams and a time inside the window,
+ * whose status says final: final, or short of a whole game by the feed's own count. Scorable or not,
+ * that row is a final for the void's purpose (types.ts, saysFinal).
+ */
+export function listsFinal(game: Game, listings: readonly Listing[]): boolean {
+	const home = resolveTeam(game.league, game.home);
+	const away = resolveTeam(game.league, game.away);
+	if (home === null || away === null || home === away) return false;
+	const w = windowOf(game);
+	return listings.some((l) =>
+		l.some((r) => {
+			if (r.state !== "final" && r.state !== "short") return false;
+			if (r.time === null || !inWindow(r.time, w)) return false;
+			const a = resolveFeedTeam(game.league, r.teams[0]);
+			const b = resolveFeedTeam(game.league, r.teams[1]);
+			return (a === home && b === away) || (a === away && b === home);
+		}),
+	);
+}
+
+/** A silent reading marked as the feed saying the game is final all the same; any other reading as it is. */
+export function saidFinal(r: Reading, said: boolean): Reading {
+	return said && r.kind === "silent" && r.saysFinal !== true ? { ...r, saysFinal: true } : r;
+}
+
+/**
  * Picks the game out of a feed's answers and reads it. Seats 1, 2 and 4; seat 3 is read by hint.
  *
  * `near` is for verification, before a start is written: among the records of the two teams in the
@@ -136,6 +171,9 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[], near?
 	const respelt = (r: FeedRecord): boolean => unknown(r, 0) && unknown(r, 1);
 	const w = windowOf(game);
 	const inside = (r: FeedRecord): boolean => r.time !== null && inWindow(r.time, w);
+	// A row of the game inside the window that says final marks every silent reading from here on.
+	const said = listsFinal(game, listings);
+	const quiet = (detail: string): Reading => saidFinal(silent(seat, detail), said);
 
 	// A feed can list one game under two of the dates asked for. Identical repeats are one record. A
 	// repeat that differs is the same record asked again moments later, so the later answer stands,
@@ -149,14 +187,14 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[], near?
 		for (const r of listing) {
 			const twin = here.get(r.id);
 			if (twin === undefined) here.set(r.id, r);
-			else if (differs(twin, r) && relevant(twin, r)) return silent(seat, "inconsistent records");
+			else if (differs(twin, r) && relevant(twin, r)) return quiet("inconsistent records");
 		}
 		for (const r of here.values()) {
 			const prior = byId.get(r.id);
 			if (prior === undefined) byId.set(r.id, r);
 			else if (differs(prior, r) && relevant(prior, r)) {
 				const sameTeams = keysOf(prior).sort().join("|") === keysOf(r).sort().join("|");
-				if (!sameTeams || prior.state === "final") return silent(seat, "inconsistent records");
+				if (!sameTeams || prior.state === "final") return quiet("inconsistent records");
 				byId.set(r.id, r);
 			}
 		}
@@ -171,14 +209,14 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[], near?
 	const rivals = records.filter((r) => ((isGame(r) || (near === undefined && mayBe(r))) && (r.time === null || inside(r))) || (near === undefined && respelt(r) && earlier(r)));
 
 	const hinted = [...new Set(game.hints.filter((h) => h.seat === seat).map((h) => h.id))];
-	if (hinted.length > 1) return silent(seat, "two hints");
+	if (hinted.length > 1) return quiet("two hints");
 	if (hinted.length === 1) {
 		const named = records.find((r) => r.id === hinted[0]);
 		if (named !== undefined && isGame(named)) {
 			if (inside(named)) return readingOf(seat, game.league, named, home);
 			// The game's two teams, but no time inside the window: not read, and while anything else
 			// could be the game, nothing else is read either. Otherwise the hint is dropped.
-			if (rivals.length > 0) return silent(seat, named.time === null ? "no game time" : "ambiguous");
+			if (rivals.length > 0) return quiet(named.time === null ? "no game time" : "ambiguous");
 		}
 	}
 
@@ -187,10 +225,10 @@ export function pick(seat: Seat, game: Game, listings: readonly Listing[], near?
 	if (near !== undefined && chosen.length > 1 && rivals.length === chosen.length) {
 		const distance = (r: FeedRecord): number => Math.abs((r.time as number) - near);
 		const [first, second] = [...chosen].sort((x, y) => distance(x) - distance(y));
-		return distance(first) < distance(second) ? readingOf(seat, game.league, first, home) : silent(seat, "ambiguous");
+		return distance(first) < distance(second) ? readingOf(seat, game.league, first, home) : quiet("ambiguous");
 	}
 	if (chosen.length === 1 && rivals.length === 1) return readingOf(seat, game.league, chosen[0], home);
-	if (chosen.length > 0) return silent(seat, "ambiguous");
+	if (chosen.length > 0) return quiet("ambiguous");
 	if (records.some((r) => (isGame(r) || mayBe(r) || respelt(r)) && r.time === null)) return silent(seat, "no game time");
 	if (records.some((r) => (mayBe(r) || respelt(r)) && inside(r))) return silent(seat, "unresolved team names");
 	if (listings.some((l) => l.length === 0)) return silent(seat, "empty listing");

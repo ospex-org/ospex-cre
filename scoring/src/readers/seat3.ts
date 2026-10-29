@@ -18,12 +18,14 @@
 //
 // Status: final only when `Final` is true and `FinalType` is "Finished"; the feed sets `Final` true
 // on postponed and cancelled games too, so `Final` alone never makes a final; a finished result
-// without points reads silent, marked as the feed saying the game is over (types.ts). "Postponed"
+// without points reads silent, marked as the feed saying the game is over (types.ts), and so does the
+// game's own finished row the reader refuses for another reason, listed twice or beside a row it can't
+// parse: the mark is set before the refusal, and after n the void waits on it (rule.ts). "Postponed"
 // and "Canceled" are the feed's own words that the game will not play, and a void may rest on them
 // (rule.ts); any other `FinalType` is not final; a row without one is a partial row and reads
 // silent. Only the game's own "Game" row is read, never its rows for halves or innings.
 
-import { points } from "../pick";
+import { points, saidFinal } from "../pick";
 import { silent } from "../run";
 import { leagueRow } from "../table";
 import type { Ask, Reading, ReaderRun, Seat } from "../types";
@@ -36,6 +38,11 @@ const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isFinalFlag(v: unknown): boolean {
 	return v === true || v === "true" || v === "True";
+}
+
+/** The feed's own word for a whole game played: `Final` set and `FinalType` "Finished". */
+function isFinished(r: Record<string, unknown>): boolean {
+	return isFinalFlag(r.Final) && r.FinalType === "Finished";
 }
 
 /** The seat 3 id the game was created with, or why there is none to read. */
@@ -56,16 +63,27 @@ export function* read(ask: Ask): ReaderRun {
 	if (!res.ok) return silent(SEAT, res.detail);
 	if (!Array.isArray(res.value)) return silent(SEAT, "unreadable");
 
+	// The hint's rows, every one that parses, read before any refusal: the game's own row among them
+	// that says finished marks the refusal, the row listed twice or beside a row the reader can't parse
+	// included (types.ts, saysFinal).
 	const rows: Record<string, unknown>[] = [];
+	let unreadable = false;
 	for (const item of res.value) {
 		const r = obj(item);
-		if (r === null) return silent(SEAT, "unreadable record");
+		if (r === null) {
+			unreadable = true;
+			continue;
+		}
 		const id = str(r.ID);
 		if (id !== null && id.toLowerCase() === hint.id) rows.push(r);
 	}
+	const said = rows.some((r) => r.OddType === "Game" && isFinished(r));
+	const quiet = (detail: string): Reading => saidFinal(silent(SEAT, detail), said);
+	if (unreadable) return quiet("unreadable record");
 	if (rows.length === 0) return silent(SEAT, "no result for the hint");
-	if (rows.length > 1) return silent(SEAT, "duplicate result");
-	// A hint naming a row for a half or for innings would read a part of the game as its final.
+	if (rows.length > 1) return quiet("duplicate result");
+	// A hint naming a row for a half or for innings would read a part of the game as its final; its
+	// finished row is the part's, and marks nothing.
 	if (rows[0].OddType !== "Game") return silent(SEAT, "hint names a part of the game");
 	return readingOf(rows[0], hint.id);
 }
@@ -75,7 +93,7 @@ function readingOf(r: Record<string, unknown>, id: string): Reading {
 	const home = points(r.HomeScore);
 	const away = points(r.AwayScore);
 	const record = { id, time: null };
-	if (isFinalFlag(r.Final) && type === "Finished") {
+	if (isFinished(r)) {
 		if (home === null || away === null) return { ...silent(SEAT, "final without points"), saysFinal: true };
 		return { seat: SEAT, kind: "final", home, away, recorded: null, detail: "final", record };
 	}

@@ -59,9 +59,13 @@ export interface Reading {
 	 */
 	readonly record: { readonly id: string; readonly time: number | null } | null;
 	/**
-	 * Set on a silent reading whose feed says the game is over all the same: a final without points,
-	 * or one the feed's own count shows short of a whole game. Silent, it decides nothing at scoring;
-	 * verification, which writes no start for a game already over, reads it.
+	 * Set on a silent reading whose feed said the game is final all the same: the game's own row,
+	 * bound by its ids or names and time, whose status says final, which the reader could not score
+	 * (a final without points, one the feed's own count shows short of a whole game, seat 3's result
+	 * listed twice, a final beside a row the reader can't parse), set before the rejection. Silent,
+	 * it is never a scoring vote; verification writes no start on it (verify.ts, over), and after n
+	 * the hour-24 void waits on it (rule.ts, decide): for an irreversible end the veto is the word,
+	 * not the score.
 	 */
 	readonly saysFinal?: true;
 }
