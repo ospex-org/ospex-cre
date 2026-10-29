@@ -73,22 +73,23 @@ describe("hints", () => {
 			const unhinted = readSaved(seat, marlins, NOW, moved);
 			const withHint = readSaved(seat, hinted(ids[seat].dayBefore), NOW, moved);
 			expect([unhinted.misses, withHint.misses]).toEqual([[], []]);
-			expect({ kind: unhinted.reading.kind, detail: unhinted.reading.detail, id: unhinted.reading.record?.id }).toEqual({ kind: "no_final", detail: "outside window", id: ids[seat].dayBefore });
+			expect({ kind: unhinted.reading.kind, detail: unhinted.reading.detail, id: unhinted.reading.record?.id }).toEqual({ kind: "silent", detail: "outside window", id: ids[seat].dayBefore });
 			expect(withHint.reading).toEqual(unhinted.reading);
 		});
 
 		test(`seat ${seat}: a hinted record outside the window decides nothing by itself`, () => {
-			// This game's record taken out and the next date's answer emptied. Unhinted, the empty date
-			// leaves the seat silent, since the game could be on it. A hint naming the day before's game
-			// doesn't make the seat say "no final" in its place.
+			// This game's record taken out and the next date's answer emptied. Asked for the two teams, the
+			// seat's answer then holds their other records, every one outside the window, and the seat says
+			// so. A hint naming the day before's game changes nothing: the hinted record is outside the
+			// window, nothing inside it could be the game, and the hint is dropped.
 			const emptied: Derive = (s, path, body) => {
 				const b = moved(s, path, body);
 				if (s !== seat || !path.includes("2026-06-12")) return b;
 				return seat === 1 ? { ...(b as Record<string, unknown>), data: [], meta: {} } : { ...(b as Record<string, unknown>), results: [] };
 			};
-			const silentEmpty = { kind: "silent", home: null, away: null, detail: "empty listing", id: null };
-			expect(read(seat, marlins, emptied)).toEqual(silentEmpty);
-			expect(read(seat, hinted(ids[seat].dayBefore), emptied)).toEqual(silentEmpty);
+			const unhinted = read(seat, marlins, emptied);
+			expect(unhinted).toMatchObject({ kind: "silent", home: null, away: null, detail: "outside window" });
+			expect(read(seat, hinted(ids[seat].dayBefore), emptied)).toEqual(unhinted);
 		});
 	}
 
@@ -115,7 +116,7 @@ describe("hints", () => {
 			expect(read(4, hinted(october31))).toEqual({ kind: "silent", home: null, away: null, detail: "ambiguous", id: null });
 			const moved: Derive = (s, _p, body) => (s === 4 ? (copy(body) as Record<string, unknown>[]).filter((g) => g.id !== final.id) : body);
 			const unhinted = read(4, lakers, moved);
-			expect(unhinted).toEqual({ kind: "no_final", home: null, away: null, detail: "outside window", id: october31 });
+			expect(unhinted).toEqual({ kind: "silent", home: null, away: null, detail: "outside window", id: october31 });
 			expect(read(4, hinted(october31), moved)).toEqual(unhinted);
 		});
 	});

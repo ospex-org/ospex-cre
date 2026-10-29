@@ -1,0 +1,15 @@
+{
+  "name": "osgames",
+  "what": "v3's games workflow, the wrapper on the scoring program; its id is what the games set's Chainlink reporter fixes. Every address here is a placeholder: a build sets the reporter, the games set, the secret owner and the payout wallet with --set, and the owner with --owner, before the id is computed",
+  "workflow": "games",
+  "target": "production-settings",
+  "owner": "0x0000000000000000000000000000000000000000",
+  "configTemplate": "games/config.production.example.json",
+  "config": {
+    "receiverAddress": "0x0000000000000000000000000000000000000000",
+    "eventAddress": "0x0000000000000000000000000000000000000000",
+    "secretOwner": "0x0000000000000000000000000000000000000000",
+    "payoutAddress": "PAYOUT_ADDRESS_NOT_SET"
+  },
+  "tools": { "cre": "v1.22.0", "bun": "1.3.14" }
+}

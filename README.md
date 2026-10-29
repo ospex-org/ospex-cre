@@ -32,6 +32,8 @@ three request types, the report ABI contract, the determinism rules, and simulat
 | `oracle/workflow.yaml`, `project.yaml` | CRE CLI target settings |
 | `secrets.yaml` | secret **names** mapped to env vars (no secret values) |
 | `scoring/` | v3: the scoring program's feed table and its four readers, which import nothing from Chainlink — see [`scoring/README.md`](./scoring/README.md) |
+| `games/` | v3: the Chainlink workflow, a thin wrapper on `scoring/` writing through the games set's reporter — see [`games/README.md`](./games/README.md) |
+| `probe/` | the forwarder probe, run on 27 Oct 2026: what a consumer on Polygon receives through the production forwarder — see [`probe/README.md`](./probe/README.md) |
 
 ## Prerequisites
 

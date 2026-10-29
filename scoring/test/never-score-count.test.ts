@@ -13,9 +13,11 @@
 //   inside n   the three counting seats all give the same final (2 finals to choose), and the
 //              fourth seat is silent, answered without a final, or gives that same final (3):
 //              2 x 3 = 6 per counting set, 12 in all.
-//   after n    the counting seats give the same final at two or three of them and are silent at
-//              the rest (XXX, XX_, X_X, _XX: 4 patterns x 2 finals), and the fourth seat is silent,
-//              answered without a final, or gives that same final (3): 24 per set, 48 in all.
+//   after n    the counting seats give the same final at two or three of them, and the third, if
+//              any, is silent or answered without a final, an answer that neither votes nor disputes
+//              (XXX; XX_, X_X, _XX with the third silent or in play: 7 patterns x 2 finals), and the
+//              fourth seat is silent, answered without a final, or gives that same final (3): 42 per
+//              set, 84 in all.
 //
 // The break that turns this red (rule.ts, decide):
 //   if (finalsCounted === AGREE.insideN) {
@@ -55,13 +57,14 @@ describe("never: a score on fewer than two agreeing finals, fewer than three ins
 					expect({ ...where, disagree: finals.filter((f) => f.home !== d.home || f.away !== d.away).length }).toEqual({ ...where, disagree: 0 });
 					// Three inside the window; two after.
 					expect({ ...where, enough: agree >= (inside ? 3 : 2) }).toEqual({ ...where, enough: true });
-					// After n the rest are silent: a counting seat that answered without a final is not silent.
+					// Inside n every counting seat is a final; after n at most one counting seat answered without a
+					// final, the single answer two agreeing finals score over.
 					const answeredNoFinal = counting.filter((s) => readings[s - 1].kind === "no_final").length;
-					expect({ ...where, answeredNoFinal }).toEqual({ ...where, answeredNoFinal: 0 });
+					expect({ ...where, withinOne: answeredNoFinal <= (inside ? 0 : 1) }).toEqual({ ...where, withinOne: true });
 				}
 			}
 		}
-		expect(scores).toEqual({ inside: 12, after: 48 });
+		expect(scores).toEqual({ inside: 12, after: 84 });
 	});
 
 	test("one seat's reading given three times is one reading: three finals all labelled seat 1 wait, inside n and after", () => {
@@ -93,7 +96,8 @@ describe("never: a score on fewer than two agreeing finals, fewer than three ins
 			// After n: two, the third silent.
 			[[1, 2, 3], false, ["A", "A", "silent", "silent"], A],
 			[[1, 2, 3], false, ["silent", "A", "A", "none"], A], // the spare's answer without a final blocks nothing
-			[[1, 2, 3], false, ["A", "A", "none", "silent"], "dispute"], // answered without a final is not silent
+			[[1, 2, 3], false, ["A", "A", "none", "silent"], A], // a third answer in play neither votes nor disputes: the two finals score
+			[[1, 2, 3], false, ["A", "none", "none", "silent"], "wait"], // a lone final beside answers in play waits for a second
 			[[1, 2, 3], false, ["A", "silent", "silent", "A"], "wait"], // one counting final and the spare's is not two
 			[[1, 2, 3], false, ["A", "A", "silent", "B"], "dispute"],
 			// The spare standing in for seat 3.
@@ -157,6 +161,6 @@ describe("never: a score on fewer than two agreeing finals, fewer than three ins
 		};
 		const end = lakers.start! + lakers.n;
 		expect(why(end - 1)).toBe("inside n: a counting seat is silent");
-		expect(why(end)).toBe("after n: two counting seats or more, the same final, the rest silent");
+		expect(why(end)).toBe("after n: two counting seats or more, the same final");
 	});
 });

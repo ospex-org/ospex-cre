@@ -1,0 +1,17 @@
+# ==========================================================================
+# CRE WORKFLOW SETTINGS FILE: the v3 games workflow
+# ==========================================================================
+# One target. The workflow is registered on the public onchain registry under
+# the v3 workflow owner, a plain wallet linked at the cutover (project.yaml's
+# account for this target names it). The config is written by the reproducible
+# build (build/fingerprint.ts) from the committed template, never by hand: its
+# bytes are in the workflow id, which the games set's reporter fixes.
+# ==========================================================================
+production-settings:
+  user-workflow:
+    workflow-name: "osgames"
+    deployment-registry: "onchain:ethereum-mainnet"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.production.json"
+    secrets-path: "./secrets.yaml"

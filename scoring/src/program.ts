@@ -26,16 +26,19 @@
 //
 // The run is written once, as a plan that yields one seat's reading at a time, and driven by a
 // synchronous transport (the Chainlink workflow's) or an asynchronous one (a sealed machine's
-// fetch). A transport that throws makes that seat silent, never the run's decision.
+// fetch). A transport that throws makes that seat silent, never the run's decision, with one
+// exception: a cut (run.ts, Cut), the caller's own count of requests used up, is raised through the
+// run, which then decides nothing and builds no report.
 
 import { READING_KIND, type ChainGame, type Decision, type Report, type ReportReading } from "./chain";
 import { readerFor, seatsFor } from "./index";
 import { keyFor, type Keys } from "./keys";
+import { cleanLine, secretsOf } from "./line";
 import { checkBoard, type BoardCheck, type BoardRun } from "./readers/board3";
 import { hintOf } from "./readers/seat3";
 import { toReport } from "./report";
 import { OPEN_FOR, countingFor, decideDisputed, decideVerified, lastRecorded, silentForGame } from "./rule";
-import { MAX_REQUESTS, runAsync, runSync, silent } from "./run";
+import { MAX_REQUESTS, clean, isCut, runAsync, runSync } from "./run";
 import { leagueRow } from "./table";
 import type { Game, HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
 import { START_BOUND, confirmStart, decideStart } from "./verify";
@@ -65,6 +68,16 @@ const REFUSED: ReadonlySet<number> = new Set([400, 401, 402, 403, 429]);
 
 function nothing(why: string): Decision {
 	return { action: "wait", readings: [], why };
+}
+
+/**
+ * The run's outcome: its decision with the line through the one function every line goes through before
+ * it is written (line.ts: the configured secret values redacted, a feed's word that is not a word marked),
+ * and the report it builds, which carries no line.
+ */
+function outcomeOf(game: ChainGame, decision: Decision, payout: string, keys: Keys): Outcome {
+	const cleaned: Decision = { ...decision, why: cleanLine(decision.why, secretsOf(keys)) };
+	return { decision: cleaned, report: toReport(game.id, cleaned, payout, game.payoutRefused) };
 }
 
 function wholeSeconds(v: unknown): v is number {
@@ -185,7 +198,7 @@ function* readAll(game: ChainGame, start: number, keys: Held, now: number, skip:
 	for (const seat of seatsFor(game.league)) {
 		const why = skip(seat);
 		if (why !== null) {
-			out.push(silent(seat, why));
+			out.push(clean(seat, why));
 			continue;
 		}
 		out.push((yield { kind: "read", seat, run: readerFor(seat)({ game: g, now, key: keyOf(keys, seat) }) }) as Reading);
@@ -194,40 +207,36 @@ function* readAll(game: ChainGame, start: number, keys: Held, now: number, skip:
 }
 
 /**
- * Verification. Seats 1, 2 and 4 are read by team within a day of the date, nearest it, without
- * their hints: the date names the game, and decideStart holds each seat's hint to that record.
- * Seat 3's board is checked against its hint, the board's horizon being the later of the game's own
- * times at seats 1 and 2 when both list it; a hint the board no longer lists is read by its result before
- * seat 3 stands down, since the board drops a finished game. If that gives a start, every seat is
- * read again as scoring's first run will read it, and confirmStart writes the start only if that
+ * Verification. Seats 1 and 2 are read by team within a day of the date, nearest it, without their
+ * hints: the date names the game, and decideStart holds each seat's hint to that record. The spare is
+ * read the same way, keeping its hint: an id present is read by itself and never the slate, and an
+ * unusable one falls back to the slate where it fits (readers/seat4.ts), so its record is the hint's
+ * own or the slate's, as scoring reads it, and decideStart holds no hint to it. Seat 3's
+ * board is asked for the hint's row by its id; a hint the board does not list is read by its result
+ * before seat 3 stands down, since the board drops a finished game. If that gives a start, every seat
+ * is read again as scoring's first run will read it, and confirmStart writes the start only if that
  * read agrees.
  */
 function* verifying(game: ChainGame, keys: Held, now: number): Plan {
 	// The range the games set accepts a start in: [date - START_BOUND, date + START_BOUND], both ends in.
 	const range = { league: game.league, home: game.home, away: game.away, start: game.date - START_BOUND, n: 2 * START_BOUND + 1 };
-	const byTeamProbe: Game = { ...range, hints: [] };
-	const byTeam = function* (seat: Seat): Generator<Job, Reading, Done> {
-		return (yield { kind: "read", seat, run: readerFor(seat)({ game: byTeamProbe, now, key: keyOf(keys, seat), near: game.date }) }) as Reading;
+	const byTeam = function* (seat: Seat, hints: Game["hints"]): Generator<Job, Reading, Done> {
+		return (yield { kind: "read", seat, run: readerFor(seat)({ game: { ...range, hints }, now, key: keyOf(keys, seat), near: game.date }) }) as Reading;
 	};
-	const r1 = yield* byTeam(1);
-	const r2 = yield* byTeam(2);
-	// The time the board must reach before a hint missing from it fails: the game's own time at seats 1
-	// and 2, the later of the two, when both list it; otherwise the creator's date. Short of the later
-	// one, the board may not yet have posted the game, listed beside its later time.
-	const t1 = r1.kind === "silent" ? null : (r1.record?.time ?? null);
-	const t2 = r2.kind === "silent" ? null : (r2.record?.time ?? null);
-	const horizon = t1 !== null && t2 !== null ? Math.max(t1, t2) : game.date;
+	const r1 = yield* byTeam(1, []);
+	const r2 = yield* byTeam(2, []);
 	let board: BoardCheck;
 	const hint = hintOf(game.hints);
 	if ("none" in hint) board = { kind: "fails", why: hint.none };
-	else board = (yield { kind: "board", run: checkBoard({ game: { ...range, hints: game.hints }, now, key: keyOf(keys, 3), near: horizon }) }) as BoardCheck;
+	else board = (yield { kind: "board", run: checkBoard({ game: { ...range, hints: game.hints }, now, key: keyOf(keys, 3) }) }) as BoardCheck;
 	// The board drops a finished game: before a hint missing from it stands seat 3 down, seat 3's
 	// result for the hint says whether the game is already over (verify.ts).
 	const result =
 		board.kind === "fails" && board.missing === true
 			? ((yield { kind: "read", seat: 3, run: readerFor(3)({ game: { ...range, hints: game.hints }, now, key: keyOf(keys, 3) }) }) as Reading)
 			: undefined;
-	const r4 = yield* byTeam(4);
+	// The spare keeps its id: read by itself where the creator gave one, by its slate otherwise.
+	const r4 = yield* byTeam(4, game.hints.filter((h) => h.seat === 4));
 	const chosen = decideStart({ date: game.date, hints: game.hints }, { 1: r1, 2: r2, 3: board, 4: r4, result });
 	if (chosen.action !== "start") return chosen;
 
@@ -271,7 +280,8 @@ function boardSync(run: BoardRun, send: (req: HttpRequest) => HttpResponse): Boa
 			if (asked >= MAX_REQUESTS) return { kind: "silent", why: "request bound" };
 			step = run.next(send(step.value));
 		}
-	} catch {
+	} catch (e) {
+		if (isCut(e)) throw e;
 		return { kind: "silent", why: "transport" };
 	}
 	return step.value;
@@ -285,7 +295,8 @@ async function boardAsync(run: BoardRun, send: (req: HttpRequest) => Promise<Htt
 			if (asked >= MAX_REQUESTS) return { kind: "silent", why: "request bound" };
 			step = run.next(await send(step.value));
 		}
-	} catch {
+	} catch (e) {
+		if (isCut(e)) throw e;
 		return { kind: "silent", why: "transport" };
 	}
 	return step.value;
@@ -309,7 +320,7 @@ export function scoreGameSync(
 		if (status !== null) return refusedKey(job, status);
 		step = p.next(done);
 	}
-	return { decision: step.value, report: toReport(game.id, step.value, payout, game.payoutRefused) };
+	return outcomeOf(game, step.value, payout, keys);
 }
 
 /** Decides one game with an asynchronous transport (a sealed machine's fetch), and builds its report. */
@@ -330,5 +341,5 @@ export async function scoreGameAsync(
 		if (status !== null) return refusedKey(job, status);
 		step = p.next(done);
 	}
-	return { decision: step.value, report: toReport(game.id, step.value, payout, game.payoutRefused) };
+	return outcomeOf(game, step.value, payout, keys);
 }

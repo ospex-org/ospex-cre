@@ -6,25 +6,87 @@
     "home": "Los Angeles Angels",
     "away": "Houston Astros",
     "date": "2026-06-11T01:38:00Z",
-    "hints": [{ "seat": 3, "id": "acc4e59b-999e-469b-9137-a2ed1b45aab2" }],
+    "hints": [
+      {
+        "seat": 3,
+        "id": "acc4e59b-999e-469b-9137-a2ed1b45aab2"
+      }
+    ],
     "n": 86400,
     "day7": 604800,
     "status": "verified",
     "start": "2026-06-11T01:38:00Z",
-    "startReadings": [[1, 1], [2, 1], [3, 1], [4, 1]]
+    "startReadings": [
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        1
+      ],
+      [
+        3,
+        1
+      ],
+      [
+        4,
+        1
+      ]
+    ]
   },
   "run": "2026-10-22T17:30:00Z",
   "payloads": [
-    { "seat": 1, "path": "/mlb/v1/games?dates[]=2026-06-10&per_page=100", "sha256": "dad240fdee01967062e59a374cd6ed4edb3cd9f6bdf6d4dd3c42aa9f44c1a67a" },
-    { "seat": 1, "path": "/mlb/v1/games?dates[]=2026-06-11&per_page=100", "sha256": "fa659b25afbc9a591088748fc967fe79757d938fc6290dfcfc4dd103f274bfc4" },
-    { "seat": 1, "path": "/mlb/v1/games?dates[]=2026-06-12&per_page=100", "sha256": "2f4adc82ed98ebd67cb00784654898978eef47d832b75c94313228dba6c53efd" },
-    { "seat": 2, "path": "/games?league=MLB&date=2026-06-10", "sha256": "30afd3b8a29b176470f2e90de6de0883c818d4f535d1643687e2b9ced410bbc6" },
-    { "seat": 2, "path": "/games?league=MLB&date=2026-06-11", "sha256": "9d95d9665f08578b7f4945a0914af92898bb659d01f76bc4f2717c0299e77006" },
-    { "seat": 2, "path": "/games?league=MLB&date=2026-06-12", "sha256": "ced21b2f60fcc56ee4007ff42df4614cbaa3ddd07fb05d60d81c7204a62aa45c" }
+    {
+      "seat": 1,
+      "path": "/mlb/v1/games?dates[]=2026-06-10&dates[]=2026-06-11&dates[]=2026-06-12&team_ids[]=13&team_ids[]=11&per_page=100",
+      "sha256": "fbe56c3be7eae2dda6d07d10bdd84ee00af087af59ec76196419ac596bcb1031"
+    },
+    {
+      "seat": 2,
+      "path": "/games?league=MLB&team=Los%20Angeles%20Angels&date=2026-06-10,2026-06-12",
+      "sha256": "45b2bfa098b745ae0d57def036c1807ec38c161cc84e60905c22ce8d98fae936"
+    },
+    {
+      "seat": 2,
+      "path": "/games?league=MLB&team=Houston%20Astros&date=2026-06-10,2026-06-12",
+      "sha256": "7c1212f05adeb63867b2e50e55cb3fd99e0b4f95050d2ac886916d79f049785b"
+    }
   ],
   "outcome": {
     "action": "score",
-    "report": { "kind": 2, "start": 0, "home": 3, "away": 2, "readings": [[1, 2, 3, 2], [2, 2, 3, 2], [3, 0, 0, 0], [4, 0, 0, 0]] }
+    "report": {
+      "kind": 2,
+      "start": 0,
+      "home": 3,
+      "away": 2,
+      "readings": [
+        [
+          1,
+          2,
+          3,
+          2
+        ],
+        [
+          2,
+          2,
+          3,
+          2
+        ],
+        [
+          3,
+          0,
+          0,
+          0
+        ],
+        [
+          4,
+          0,
+          0,
+          0
+        ]
+      ]
+    }
   },
   "logic": "As if created with seat 3's id and verified with seat 3 passing, so seats 1 to 3 count. The run is more than five days after the start, the window seat 3's docs give for a result (an id this old answers nothing), so seat 3 is not asked and reads silent on this run; it is not silent for the game, so the spare does not stand in, and the spare is past its own 66 hours. After n, seats 1 and 2 give the same final with the third silent: the score."
 }

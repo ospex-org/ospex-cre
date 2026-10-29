@@ -15,6 +15,12 @@ import { TEAMS } from "./teams/index";
 export interface Team {
 	readonly key: string;
 	readonly names: readonly string[];
+	/**
+	 * How a seat is asked for the team's games, one game at a time: seat 1 by its own id for the team
+	 * (team_ids[]), seat 2 by its own spelling (team=), null where seat 2's list lacks the team. Each
+	 * is taken from that seat's own list by capture/teams.ts, never typed in.
+	 */
+	readonly ask: { readonly 1: number; readonly 2: string | null };
 }
 
 /**
@@ -53,6 +59,26 @@ function indexFor(league: string): Index | null {
 	}
 	INDEXES.set(league, index);
 	return index;
+}
+
+/** The team of a league by its key, or null. */
+export function teamOf(league: string, key: string): Team | null {
+	if (!Object.prototype.hasOwnProperty.call(TEAMS, league)) return null;
+	return TEAMS[league].find((t) => t.key === key) ?? null;
+}
+
+/**
+ * How the seats ask for a game's two teams, home first, or null when a team is unknown to the
+ * league's lists or both names mean one team: the readers ask for a game by its teams, never by
+ * the day's slate.
+ */
+export function asksOf(league: string, home: string, away: string): readonly [Team["ask"], Team["ask"]] | null {
+	const h = resolveTeam(league, home);
+	const a = resolveTeam(league, away);
+	if (h === null || a === null || h === a) return null;
+	const th = teamOf(league, h);
+	const ta = teamOf(league, a);
+	return th === null || ta === null ? null : [th.ask, ta.ask];
 }
 
 /** The team a name means in a league, or null when it means none or more than one. */

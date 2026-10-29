@@ -5,11 +5,14 @@ import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../src/chain";
 import { scoreGameAsync, scoreGameSync } from "../src/program";
 import { silentForGame } from "../src/rule";
+import { Cut } from "../src/run";
 import { CASES, LATE, NOW } from "./cases";
 import { KEY, at, copy, locate, saved, type Derive } from "./fixtures";
 import { PAYOUT, chainOf } from "./rule-helpers";
 
 const KEYS = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
+/** The board's one-game request for the Bears' hint, as the index keys it: the method, the path and the body. */
+const BOARD_ASK = `POST /odds/bygames {"GameIDs":["edcfd41f-1773-4bc9-a349-aa50931a0278"],"Sport":"NFL","OddType":"Game"}`;
 
 function asked(game: ChainGame, now = NOW) {
 	// The saved answers take a clock in unix seconds and refuse a larger one, so a run whose clock is
@@ -168,8 +171,8 @@ describe("one run", () => {
 		expect(o.decision.action).toBe("start");
 		expect(t.misses).toEqual([]);
 		const paths = t.asked.map((q) => locate(q)!);
-		// Seat 3 is asked twice: its board near the date, then its result for the hint as scoring reads it.
-		expect(paths.filter((p) => p.seat === 3).map((p) => p.path)).toEqual(["/odds/NFL?oddType=Game", "/results/edcfd41f-1773-4bc9-a349-aa50931a0278"]);
+		// Seat 3 is asked twice: its board's row for the hint near the date (a POST naming the id), then its result for the hint as scoring reads it.
+		expect(paths.filter((p) => p.seat === 3).map((p) => p.path)).toEqual([BOARD_ASK, "/results/edcfd41f-1773-4bc9-a349-aa50931a0278"]);
 		// The order of the seats asked: the read near the date, then the re-read in seat order.
 		const runs = paths.map((p) => p.seat).filter((s, i, all) => i === 0 || all[i - 1] !== s);
 		expect(runs).toEqual([1, 2, 3, 4, 1, 2, 3, 4]);
@@ -185,8 +188,34 @@ describe("one run", () => {
 		expect(t3.misses).toEqual([]);
 		expect(o3.decision.action).toBe("start");
 		const asked3 = t3.asked.map((q) => locate(q)!);
-		expect(asked3.filter((p) => p.seat === 3).map((p) => p.path)).toEqual(["/odds/NFL?oddType=Game", "/results/edcfd41f-1773-4bc9-a349-aa50931a0278"]);
+		expect(asked3.filter((p) => p.seat === 3).map((p) => p.path)).toEqual([BOARD_ASK, "/results/edcfd41f-1773-4bc9-a349-aa50931a0278"]);
 		expect(asked3.map((p) => p.seat).filter((s, i, all) => i === 0 || all[i - 1] !== s)).toEqual([1, 2, 3, 4, 1, 2, 4]);
+	});
+
+	test("the spare keeps its id at verification: asked by it near the date and again at the re-read, never its slate; an id the feed answers nothing for reads the slate where it fits; college basketball without an id asks nothing", () => {
+		const g: ChainGame = { ...chainOf("nfl not final"), status: "unverified", start: null, startReadings: null };
+		const withId = { ...g, hints: [...g.hints, { seat: 4, id: "ffebea881c1d7b2dfb85b3e590c35985" }] };
+		const t = saved(undefined, NOW);
+		const o = scoreGameSync(withId, KEYS, PAYOUT, NOW, t.send);
+		expect([o.decision.action, t.misses]).toEqual(["start", []]);
+		const spare = t.asked.filter((q) => locate(q)!.seat === 4).map((q) => locate(q)!.path);
+		expect([spare.length, spare.every((p) => p.includes("eventIds=ffebea881c1d7b2dfb85b3e590c35985")), new Set(spare).size]).toEqual([2, true, 1]);
+		// Nothing for the id: the slate behind it, where the league's fits, near the date and at the re-read.
+		const t2 = saved(undefined, NOW);
+		const nothing = scoreGameSync({ ...g, hints: [...g.hints, { seat: 4, id: "0".repeat(32) }] }, KEYS, PAYOUT, NOW, (q) => (q.url.includes("eventIds=") ? { status: 200, body: "[]" } : t2.send(q)));
+		expect([nothing.decision.action, t2.misses]).toEqual(["start", []]);
+		const paths = t2.asked.filter((q) => locate(q)!.seat === 4).map((q) => locate(q)!.path.includes("eventIds=") ? "by id" : "the slate");
+		expect(paths).toEqual(["the slate", "the slate"]);
+		// College basketball without the spare's id: the spare is silent without a request. (The saved answers
+		// at this clock lack the day before the game's, so seats 1 and 2, asked for it among their dates, are
+		// answered with nothing here: empty, so silent, and the run waits on seat 1 first; every seat is read
+		// before it decides, and the spare's reading stands beside.)
+		const iowa: ChainGame = { ...chainOf("ncaab not final: Memphis at Iowa State"), status: "unverified", start: null, startReadings: null, hints: [] };
+		const t3 = saved(undefined, NOW);
+		const college = scoreGameSync(iowa, KEYS, PAYOUT, NOW, (q) => (q.url.includes("2026-11-01") ? { status: 200, body: JSON.stringify(locate(q)!.seat === 1 ? { data: [], meta: {} } : { results: [] }) } : t3.send(q)));
+		expect([t3.misses, t3.asked.filter((q) => locate(q)!.seat === 4)]).toEqual([[], []]);
+		const spareReading = college.decision.readings.find((r) => r.seat === 4);
+		expect([college.decision.action, college.decision.why, spareReading?.kind, spareReading?.detail]).toEqual(["wait", "seat 1 is silent: empty listing", "silent", "no id, and the slate is past the size"]);
 	});
 
 	test("the synchronous and asynchronous runs decide the same, on every real game, verified, unverified and disputed", async () => {
@@ -254,6 +283,25 @@ describe("one run", () => {
 		expect([v.decision.action, v.decision.why]).toEqual(["wait", "seat 3's board is silent: transport"]);
 	});
 
+	test("a transport that cuts the run ends it undecided: the reader raises it through the run, no report is built", async () => {
+		// The same two reads as above, the throw a cut: the caller's own count of requests used up. The
+		// run that would have waited on a silent seat 2 now ends with nothing; the board's cut the same.
+		const g = chainOf("nba final");
+		const t = saved(undefined, NOW);
+		expect(() =>
+			scoreGameSync(g, KEYS, PAYOUT, NOW, (q) => {
+				if (locate(q)?.seat === 2) throw new Cut("the run's 15 requests are used");
+				return t.send(q);
+			}),
+		).toThrow(Cut);
+		await expect(
+			scoreGameAsync({ ...chainOf("nfl not final"), status: "unverified", start: null, startReadings: null }, KEYS, PAYOUT, NOW, async (q) => {
+				if (q.url.includes("/odds/")) throw new Cut("the run's 15 requests are used");
+				return saved(undefined, NOW).send(q);
+			}),
+		).rejects.toThrow(Cut);
+	});
+
 	test("async, after n: seats 1 and 2 answer without a final at once, the spare's final arrives last, and the run waits for it: a dispute, never a void", async () => {
 		// Cleveland at Philadelphia, created without a seat 3 hint, so the spare counts; read after n
 		// from the answers saved at 03:32, with seats 1 and 2 derived back to a game still on.
@@ -290,9 +338,12 @@ describe("one run", () => {
 		// The spare's answer came last, and the run read it before deciding.
 		expect(answered.at(-1)).toBe(4);
 		expect(o.decision.readings.map((r) => [r.seat, r.kind])).toEqual([[1, "no_final"], [2, "no_final"], [3, "silent"], [4, "final"]]);
-		expect([o.decision.action, o.decision.why, o.report?.kind]).toEqual(["dispute", "after n: finals beside answers without a final", 4]);
-		// The control: without the spare's final, the same run is the hour-24 void.
+		// A lone final, the spare's, beside two answers in play: no record and no void; the run waits for a second final.
+		expect([o.decision.action, o.decision.why, o.report?.kind]).toEqual(["wait", "after n: one final, no second, and the answers beside it neither vote nor dispute; seat 1 in_progress, seat 2 in progress, seat 3 silence (silent for the game), seat 4 a final", undefined]);
+		// The control: without the spare's final, two answers that the game is still on are no void's votes
+		// (a void needs two counting seats saying the game will not or did not play), and the run waits, its
+		// line saying what each seat gave.
 		const none = (await go(false)).o;
-		expect([none.decision.action, none.report?.kind]).toEqual(["void", 3]);
+		expect([none.decision.action, none.report?.kind ?? null, none.decision.why.startsWith("after n: 0 counting seats say the game will not or did not play, two needed; seat 1 ")]).toEqual(["wait", null, true]);
 	});
 });

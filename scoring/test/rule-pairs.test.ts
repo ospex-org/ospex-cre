@@ -59,8 +59,10 @@ describe("two finals are the same only when both teams' points match, by team", 
 		expect(decideDay7(votesOf(fresh, recorded, SEATS4, null, W), SEATS4, null).action).toBe("void");
 		// Inside n, two finals and an answer without one at the same points: still waiting.
 		expect(decide([final(1, h, a), final(2, h, a), live(3, h, a), quiet(4)], [1, 2, 3], true).action).toBe("wait");
-		// After n the same is a disagreement, not a score: the third seat answered, and not with a final.
-		expect(decide([final(1, h, a), final(2, h, a), live(3, h, a), quiet(4)], [1, 2, 3], false).action).toBe("dispute");
+		// After n the two finals score over the third seat's answer without a final, whatever points it
+		// carries: that answer neither votes nor disputes, and never agrees with a final.
+		const two = decide([final(1, h, a), final(2, h, a), live(3, h, a), quiet(4)], [1, 2, 3], false);
+		expect([two.action, two.action === "score" ? [two.home, two.away] : null]).toEqual(["score", [h, a]]);
 	});
 
 	test("the control: the same final at every seat scores, inside n and after, and on day 7", () => {

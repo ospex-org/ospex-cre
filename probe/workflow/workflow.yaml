@@ -1,0 +1,16 @@
+# ==========================================================================
+# CRE WORKFLOW SETTINGS FILE: the forwarder probe
+# ==========================================================================
+# One target, on Chainlink's private registry (no wallet, no gas, no Ethereum
+# RPC; the owner is the organisation's own address, derived at deploy). The
+# workflow's config is this folder's config.json; it names the probe consumer
+# on Polygon. No secrets.
+# ==========================================================================
+probe-settings:
+  user-workflow:
+    workflow-name: "osprobe"
+    deployment-registry: "private"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.json"
+    secrets-path: ""

@@ -1,0 +1,15 @@
+# ==========================================================================
+# CRE WORKFLOW SETTINGS FILE: the spare
+# ==========================================================================
+# A no-op workflow (a cron that logs a line and writes nothing anywhere), used
+# to try each lifecycle command on the private registry with the pinned CLI
+# before the probe is deployed. Deleted after.
+# ==========================================================================
+probe-settings:
+  user-workflow:
+    workflow-name: "osspare"
+    deployment-registry: "private"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.json"
+    secrets-path: ""

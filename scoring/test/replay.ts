@@ -6,6 +6,11 @@
 //
 // Cases name feeds by seat only, as every record of the program does. The public cases record
 // lives in ospex-artifacts; its entries' payloads are saved here, under fixtures/, and replayed here.
+//
+// The readers ask for one game at a time (seat 1 for the two teams' games on the dates, seat 2 for each
+// team's games, seat 3 for its result by hint and its board's row by id, the spare by its id or for its
+// slate), and a case's payloads are the feed's own answers to those requests, captured: a request is
+// answered by the listed payload for its exact path, by seat, and by nothing else.
 
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
@@ -100,17 +105,24 @@ export function replay(c: CaseFile): Replay {
 	}
 	const unlisted: string[] = [];
 	const asked = new Set<string>();
-	const send = (req: HttpRequest): HttpResponse => {
-		const l = locate(req);
-		const k = l === null ? "a host outside the table" : `${l.seat} ${l.path}`;
+	const listed = (seat: Seat, path: string): HttpResponse => {
+		const k = `${seat} ${path}`;
 		asked.add(k);
 		const bytes = served.get(k);
 		if (bytes === undefined) {
-			unlisted.push(l === null ? k : `seat ${l.seat} ${l.path}`);
+			unlisted.push(`seat ${seat} ${path}`);
 			throw new Error("not in the case");
 		}
 		const entry = INDEX.find((e) => `${e.seat} ${e.path}` === k && e.sha256 === c.payloads.find((p) => `${p.seat} ${p.path}` === k)!.sha256)!;
 		return { status: entry.status, body: new TextDecoder().decode(bytes) };
+	};
+	const send = (req: HttpRequest): HttpResponse => {
+		const l = locate(req);
+		if (l === null) {
+			unlisted.push("a host outside the table");
+			throw new Error("not in the case");
+		}
+		return listed(l.seat, l.path);
 	};
 	const keys = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
 	const o = scoreGameSync(chainGameOf(c), keys, PAYOUT, at(c.run), send);

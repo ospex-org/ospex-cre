@@ -257,7 +257,7 @@ export const CASES: readonly Case[] = [
 			3: NO_HINT,
 			// The league had not started at this seat: its answer was an empty list, which is not
 			// proof the game is absent.
-			4: silent("empty listing"),
+			4: silent("no id, and the slate is past the size"),
 		},
 	},
 	// The same four games and the same requests, read after they ended. Seat 1 was not asked for
@@ -391,7 +391,7 @@ export const CASES: readonly Case[] = [
 			1: noFinal("scheduled", "10882536", 0, 0),
 			2: noFinal("scheduled", "341752"),
 			3: NO_HINT,
-			4: silent("empty listing"),
+			4: silent("no id, and the slate is past the size"),
 		},
 	},
 	// Listed twice: seat 2 has Seattle at Hawaii under two ids a minute apart (04:59 and 05:00 UTC
@@ -406,7 +406,7 @@ export const CASES: readonly Case[] = [
 			1: noFinal("scheduled", "10882589", 0, 0),
 			2: silent("ambiguous"),
 			3: NO_HINT,
-			4: silent("empty listing"),
+			4: silent("no id, and the slate is past the size"),
 		},
 	},
 	// Beside a game to be announced: seat 2's answer for 4 Nov holds Virginia University-Lynchburg at
@@ -418,9 +418,11 @@ export const CASES: readonly Case[] = [
 		game: g("ncaab", "Western Kentucky", "Morehead State", "2026-11-03T00:30:00Z"),
 		expect: {
 			1: noFinal("scheduled", "10882439", 0, 0),
-			2: noFinal("scheduled", "342166"),
+			// Western Kentucky's game to be announced, against a school the lists don't know, has no time to
+			// place it: it could be the game, and seat 2 is silent (a conference missing is unknown, never a mark).
+			2: silent("ambiguous"),
 			3: NO_HINT,
-			4: silent("empty listing"),
+			4: silent("no id, and the slate is past the size"),
 		},
 	},
 	{

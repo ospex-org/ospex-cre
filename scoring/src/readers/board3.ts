@@ -1,4 +1,5 @@
-// Seat 3's board, read once, at verification.
+// Seat 3's board, read once, at verification: the board's row for the hint, asked for by its id in one
+// request (a POST naming the id), never the league's slate.
 //
 // Seat 3 is read by its creation hint, and its results carry no team names and no time, so its
 // points are the feed's own home and away, bound to the game only by the hint. Verification checks
@@ -10,15 +11,15 @@
 // Three outcomes, kept apart because they lead to different places:
 //   listed   the hint's row is the game's, names the game's teams in the game's order, with a time;
 //   fails    the board answered, every row of it readable, and the hint can't be bound to the game:
-//            not on a board that reaches the game, listed twice, a row for a part of the game, other
-//            teams, the teams the other way round, or a team name the team lists don't know. Seat 3
-//            is silent for the whole game, and the spare stands in. A hint missing from the board is
-//            marked: the board drops a finished game, so verification reads seat 3's result for that
-//            hint before standing seat 3 down (verify.ts);
+//            no row for the hint, listed twice, a row for a part of the game, other teams, the teams
+//            the other way round, or a team name the team lists don't know. Seat 3 is silent for the
+//            whole game, and the spare stands in. A hint missing from the board is marked: the board
+//            drops a finished game, so verification reads seat 3's result for that hint before
+//            standing seat 3 down (verify.ts);
 //   silent   nothing is learned about the hint this time, and verification waits: no key, a refused
 //            or failed request, a body that is not JSON of the board's shape, a row whose id isn't
-//            a seat 3 id, the hinted row's teams unreadable or not yet named, the hinted row's time
-//            unreadable when its teams are the game's, or a board that doesn't reach the game yet.
+//            a seat 3 id, the hinted row's teams unreadable or not yet named, or the hinted row's time
+//            unreadable when its teams are the game's.
 //
 // A row the program can't read says nothing about the hint, so it never stands seat 3 down: an id
 // that isn't in the form a hint must take (the seat 3 id pattern hintOf checks, in any case) could
@@ -27,12 +28,10 @@
 // side the board names only by a placeholder ("TBD") is not named yet: the row may become the game,
 // so it waits, unless the side it does name already makes it another game.
 //
-// A hint missing from the board fails only once the board lists some game at or after `ask.near`:
-// the game's own time at seats 1 and 2 when both list it, the later of the two, otherwise the
-// creator's date (program.ts). Before that, the board has not reached the game, and a game created
-// early would otherwise lose seat 3. A finished game the board has dropped still fails here, since the
-// board lists the games after it; and so does the league's last listed game when the creator's date
-// falls after its time.
+// Asked for by its id, the board answers the hint's row or nothing: a game it has dropped as finished,
+// which the result then tells from an id it never had, or a game it has not posted. A creator takes
+// the seat 3 id from this board, so a game created with one is on it; a game created before the board
+// posts it has no seat 3 id to give, and seat 3 is silent for it from the start.
 //
 // An unknown team name fails the check here, where the readers would read the seat silent for the
 // run. The difference is deliberate: verification is the one moment the binding can be checked, and
@@ -76,37 +75,32 @@ function wholeGame(r: Record<string, unknown>): boolean {
 	return [r.OddType, ...odds].every((t) => typeof t !== "string" || t === "Game");
 }
 
-/**
- * Checks the hint against the board. `ask.near` is the time the board must reach for a missing hint
- * to fail: the later of the game's own times at seats 1 and 2, or the creator's date. Short of it, a missing hint
- * waits rather than fails.
- */
+/** Checks the hint against the board's row for it. */
 export function* checkBoard(ask: Ask): BoardRun {
 	const row = leagueRow(ask.game.league);
 	if (row === null) return { kind: "fails", why: "league not offered" };
 	const hint = hintOf(ask.game.hints);
 	if ("none" in hint) return { kind: "fails", why: hint.none };
 
-	const res = jsonOf(yield request(3, `/odds/${encodeURIComponent(row[3])}?oddType=Game`, ask.key));
+	// One game, one request: the board's row for the hint, asked for by its id (a POST carrying the id,
+	// the league's code and the game's own odds type), never the league's slate, whose page is past the
+	// size an answer may be in the college leagues.
+	const res = jsonOf(yield request(3, "/odds/bygames", ask.key, JSON.stringify({ GameIDs: [hint.id], Sport: row[3], OddType: "Game" })));
 	if (!res.ok) return { kind: "silent", why: res.detail };
 	if (!Array.isArray(res.value)) return { kind: "silent", why: "unreadable" };
 
 	const rows: Record<string, unknown>[] = [];
-	let last: number | null = null;
 	for (const item of res.value) {
 		const r = obj(item);
 		// Readable only in the form the hint takes: a seat 3 id, compared without regard to case.
 		const id = r === null || typeof r.ID !== "string" ? null : hintOf([{ seat: 3, id: r.ID }]);
 		if (r === null || id === null || "none" in id) return { kind: "silent", why: "unreadable record" };
 		if (id.id === hint.id) rows.push(r);
-		const t = boardTime(r.MatchTime);
-		if (t !== null && (last === null || t > last)) last = t;
 	}
-	if (rows.length === 0) {
-		const date = ask.near;
-		if (date === undefined || last === null || last < date) return { kind: "silent", why: "the board doesn't reach the game yet" };
-		return { kind: "fails", why: "hint not on the board", missing: true };
-	}
+	// An answer with no row for the hint is the board not listing it: a game it has dropped as finished,
+	// which verification reads by the result before standing seat 3 down, or an id the board does not
+	// have. An empty answer is never a reading of the game; it is the board's answer about the hint.
+	if (rows.length === 0) return { kind: "fails", why: "hint not on the board", missing: true };
 	if (rows.length > 1) return { kind: "fails", why: "hint listed twice on the board" };
 
 	const hinted = rows[0];

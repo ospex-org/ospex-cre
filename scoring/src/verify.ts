@@ -30,10 +30,14 @@
 //     window included, is the game: it reads no other record there, and can give no final to count.
 //   * No start is written for a game already over. While any reading verification takes shows the
 //     game final, by team near the date or at the re-read, seat 3's result and the spare read by
-//     its hint included, nothing is written; and so does a feed that says the game is finished but
-//     gives no points, or a count short of a whole game (types.ts, saysFinal). Seat 3's board drops a
-//     finished game, so a hint missing from it is read by its result before seat 3 stands down. A
-//     game every seat shows still in play gets its start, late.
+//     its hint included, nothing is written; and so does a counting seat whose answer touched the
+//     game and could not be used (types.ts, answer): a final without points, a count short of a
+//     whole game, a result listed twice, a row that would not parse. The spare that does not count
+//     holds the start by a final alone: a doubleheader it lists both games of must start, and what
+//     it could not use is read at scoring, where it holds the void. Seat 3's board drops a
+//     finished game, so a hint missing from it is read by its result before seat 3 stands down: a
+//     result the reader could not use stands it down exactly as no result does, and only a final
+//     there holds the start. A game every seat shows still in play gets its start, late.
 //
 // As built:
 //
@@ -55,7 +59,7 @@
 // So the start is written only when three seats list the game within an hour of one another, the
 // same count a score needs inside n, and the time is always a counting seat's schedule.
 
-import { silent } from "./run";
+import { clean } from "./run";
 import type { Decision } from "./chain";
 import type { BoardCheck } from "./readers/board3";
 import type { Game, Reading, Seat } from "./types";
@@ -103,11 +107,21 @@ export interface Verifying {
 export const READ_BY_TEAM: readonly (1 | 2 | 4)[] = Object.freeze([1, 2, 4] as const);
 
 /**
- * What seat 3's result says when it answers about the hint without a final it could score: nothing
- * of the game's end, so a hint the board no longer lists then stands seat 3 down. Any other silence
- * of the result is a read that failed, and teaches nothing.
+ * What seat 3's result says when the feed answered about the hint with nothing of the game: no row
+ * for it, so a hint the board no longer lists then stands seat 3 down. An answer the reader could not
+ * use (a result listed twice, a part of the game, a row without points) stands it down the same way
+ * (unusable, in decideStart); any other silence of the result is a read that failed, and teaches
+ * nothing.
  */
-const RESULT_ANSWERED: ReadonlySet<string> = new Set(["no result for the hint", "duplicate result", "hint names a part of the game"]);
+const RESULT_ANSWERED: ReadonlySet<string> = new Set(["no result for the hint"]);
+
+/**
+ * What the spare says when the feed answered about the game's id without a record of the game and no
+ * slate stands behind it (readers/seat4.ts): silent so at scoring too, so a hinted spare that does not
+ * count holds nothing by it. Any other silence of a hinted spare is a read that failed, and its hint is
+ * unchecked.
+ */
+const SPARE_ANSWERED: ReadonlySet<string> = new Set(["nothing for the id, and the slate is past the size", "the id's row is not the game, and the slate is past the size", "no id, and the slate is past the size"]);
 
 /** True when a time is within START_BOUND of the date, both ends in. */
 function inRange(t: number, g: Verifying): boolean {
@@ -129,9 +143,18 @@ function hintedIds(g: Verifying, seat: Seat): string[] {
 	return [...new Set(g.hints.filter((h) => h.seat === seat).map((h) => h.id))];
 }
 
-/** True when a reading shows the game over: a final, or a feed that says final but gives none it can score. */
+/** True when a reading shows the game over: a final. */
 export function over(r: Reading): boolean {
-	return r.kind === "final" || r.saysFinal === true;
+	return r.kind === "final";
+}
+
+/**
+ * True when a seat answered about the game and the reader could not use the answer (types.ts, answer):
+ * a final without points or short of a whole game, a result listed twice, a row that would not parse,
+ * a status word the reader does not know. No start is written on it, as none is on a final.
+ */
+export function unusable(r: Reading): boolean {
+	return r.kind === "silent" && r.answer !== "nothing";
 }
 
 /**
@@ -141,24 +164,31 @@ export function over(r: Reading): boolean {
 export function decideStart(g: Verifying, seen: Seen): Decision {
 	const seat3Reading = (): Reading =>
 		seen[3].kind === "listed"
-			? { seat: 3, kind: "no_final", home: null, away: null, recorded: null, detail: "listed on the board", record: { id: seen[3].id, time: seen[3].time } }
-			: silent(3, seen[3].kind === "fails" ? `silent for the game: ${seen[3].why}` : seen[3].why);
+			? { seat: 3, kind: "no_final", home: null, away: null, recorded: null, detail: "listed on the board", record: { id: seen[3].id, time: seen[3].time }, answer: "the game" }
+			: clean(3, seen[3].kind === "fails" ? `silent for the game: ${seen[3].why}` : seen[3].why);
 	const readings = (): Reading[] => [seen[1], seen[2], seat3Reading(), seen[4]];
 	const wait = (why: string): Decision => ({ action: "wait", readings: readings(), why });
 
-	// No start for a game already over: a start written now would score at once, on a known result.
+	// No start for a game already over: a start written now would score at once, on a known result. And
+	// none on an answer a counting seat's reader could not use: what it says of the game's end is
+	// unread. The spare that does not count keeps its own rules below: its scorable final holds the
+	// start, and an answer it could not use does not (a doubleheader it lists both games of must start).
 	for (const seat of READ_BY_TEAM) {
 		if (over(seen[seat])) return wait(`seat ${seat} shows the game final`);
+		if (seat !== 4 && unusable(seen[seat])) return wait(`seat ${seat} answered but could not be used: ${seen[seat].detail}`);
 	}
 	// The board drops a finished game: a hint it no longer lists is read by its result. One that shows
-	// the game over writes nothing; one whose read failed teaches nothing, and the run waits, as it
-	// does on a board it can't read.
+	// the game over writes nothing; one the reader could not use, or none for the hint, stands seat 3
+	// down for the spare below; one whose read failed teaches nothing, and the run waits, as it does on
+	// a board it can't read.
 	if (seen.result !== undefined) {
 		if (over(seen.result)) return wait("seat 3 shows the game final");
-		if (seen.result.kind === "silent" && !RESULT_ANSWERED.has(seen.result.detail)) return wait(`seat 3's result is silent: ${seen.result.detail}`);
+		if (seen.result.kind === "silent" && !unusable(seen.result) && !RESULT_ANSWERED.has(seen.result.detail)) return wait(`seat 3's result is silent: ${seen.result.detail}`);
 	}
-	// The date names the game. A seat that lists it, and whose hint names another record, waits.
-	for (const seat of READ_BY_TEAM) {
+	// The date names the game. A seat read by team that lists it, and whose hint names another record,
+	// waits. Not the spare: asked by its id, its record is the hint's own, or where the feed has nothing
+	// for the id, the slate's (readers/seat4.ts), and scoring reads it the same way.
+	for (const seat of [1, 2] as const) {
 		const r = seen[seat];
 		const named = hintedIds(g, seat);
 		if (named.length === 0 || listedAt(r, g) === null) continue;
@@ -187,8 +217,8 @@ export function decideStart(g: Verifying, seen: Seen): Decision {
 	// Seat 3 is silent for the game: its hint failed, or its time is not at the start. The spare stands in.
 	const down: Reading =
 		board.kind === "listed"
-			? silent(3, "silent for the game: board time not at the start")
-			: silent(3, `silent for the game: ${board.why}`);
+			? clean(3, "silent for the game: board time not at the start")
+			: clean(3, `silent for the game: ${board.why}`);
 	const r4 = seen[4];
 	const t4 = listedAt(r4, g);
 	const settled = (why: string): Decision => ({ action: "wait", readings: [seen[1], seen[2], down, r4], why });
@@ -233,8 +263,13 @@ export function confirmStart(start: Decision, game: Game, again: readonly Readin
 	if (start.action !== "start") return start;
 	const wait = (why: string): Decision => ({ action: "wait", readings: start.readings, why });
 	const w = windowOf(game);
-	for (const r of again) if (over(r)) return wait(`seat ${r.seat} shows the game final`);
 	const counting = countingByTeam(start);
+	// A final anywhere, or an answer a counting seat's reader could not use (seat 3's result where it
+	// counts): nothing is written. The spare that does not count keeps its own rules below.
+	for (const r of again) {
+		if (over(r)) return wait(`seat ${r.seat} shows the game final`);
+		if (unusable(r) && (counting.includes(r.seat) || (r.seat === 3 && !counting.includes(4)))) return wait(`seat ${r.seat} answered but could not be used: ${r.detail}`);
+	}
 	if (!counting.includes(4)) {
 		// Seat 3 counts: scoring reads it by its result, so the result must read now.
 		const r3 = again.find((x) => x.seat === 3);
@@ -257,11 +292,16 @@ export function confirmStart(start: Decision, game: Game, again: readonly Readin
 			continue;
 		}
 		// No record of the game inside the window: a counting seat can't be read as scoring will, and a
-		// hinted spare's hint is unchecked, unless its record is the game, just before the window.
+		// hinted spare's hint is unchecked, unless its record is the game, just before the window (seen
+		// again now, as a reading or as the record outside the window; not a read that failed), or the
+		// feed answered that it has nothing for the id with no slate behind it (SPARE_ANSWERED): silent so
+		// at scoring too, nothing binds it, and the most it can cost is a dispute.
 		const named = [...new Set(game.hints.filter((h) => h.seat === seat).map((h) => h.id))];
-		if (!counts && named.length === 1 && r.kind !== "silent" && was.record?.id === named[0] && was.record.time !== null && Math.abs(was.record.time - game.start) <= START_SPREAD) {
+		const seen = r.kind !== "silent" || r.record !== null;
+		if (!counts && named.length === 1 && seen && was.record?.id === named[0] && was.record.time !== null && Math.abs(was.record.time - game.start) <= START_SPREAD) {
 			continue;
 		}
+		if (!counts && r.kind === "silent" && SPARE_ANSWERED.has(r.detail)) continue;
 		if (counts || named.length > 0) {
 			return wait(r.kind === "silent" ? `seat ${seat} can't read the game as scoring will: ${r.detail}` : `seat ${seat} reads another record, or none, in the game's window: ${r.detail}`);
 		}

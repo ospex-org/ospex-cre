@@ -18,15 +18,31 @@
 //
 // Status: final only when `Final` is true and `FinalType` is "Finished"; the feed sets `Final` true
 // on postponed and cancelled games too, so `Final` alone never makes a final; a finished result
-// without points reads silent, marked as the feed saying the game is over (types.ts). "Postponed"
-// and "Canceled" are recorded; everything else is not final. Only the game's own "Game" row is read,
-// never its rows for halves or innings.
+// without points reads silent. "Postponed" and "Canceled" are the feed's own words that the game will
+// not play, and a void may rest on them (rule.ts); "NotFinished" is not final; a row without a
+// `FinalType` is a partial row and reads silent; any other `FinalType`, or "Finished" under a final
+// flag the reader does not know, is unrecognized, silent too, the words verbatim on the reading. Only
+// the game's own "Game" row is read: a hint naming a row for halves or innings is a part of the game,
+// silent. Every silence here but a failed request, an empty body and the hint's rows absent from a
+// readable list (no result for the hint: every row under another seat 3 id) is an answer the reader
+// could not use, and the void holds it (types.ts, answer): a body that is not the feed's list, a row
+// that would not parse, a row whose id is not a seat 3 id (missing, empty, a number, a string of another
+// shape: it may be the hint's; the line carries the id, `result without a usable id: "0"`), the result
+// listed twice, a part of the game, a row without points, a status word or one it does not know. A
+// result's id is held to the feed's id shape, the UUID the hint is held to (ID, below); a result under
+// another seat 3 id is absence, by design: with no team names or time in a result, it cannot be told
+// from another game, and the hint is the binding. Status decides nothing; the body does: a failed
+// request (a status outside 2xx) is clean unless its body is the feed's list, read by the one reading a
+// 2xx list gets: a row that would not parse, one without a usable id or the hint's row of any shape makes
+// it an answer the reader could not use (the game's row in a 503; result without an id); an error object,
+// a page or an empty body on any status is a failure (readers/request.ts, failed). A refusal for a bad row carries the hint's row's
+// word and its final flag beside it (`the hint's row says "Finished", Final "TRUE"`).
 
 import { points } from "../pick";
-import { silent } from "../run";
+import { clean, silent } from "../run";
 import { leagueRow } from "../table";
 import type { Ask, Reading, ReaderRun, Seat } from "../types";
-import { jsonOf, obj, request, str } from "./request";
+import { failed, jsonOf, obj, request, str } from "./request";
 
 const SEAT: Seat = 3;
 
@@ -47,26 +63,49 @@ export function hintOf(hints: Ask["game"]["hints"]): { id: string } | { none: st
 }
 
 export function* read(ask: Ask): ReaderRun {
-	if (leagueRow(ask.game.league) === null) return silent(SEAT, "league not offered");
+	if (leagueRow(ask.game.league) === null) return clean(SEAT, "league not offered");
 	const hint = hintOf(ask.game.hints);
-	if ("none" in hint) return silent(SEAT, hint.none);
+	if ("none" in hint) return clean(SEAT, hint.none);
+
+	// The one reading of the feed's list, whatever the status it came under (request.ts, failed). Every row
+	// is read before any refusal, so a refusal carries the hint's row's word and its final flag. A row that
+	// would not parse, or one whose id is not a seat 3 id (the feed's id shape, which the hint is held to),
+	// may be the hint's: an answer the reader could not use, the line carrying the id. A row under another
+	// seat 3 id is not the game.
+	const ofList = (items: readonly unknown[]): Reading => {
+		const rows: Record<string, unknown>[] = [];
+		let unreadable = false;
+		let unusable: string | null = null;
+		for (const item of items) {
+			const r = obj(item);
+			if (r === null) {
+				unreadable = true;
+				continue;
+			}
+			const id = str(r.ID);
+			if (id === null || !ID.test(id)) {
+				if (unusable === null) unusable = r.ID === undefined ? "result without an id" : `result without a usable id: ${String(JSON.stringify(r.ID))}`;
+			} else if (id.toLowerCase() === hint.id) rows.push(r);
+		}
+		const word = rows.length === 0 ? "" : `; the hint's row says ${JSON.stringify(typeof rows[0].FinalType === "string" ? rows[0].FinalType : "")}, Final ${String(JSON.stringify(rows[0].Final))}`;
+		if (unreadable) return silent(SEAT, `unreadable record${word}`);
+		if (unusable !== null) return silent(SEAT, `${unusable}${word}`);
+		// The hint's rows absent from the answer: clean silence. Listed twice, or naming a row for a half or
+		// for innings, a part of the game: an answer the reader could not use, and the void holds it.
+		if (rows.length === 0) return clean(SEAT, "no result for the hint");
+		if (rows.length > 1) return silent(SEAT, "duplicate result");
+		if (rows[0].OddType !== "Game") return silent(SEAT, "hint names a part of the game");
+		return readingOf(rows[0], hint.id);
+	};
 
 	const res = jsonOf(yield request(SEAT, `/results/${hint.id}`, ask.key));
-	if (!res.ok) return silent(SEAT, res.detail);
+	// Status decides nothing; the body does (request.ts, failed): a failed request is clean silence unless
+	// its body is the feed's list and that list, read by the one reading above, is anything but clean
+	// silence (a row that would not parse, one without a usable id, the hint's row of any shape); a 2xx
+	// body that is not the feed's list is an answer the reader could not use too.
+	if (!res.ok) return failed(SEAT, res, (json) => (Array.isArray(json) ? ofList(json) : null), false);
 	if (!Array.isArray(res.value)) return silent(SEAT, "unreadable");
-
-	const rows: Record<string, unknown>[] = [];
-	for (const item of res.value) {
-		const r = obj(item);
-		if (r === null) return silent(SEAT, "unreadable record");
-		const id = str(r.ID);
-		if (id !== null && id.toLowerCase() === hint.id) rows.push(r);
-	}
-	if (rows.length === 0) return silent(SEAT, "no result for the hint");
-	if (rows.length > 1) return silent(SEAT, "duplicate result");
-	// A hint naming a row for a half or for innings would read a part of the game as its final.
-	if (rows[0].OddType !== "Game") return silent(SEAT, "hint names a part of the game");
-	return readingOf(rows[0], hint.id);
+	return ofList(res.value);
 }
 
 function readingOf(r: Record<string, unknown>, id: string): Reading {
@@ -74,10 +113,20 @@ function readingOf(r: Record<string, unknown>, id: string): Reading {
 	const home = points(r.HomeScore);
 	const away = points(r.AwayScore);
 	const record = { id, time: null };
-	if (isFinalFlag(r.Final) && type === "Finished") {
-		if (home === null || away === null) return { ...silent(SEAT, "final without points"), saysFinal: true };
-		return { seat: SEAT, kind: "final", home, away, recorded: null, detail: "final", record };
+	if (type === "Finished") {
+		// The feed's own word for a whole game played, under its final flag; a flag the reader does not
+		// know is unrecognized, verbatim.
+		if (!isFinalFlag(r.Final)) return silent(SEAT, `unrecognized final flag ${String(JSON.stringify(r.Final))}`);
+		if (home === null || away === null) return silent(SEAT, "final without points");
+		return { seat: SEAT, kind: "final", home, away, recorded: null, detail: "final", record, answer: "the game" };
 	}
-	const recorded = type === "Postponed" ? "postponed" : type === "Canceled" ? "canceled" : null;
-	return { seat: SEAT, kind: "no_final", home, away, recorded, detail: recorded ?? type, record };
+	if (type === "Postponed" || type === "Canceled") {
+		const recorded = type === "Postponed" ? "postponed" : "canceled";
+		return { seat: SEAT, kind: "no_final", home, away, recorded, detail: recorded, record, answer: "the game" };
+	}
+	if (type === "NotFinished") return { seat: SEAT, kind: "no_final", home, away, recorded: null, detail: type, record, answer: "the game" };
+	// A row with no status word is a partial row; any other word is one the reader does not know, kept
+	// verbatim so the feed's own word shows in the run's line: both silent, an answer it could not use.
+	if (type.trim() === "") return silent(SEAT, "no status");
+	return silent(SEAT, `unrecognized status ${JSON.stringify(type)}`);
 }

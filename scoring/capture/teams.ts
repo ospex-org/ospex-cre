@@ -4,6 +4,8 @@
 //
 // One team per current entry on seat 1's list for the league. Seat 1's list gives every team an id
 // and, in college, the school's name beside the full name, so it is the roll the other seats join.
+// Each team also carries how seats 1 and 2 are asked for its games (`ask`): seat 1's id for it, and
+// seat 2's own spelling of it, taken from seat 2's list, null where that list lacks the team.
 //
 // A spelling becomes a team's alias only when it comes from a seat's own list (the team lists of
 // seats 1, 2 and 4, and seat 3's board, its one list of games and teams) and one reviewed identity
@@ -115,6 +117,10 @@ function listNames(league: string): Map<Seat, Set<string>> {
 interface Team {
 	key: string;
 	names: Set<string>;
+	/** Seat 1's own id for the team, the one its games are asked by (team_ids[]). */
+	id1: number;
+	/** Seat 2's own spelling of the team, the one its games are asked by (team=); null where its list lacks the team. */
+	name2: string | null;
 }
 
 interface Built {
@@ -156,7 +162,8 @@ function build(league: string): Built {
 				continue;
 			}
 			if (teams.has(s.key)) refusals.push(`${league}: seat 1's list has two current entries for ${s.key}`);
-			teams.set(s.key, { key: s.key, names: new Set() });
+			if (typeof t.id !== "number") refusals.push(`${league}: seat 1's entry for ${s.key} has no id`);
+			teams.set(s.key, { key: s.key, names: new Set(), id1: typeof t.id === "number" ? t.id : -1, name2: null });
 			const nick = text(t.name);
 			if (nick !== null) mascot.set(s.key, nick);
 			for (const n of s.names) {
@@ -222,7 +229,10 @@ function build(league: string): Built {
 				report.push(`${league}: seat ${seat} "${name}" joins nothing${(own.get(f)?.size ?? 0) > 1 ? " (it is two teams' name)" : ""}`);
 				continue;
 			}
-			teams.get(key)!.names.add(name);
+			const team = teams.get(key)!;
+			team.names.add(name);
+			// Seat 2 is asked for a team's games by its own spelling: the first of its list's that joins the team.
+			if (seat === 2 && team.name2 === null) team.name2 = name;
 		}
 	}
 	return { teams: [...teams.values()], outside };
@@ -268,7 +278,7 @@ for (const league of LEAGUES) {
 			seen.set(normalise(n), t.key);
 		}
 	}
-	const lines = teams.map((t) => `\t{ key: ${JSON.stringify(t.key)}, names: ${JSON.stringify([...t.names].sort())} },`).join("\n");
+	const lines = teams.map((t) => `\t{ key: ${JSON.stringify(t.key)}, names: ${JSON.stringify([...t.names].sort())}, ask: { 1: ${t.id1}, 2: ${JSON.stringify(t.name2)} } },`).join("\n");
 	if (refusals.length === 0) {
 		writeFileSync(
 			join(OUT, `${league}.ts`),

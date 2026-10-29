@@ -13,17 +13,33 @@
 //              points for both teams. A silent counting seat blocks, and so does one that has not
 //              yet answered with a final: inside n that is a game still on, or a feed still
 //              catching up, and the run waits.
-//   After n    Two counting seats answer with the same final and the third is silent. A seat that
-//              answered without a final is not silent, so two finals beside an
-//              answer without one are not enough.
-//   Void       Only from start + n. No seat that answers shows a final, and the counting seats
-//              answer as a score's would: "the same proof as a score: three feeds inside the
-//              window and two after". A void is never taken inside the window, so its count is
-//              always the after-n count: at least two counting seats answer, each without a final.
+//   After n    Two counting seats answer with the same final: a score, over any single answer at the
+//              third that is not a competing final (in play, a word the reader does not know, an
+//              answer it could not use, postponed, cancelled); that answer neither votes nor
+//              disputes.
+//   Void       Only from start + n, and held to the finals' count: two counting seats answer
+//              affirmatively that the game will not or did not play (a row of the game, bound by
+//              its ids or names and time, whose status in the feed's own words is postponed or
+//              cancelled, and nothing else: affirmsNoFinal), the rest of the counting seats silent,
+//              and the void's silence only clean silence: a seat whose answer held nothing of the
+//              game (empty, the game absent or outside the window, a failure before any row
+//              arrived, the seat past its window by date arithmetic; types.ts, answer "nothing").
+//              Every other reading that is not an affirmative row holds the void, whatever the word
+//              was: an answer the reader could not use (a row without an id, a status word or
+//              points, a word it does not recognize, a short final, a part of the game, a row that
+//              would not parse, a failure or a cap partway through the reads, two rows that could be
+//              the game, two answers that disagree), or the game's row chosen by its hint beside
+//              another that could be the game; the run waits, its line naming the seat and the
+//              class. A row that says the game is scheduled or in
+//              play is an answer, not a void's vote, and beside two affirmative answers it holds the
+//              void as it would hold a score; absence, a
+//              listing without the game, and a row without a status are silence (pick.ts). Fewer
+//              than two affirmative answers: the run waits, its line saying what each seat gave.
 //   Disagree   Any two finals that differ, from any seat asked, the spare's included, inside n or
-//              after; and from start + n, finals beside answers without one, with at least two
-//              counting seats answering: neither a score nor a void. The first run that sees either
-//              posts the dispute record, with every seat's answer.
+//              after; and from start + n, a lone final against two counting seats that say the game
+//              will not or did not play: neither a score nor a void. A lone final beside anything
+//              else waits for a second. The first run that sees either posts the dispute record,
+//              with every seat's answer.
 //   After a record   The record is not a lock (decideDisputed). Each seat is open while the program
 //              still asks it and closed once it stops (OPEN_FOR), and each has a vote: its most
 //              recent answer while it is open, its last answer once it is closed (votesOf). Silence
@@ -42,7 +58,7 @@
 // For a game whose counting seat is silent for the whole game, it stands in for that seat
 // (countingFor).
 
-import { silent } from "./run";
+import { clean } from "./run";
 import { COUNTING, SPARE } from "./table";
 import { READING_KIND, fromReportReading, type ChainGame, type Decision, type ReportReading } from "./chain";
 import { hintOf } from "./readers/seat3";
@@ -99,11 +115,39 @@ export function countingFor(down: Seat | null): readonly Seat[] {
 }
 
 /**
+ * An affirmative no-final answer: the game's own row, bound by its ids or names and time, whose
+ * status in the feed's own words says the game will not or did not play: postponed or cancelled, and
+ * nothing else (the reading's `recorded`), read as the game and not chosen by its hint beside another
+ * row that could be the game (types.ts, answer). The only answer without a final a void may rest on.
+ * A row scheduled or in play is an answer, not a void's vote.
+ */
+export function affirmsNoFinal(r: Reading): boolean {
+	return r.kind === "no_final" && r.recorded !== null && r.answer === "the game";
+}
+
+/** Whether a reading holds the void: silence that is not clean, or the game's row chosen beside another (types.ts, answer). */
+function holdsVoid(r: Reading): boolean {
+	return (r.kind === "silent" && r.answer !== "nothing") || r.answer === "chosen";
+}
+
+/** The line for a reading that holds the void: the seat and the class, with the reader's detail. */
+function holding(r: Reading): string {
+	return r.answer === "chosen" ? `seat ${r.seat} answered by its hint beside another row that could be the game: ${r.detail}` : `seat ${r.seat} answered but could not be used: ${r.detail}`;
+}
+
+/** What each seat gave, for the line of a run that waits on the void's count. */
+function gave(readings: readonly Reading[]): string {
+	return readings.map((r) => `seat ${r.seat} ${r.kind === "final" ? "a final" : r.kind === "silent" ? `silence (${r.detail})` : (r.recorded ?? r.detail)}`).join(", ");
+}
+
+/**
  * What a run's readings decide for a game whose start is written and that has no dispute record.
- * `inside` is whether the run's clock is before start + n.
+ * `inside` is whether the run's clock is before start + n. Every reading here is silent or an answer
+ * about the game (decideVerified reads non-answers silent; votesOf gives only answers): a final, or
+ * the game's own row without one.
  */
 export function decide(readings: readonly Reading[], counting: readonly Seat[], inside: boolean): Decision {
-	const of = (seat: Seat): Reading => readings.find((r) => r.seat === seat) ?? silent(seat, "not read");
+	const of = (seat: Seat): Reading => readings.find((r) => r.seat === seat) ?? clean(seat, "not read");
 	const finals = readings.filter((r) => r.kind === "final");
 	const first = finals[0];
 
@@ -113,7 +157,10 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 	const counted = counting.map(of);
 	const finalsCounted = counted.filter((r) => r.kind === "final").length;
 	const answeredCounted = counted.filter((r) => r.kind !== "silent").length;
-	const withoutFinal = answeredCounted - finalsCounted;
+	// The void's votes: the answers that say the game will not or did not play.
+	const affirmed = counted.filter(affirmsNoFinal).length;
+	// The seats whose silence is not clean, and the game's row chosen beside another: each holds the void.
+	const held = readings.filter(holdsVoid);
 
 	if (inside) {
 		if (finalsCounted === AGREE.insideN) {
@@ -123,12 +170,27 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
 		return { action: "wait", readings, why };
 	}
 
-	if (answeredCounted < AGREE.afterN) return { action: "wait", readings, why: "after n: fewer than two counting seats answer" };
-	if (finalsCounted >= AGREE.afterN && withoutFinal === 0) {
-		return { action: "score", home: first.home as number, away: first.away as number, readings, why: "after n: two counting seats or more, the same final, the rest silent" };
+	// After n. Two counting seats with the same final score, over any single answer at the third that
+	// is not a competing final (two finals that differ disputed above): in play, a word the reader does
+	// not know, an answer it could not use, postponed, cancelled. That answer neither votes nor disputes.
+	if (finalsCounted >= AGREE.afterN) {
+		return { action: "score", home: first.home as number, away: first.away as number, readings, why: "after n: two counting seats or more, the same final" };
 	}
-	if (finals.length === 0) return { action: "void", readings, why: "after n: every seat that answers shows no final" };
-	return { action: "dispute", readings, why: "after n: finals beside answers without a final" };
+	if (finals.length > 0) {
+		// A lone final against two counting seats that say the game will not or did not play: the record.
+		// Beside anything else it waits for a second, the line saying what each seat gave.
+		if (affirmed >= AGREE.afterN) return { action: "dispute", readings, why: "after n: a final against two counting seats that say the game will not or did not play" };
+		if (answeredCounted < AGREE.afterN) return { action: "wait", readings, why: "after n: fewer than two counting seats answer" };
+		return { action: "wait", readings, why: `after n: one final, no second, and the answers beside it neither vote nor dispute; ${gave(readings)}` };
+	}
+	// No final anywhere. The void's silence is only clean silence: a seat whose answer touched the game
+	// and could not be used, or whose hint chose the game's row beside another, holds the void.
+	if (held.length > 0) return { action: "wait", readings, why: `after n: ${held.map(holding).join("; ")}` };
+	if (answeredCounted < AGREE.afterN) return { action: "wait", readings, why: "after n: fewer than two counting seats answer" };
+	// As a score after n: two or more affirm, and the rest of the counting seats are silent. A counting seat
+	// that answers the game is in play is not silent, so two affirmative answers beside it are not enough.
+	if (affirmed >= AGREE.afterN && answeredCounted === affirmed) return { action: "void", readings, why: "after n: two counting seats or more say the game will not or did not play, the rest silent, and no seat shows a final" };
+	return { action: "wait", readings, why: `after n: ${affirmed} counting seat${affirmed === 1 ? " says" : "s say"} the game will not or did not play, two needed; ${gave(readings)}` };
 }
 
 /**
@@ -138,7 +200,10 @@ export function decide(readings: readonly Reading[], counting: readonly Seat[], 
  * the game is silent on it.
  */
 export function decideVerified(readings: readonly Reading[], counting: readonly Seat[], inside: boolean, seats: readonly Seat[], w: Window): Decision {
-	const d = decide(readings, counting, inside);
+	// A reading that is not an answer about the game (a listing without it, its record outside the
+	// window) is silence to the rule, with its reason: absence is silence everywhere.
+	const seen = readings.map((r) => (r.kind === "silent" || answers(r, w) ? r : clean(r.seat, r.detail)));
+	const d = decide(seen, counting, inside);
 	return d.action === "dispute" ? { ...d, readings: answersOf(readings, seats, w) } : d;
 }
 
@@ -161,8 +226,8 @@ export function answers(r: Reading, w: Window): boolean {
 export function answersOf(readings: readonly Reading[], seats: readonly Seat[], w: Window): Reading[] {
 	return seats.map((seat) => {
 		const r = readings.find((x) => x.seat === seat);
-		if (r === undefined) return silent(seat, "not read");
-		return answers(r, w) ? r : silent(seat, r.detail);
+		if (r === undefined) return clean(seat, "not read");
+		return answers(r, w) ? r : clean(seat, r.detail);
 	});
 }
 
@@ -188,12 +253,12 @@ export function lastRecorded(records: readonly (readonly ReportReading[])[], sea
  */
 export function votesOf(fresh: readonly Reading[], recorded: readonly ReportReading[], seats: readonly Seat[], down: Seat | null, w: Window): Reading[] {
 	return seats.map((seat) => {
-		if (seat === down) return silent(seat, "silent for the game");
+		if (seat === down) return clean(seat, "silent for the game");
 		const now = fresh.find((r) => r.seat === seat);
 		if (now !== undefined && answers(now, w)) return now;
 		const then = recorded.find((r) => r.seat === seat);
 		if (then !== undefined && then.kind !== READING_KIND.silent) return fromReportReading(then, "its vote on record");
-		return silent(seat, now?.detail ?? "not read");
+		return clean(seat, now?.detail ?? "not read");
 	});
 }
 
@@ -267,7 +332,7 @@ function votesFor(votes: readonly Reading[], home: number, away: number): number
  * a dispute on it voids.
  */
 export function decideDay7(votes: readonly Reading[], seats: readonly Seat[], down: Seat | null): Decision {
-	const sources: Reading[] = seats.map((seat) => (seat === down ? silent(seat, "silent for the game") : (votes.find((r) => r.seat === seat) ?? silent(seat, "not read"))));
+	const sources: Reading[] = seats.map((seat) => (seat === down ? clean(seat, "silent for the game") : (votes.find((r) => r.seat === seat) ?? clean(seat, "not read"))));
 
 	if (seats.length < AGREE.day7Sources) return { action: "void", readings: sources, why: "day 7: fewer than four feeds" };
 	if (sources.some((r) => r.kind === "silent")) return { action: "void", readings: sources, why: "day 7: a source is silent" };

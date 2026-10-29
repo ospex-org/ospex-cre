@@ -1,0 +1,12 @@
+# ==========================================================================
+# CRE PROJECT SETTINGS FILE: the forwarder probe (a project root of its own)
+# ==========================================================================
+# The probe's two workflows deploy to Chainlink's private registry, which takes no
+# wallet, no gas and no Ethereum RPC: the registry is chosen per target in each
+# workflow's workflow.yaml (deployment-registry: "private"). The one RPC here is
+# the chain the probe writes to, for the simulator.
+# ==========================================================================
+probe-settings:
+  rpcs:
+    - chain-name: polygon-mainnet
+      url: https://polygon-bor-rpc.publicnode.com

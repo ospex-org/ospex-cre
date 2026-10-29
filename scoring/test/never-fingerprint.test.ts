@@ -15,15 +15,20 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { COUNTING, LEAGUES, SEATS, SPARE, readGameAsync, readGameSync, seatsFor, type Keys } from "../src/index";
 import { request } from "../src/readers/request";
+import { TEAMS } from "../src/teams/index";
 import type { Game, HttpRequest, HttpResponse, Seat } from "../src/types";
 import { locate } from "./fixtures";
 
 const OFFERED = ["mlb", "nba", "ncaab", "ncaaf", "nfl", "nhl"];
 const ALL_KEYS: Keys = { 1: "k1", 2: "k2", 3: "k3", 4: "k4" };
 
-// A seat 3 hint, so seat 3 (read by hint) has something to ask about like the other three.
+// Two teams of the league's own lists that every seat asked by team can ask for (seat 2's list lacks
+// most college football schools), so seats 1 and 2 have something to ask about, and a seat 3 hint,
+// so seat 3 (read by hint) has too, like the spare, which asks by its own id.
 function game(league: string): Game {
-	return { league, home: "Home", away: "Away", start: 1_792_000_000, n: 86_400, hints: [{ seat: 3, id: "00000000-0000-4000-8000-000000000000" }] };
+	const teams = (Object.prototype.hasOwnProperty.call(TEAMS, league) ? TEAMS[league] : []).filter((t) => t.ask[2] !== null);
+	// And the spare's id, so the spare asks by it in college basketball too, whose slate it never reads.
+	return { league, home: teams[0]?.names[0] ?? "Home", away: teams[1]?.names[0] ?? "Away", start: 1_792_000_000, n: 86_400, hints: [{ seat: 3, id: "00000000-0000-4000-8000-000000000000" }, { seat: 4, id: "00000000000000000000000000000000" }] };
 }
 
 /** A transport that refuses everything, recording which seats were asked, in order. */

@@ -39,7 +39,7 @@ export interface Entry {
 
 interface Plan {
 	asks?: { seat: Seat; game: Game; now?: number }[];
-	lists?: { seat: Seat; league: string; path: string; follow?: "cursor" }[];
+	lists?: { seat: Seat; league: string; path: string; follow?: "cursor"; method?: "POST"; body?: string }[];
 	fresh?: boolean;
 }
 
@@ -49,10 +49,12 @@ function keyOf(seat: Seat): string {
 	return k;
 }
 
-function pathOf(seat: Seat, url: string): string {
+/** The path an answer is saved under: for a POST, the method, the path and the body as one key (test/fixtures.ts reads it back the same way). */
+function pathOf(seat: Seat, req: HttpRequest): string {
 	const prefix = `https://${seatRow(seat).host}`;
-	if (!url.startsWith(prefix)) throw new Error(`request for seat ${seat} left its host`);
-	return url.slice(prefix.length);
+	if (!req.url.startsWith(prefix)) throw new Error(`request for seat ${seat} left its host`);
+	const path = req.url.slice(prefix.length);
+	return req.method === "GET" ? path : `${req.method} ${path} ${req.body ?? ""}`;
 }
 
 function fileFor(seat: Seat, league: string, path: string, at: string | null): string {
@@ -74,7 +76,7 @@ const last: Partial<Record<Seat, number>> = {};
 const calls: Record<Seat, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
 
 async function send(seat: Seat, league: string, req: HttpRequest): Promise<HttpResponse> {
-	const path = pathOf(seat, req.url);
+	const path = pathOf(seat, req);
 	const known = byPath.get(`${seat} ${path}`);
 	if (known && (!fresh || thisRun.has(`${seat} ${path}`))) {
 		const body = readFileSync(join(ROOT, known.file), "utf8");
@@ -90,7 +92,7 @@ async function send(seat: Seat, league: string, req: HttpRequest): Promise<HttpR
 	let res: Response;
 	try {
 		calls[seat]++;
-		res = await fetch(url, { method: "GET", headers, redirect: "manual" });
+		res = await fetch(url, { method: req.method, headers, body: req.body, redirect: "manual" });
 	} catch (e) {
 		console.log(`seat ${seat} ${path} -> transport error (${(e as Error).name})`);
 		throw new Error("transport");
@@ -125,13 +127,14 @@ async function drive(seat: Seat, game: Game, now: number): Promise<void> {
 	console.log(`  seat ${seat} ${game.league} ${game.away} at ${game.home}: ${r.kind} (${r.detail})`);
 }
 
-async function fetchList(seat: Seat, league: string, path: string, follow?: "cursor"): Promise<void> {
+async function fetchList(seat: Seat, league: string, path: string, follow?: "cursor", method: "GET" | "POST" = "GET", body?: string): Promise<void> {
 	let next: string | null = path;
 	while (next !== null) {
 		const res = await send(seat, league, {
-			method: "GET",
+			method,
 			url: `https://${seatRow(seat).host}${next}`,
-			headers: listHeaders(seat),
+			headers: method === "GET" ? listHeaders(seat) : { ...listHeaders(seat), "content-type": "application/json" },
+			...(body === undefined ? {} : { body }),
 		});
 		next = null;
 		if (follow === "cursor" && res.status === 200) {
@@ -156,6 +159,6 @@ for (const a of plan.asks ?? []) await drive(a.seat, a.game, a.now ?? Math.floor
 for (const l of plan.lists ?? []) {
 	const key = seatRow(l.seat).key;
 	const path = "query" in key ? `${l.path}${l.path.includes("?") ? "&" : "?"}${key.query}=${PLACEHOLDER}` : l.path;
-	await fetchList(l.seat, l.league, path, l.follow);
+	await fetchList(l.seat, l.league, path, l.follow, l.method ?? "GET", l.body);
 }
 console.log(`calls this run: seat 1 ${calls[1]}, seat 2 ${calls[2]}, seat 3 ${calls[3]}, seat 4 ${calls[4]}`);

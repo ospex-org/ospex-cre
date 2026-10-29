@@ -36,7 +36,8 @@ describe("never: a final outside the window counts", () => {
 			const t = readSaved(seat, lakers.game, NOW).reading.record!.time;
 			const at = (start: number, n = DAY) => read(seat, { ...lakers.game, start, n });
 			const final = { kind: "final", home: want.home, away: want.away, detail: "final", id: want.id };
-			const out = { kind: "no_final", home: null, away: null, detail: "outside window", id: want.id };
+			// A record outside the window is silence, with its reason and the record it turned away.
+			const out = { kind: "silent", home: null, away: null, detail: "outside window", id: want.id };
 			expect({ seat, edge: "start = feed time", ...at(t) }).toEqual({ seat, edge: "start = feed time", ...final });
 			expect({ seat, edge: "start one second after", ...at(t + 1) }).toEqual({ seat, edge: "start one second after", ...out });
 			expect({ seat, edge: "start + n one second after", ...at(t - DAY + 1) }).toEqual({ seat, edge: "start + n one second after", ...final });
@@ -51,7 +52,7 @@ describe("never: a final outside the window counts", () => {
 		for (const seat of [1, 2] as Seat[]) {
 			const start = at("2026-06-11T00:00:00Z");
 			const n = game.start - start;
-			expect({ seat, ...read(seat, { ...game, start, n }) }).toMatchObject({ seat, kind: "no_final", detail: "outside window" });
+			expect({ seat, ...read(seat, { ...game, start, n }) }).toMatchObject({ seat, kind: "silent", detail: "outside window" });
 			expect({ seat, ...read(seat, { ...game, start, n: n + 1 }) }).toMatchObject({ seat, kind: "final", home: 2, away: 0 });
 		}
 	});
@@ -61,7 +62,7 @@ describe("never: a final outside the window counts", () => {
 		for (const seat of [1, 2] as Seat[]) {
 			const start = lakers.game.start - 2 * 3600;
 			expect({ seat, ...read(seat, { ...lakers.game, start, n: DAY }) }).toMatchObject({ seat, kind: "final" });
-			expect({ seat, ...read(seat, { ...lakers.game, start, n: 3600 }) }).toMatchObject({ seat, kind: "no_final", detail: "outside window" });
+			expect({ seat, ...read(seat, { ...lakers.game, start, n: 3600 }) }).toMatchObject({ seat, kind: "silent", detail: "outside window" });
 		}
 	});
 
@@ -95,8 +96,8 @@ describe("never: a final outside the window counts", () => {
 			if (original) b.results.push({ ...original, ...MAKEUP_2 });
 			return b;
 		};
-		expect(read(1, rainout, seat1Makeup)).toEqual({ kind: "no_final", home: null, away: null, detail: "outside window", id: "8800381" });
-		expect(read(2, rainout, seat2Makeup)).toEqual({ kind: "no_final", home: null, away: null, detail: "outside window", id: "340378" });
+		expect(read(1, rainout, seat1Makeup)).toEqual({ kind: "silent", home: null, away: null, detail: "outside window", id: "8800381" });
+		expect(read(2, rainout, seat2Makeup)).toEqual({ kind: "silent", home: null, away: null, detail: "outside window", id: "340378" });
 		// The control: the same derived answer read for the makeup's own game scores it.
 		const makeupGame = byName("mlb final: the makeup").game;
 		expect(read(1, makeupGame)).toMatchObject({ kind: "final", home: 0, away: 2, id: "8800381" });
@@ -116,7 +117,7 @@ describe("never: a final outside the window counts", () => {
 		};
 		const hinted = { ...rainout, hints: [{ seat: 1, id: "5058800" }] };
 		const unhinted = read(1, rainout, moved1);
-		expect(unhinted).toEqual({ kind: "no_final", home: null, away: null, detail: "outside window", id: "5058788" });
+		expect(unhinted).toEqual({ kind: "silent", home: null, away: null, detail: "outside window", id: "5058788" });
 		expect(read(1, hinted, moved1)).toEqual(unhinted);
 	});
 

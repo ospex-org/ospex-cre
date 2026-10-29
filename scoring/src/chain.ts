@@ -111,10 +111,10 @@ export type Decision =
 export function fromReportReading(r: ReportReading, detail: string): Reading {
 	const seat = r.seat as Seat;
 	if (r.kind === READING_KIND.final) {
-		return { seat, kind: "final", home: r.homeScore, away: r.awayScore, recorded: null, detail, record: null };
+		return { seat, kind: "final", home: r.homeScore, away: r.awayScore, recorded: null, detail, record: null, answer: "the game" };
 	}
 	if (r.kind === READING_KIND.noFinal) {
-		return { seat, kind: "no_final", home: r.homeScore, away: r.awayScore, recorded: null, detail, record: null };
+		return { seat, kind: "no_final", home: r.homeScore, away: r.awayScore, recorded: null, detail, record: null, answer: "the game" };
 	}
-	return { seat, kind: "silent", home: null, away: null, recorded: null, detail, record: null };
+	return { seat, kind: "silent", home: null, away: null, recorded: null, detail, record: null, answer: "nothing" };
 }

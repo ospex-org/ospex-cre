@@ -5,7 +5,7 @@
 //   bun shapes.ts           writes shapes/emitted.json, then prints the counts
 //   bun shapes.ts --check   writes nothing, and exits 1 if the file isn't what the program sends now
 //   bun shapes.ts --sweep   also runs the sweep of a disputed game, every fresh state beside every
-//                           record a seat could hold (393,216 decisions), and checks that each
+//                           record a seat could hold (1,500,000 decisions), and checks that each
 //                           disputed shape here is one of its shapes
 //
 // Where the shapes come from, each by the program's own functions:
@@ -26,14 +26,14 @@
 // every seat is still open for a while after the window (seat 4 to 66 hours from the start, seat 3 to
 // five days), so it adds no shape. The program's tests pin both (never-day7.test.ts, dispute.test.ts).
 //
-// The states a seat can read: the sweep's four, and one more.
-//   silent   the feed gives no answer about the game
+// The states a seat can read: four from test/rule-helpers.ts, and one more (freshStates, below).
+//   silent   the feed gives no answer about the game: nothing, a listing without the game, the
+//            game's record outside the window, or a row without a status (all silence, pick.ts)
 //   none     an answer without a final: the game's own record, still on, at 27-20, final A's points,
 //            as a game still on can carry them (the program never compares them)
-//   absent   a listing that doesn't give the game: absent from it, or its record outside the window.
-//            Seats 1, 2 and 4, which list by team; seat 3 reads its result by the hint. 0-0, since
-//            the reader gives no points. A score or a void of a game with no record carries it as
-//            read; every other report writes it silent.
+//   off      an answer without a final that says the game will not play: the game's own record,
+//            postponed, 0-0, since the feed gives it no points. The one answer a void may rest on
+//            (rule.ts). Seats 1, 2 and 3; the spare's feed has no such word.
 //   A, B     the two finals, 27-20 and 20-27: the same points, swapped
 // Two finals are the same exactly when both teams' points are, so two values stand for any two
 // finals. A report with three or four different finals (only a dispute record, an update or a day-7
@@ -45,10 +45,10 @@ import type { Decision, Report, ReportReading } from "./src/chain";
 import type { BoardCheck } from "./src/readers/board3";
 import { toReport } from "./src/report";
 import { countingFor, decideDisputed, decideVerified, lastRecorded } from "./src/rule";
-import { silent } from "./src/run";
+import { clean } from "./src/run";
 import type { Game, Reading, Seat } from "./src/types";
 import { confirmStart, decideStart, type Seen } from "./src/verify";
-import { LIVE, PAYOUT, PAYOUT_REFUSED, POINTS, SEATS4, STATES, W, reading, reportReading, type State } from "./test/rule-helpers";
+import { LIVE, PAYOUT, PAYOUT_REFUSED, POINTS, SEATS4, W, reading, reportReading, type State } from "./test/rule-helpers";
 
 export const FILE = join(import.meta.dir, "shapes", "emitted.json");
 
@@ -148,17 +148,17 @@ function order(a: Shape, b: Shape): number {
 
 // ── A game with a start: no record, then disputed ──
 
-type Fresh = State | "absent";
+type Fresh = State | "off";
 
 function freshReading(seat: Seat, s: Fresh): Reading {
-	if (s === "absent") return { seat, kind: "no_final", home: null, away: null, recorded: null, detail: "absent", record: null };
+	if (s === "off") return { seat, kind: "no_final", home: null, away: null, recorded: "postponed", detail: "postponed", record: { id: `r${seat}`, time: null }, answer: "the game" };
 	return reading(seat, s);
 }
 
-/** What a seat can read on a run, as readAll asks it. */
+/** What a seat can read on a run, as readAll asks it: the spare's feed has no word that a game will not play. */
 function freshStates(seat: Seat, down: Seat | null, phase: Phase): readonly Fresh[] {
 	if (phase === "day7" || seat === down) return ["silent"];
-	return seat === 3 ? ["silent", "none", "A", "B"] : ["silent", "none", "absent", "A", "B"];
+	return seat === 4 ? ["silent", "none", "A", "B"] : ["silent", "none", "off", "A", "B"];
 }
 
 function* runs(down: Seat | null, phase: Phase): Generator<Reading[]> {
@@ -220,17 +220,17 @@ function near(seat: Seat, s: Near): Reading {
 	const record = (time: number) => ({ id: `r${seat}`, time });
 	switch (s) {
 		case "silent":
-			return silent(seat, "silent");
+			return clean(seat, "silent");
 		case "listed":
-			return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: record(DATE) };
+			return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: record(DATE), answer: "the game" };
 		case "later":
-			return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: record(DATE + 2 * HOUR) };
+			return { seat, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record: record(DATE + 2 * HOUR), answer: "the game" };
 		case "absent":
-			return { seat, kind: "no_final", home: null, away: null, recorded: null, detail: "absent", record: null };
+			return clean(seat, "absent");
 		case "outside":
-			return { seat, kind: "no_final", home: null, away: null, recorded: null, detail: "outside window", record: record(DATE + 3 * 86_400) };
+			return { ...clean(seat, "outside window"), record: record(DATE + 3 * 86_400) };
 		case "final":
-			return { seat, kind: "final", home: POINTS.A[0], away: POINTS.A[1], recorded: null, detail: "final", record: record(DATE) };
+			return { seat, kind: "final", home: POINTS.A[0], away: POINTS.A[1], recorded: null, detail: "final", record: record(DATE), answer: "the game" };
 	}
 }
 
@@ -260,13 +260,13 @@ function result(s: Result): Reading {
 	const record = { id: HINT, time: null };
 	switch (s) {
 		case "nothing":
-			return silent(3, "no result for the hint");
+			return clean(3, "no result for the hint");
 		case "on":
-			return { seat: 3, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record };
+			return { seat: 3, kind: "no_final", home: LIVE[0], away: LIVE[1], recorded: null, detail: "in progress", record, answer: "the game" };
 		case "final":
-			return { seat: 3, kind: "final", home: POINTS.A[0], away: POINTS.A[1], recorded: null, detail: "final", record };
+			return { seat: 3, kind: "final", home: POINTS.A[0], away: POINTS.A[1], recorded: null, detail: "final", record, answer: "the game" };
 		case "failed":
-			return silent(3, "http 503");
+			return clean(3, "http 503");
 	}
 }
 
@@ -282,7 +282,7 @@ function verification(out: Collected): void {
 				// Read again as scoring's first run will: the same records, inside the window from the
 				// start; seat 3 by its result when it counts, and not at all when it doesn't.
 				const down = chosen.readings.find((x) => x.seat === 3)?.kind === "silent";
-				const again = [seen[1], seen[2], down ? silent(3, "silent for the game") : result("on"), seen[4]];
+				const again = [seen[1], seen[2], down ? clean(3, "silent for the game") : result("on"), seen[4]];
 				const game: Game = { league: "nba", home: "home", away: "away", start: chosen.start, n: 86_400, hints };
 				d = confirmStart(chosen, game, again);
 			}
@@ -327,7 +327,7 @@ const ABOUT = [
 	"readings: one per seat in seat order, each [seat, kind, home, away]; kind is the games set's ReadingKind (0 silent, 1 answered without a final, 2 final).",
 	"clock: when the run decided it. verification; inside the window, before start + n; after the window, from start + n; hour 24, the void of a game with no record, from start + n; day 7, from the first record plus the day-7 clock.",
 	"game: the status the report meets: unverified, verified (no dispute record) or disputed. decision: start, score, void, dispute record (the first) or update (a later one). why: the program's own reason.",
-	"Values: final A is 27-20 and final B 20-27. An answer without a final carries 27-20, as a game still on can; a reading the program builds without points (seat 3's board row, a listing that doesn't give the game) carries 0-0. The program never compares an answer's points unless both are finals, so these stand for any others.",
+	"Values: final A is 27-20 and final B 20-27. An answer without a final carries 27-20, as a game still on can; a reading the program builds without points (seat 3's board row; a postponed row, the one answer a void may rest on) carries 0-0; a listing that doesn't give the game is silent. The program never compares an answer's points unless both are finals, so these stand for any others.",
 	"Not listed: a report with three or four different finals (only a dispute record, an update or a day-7 void can carry one). Not part of a shape: the game id, the start (a start's is the earliest counting seat's listed time, within a day of the date), and the payout (the zero address on a start and a dispute report). At the launch terms: n 24 hours, the day-7 clock seven days.",
 ];
 
@@ -349,15 +349,24 @@ export function render(e: Emitted): string {
 
 function sweep(): Collected {
 	const out = new Collected();
-	const pairs: [State, State][] = [];
-	for (const f of STATES) for (const r of STATES) pairs.push([f, r]);
+	// Each seat's states as the walk reads them (freshStates: five, the spare's four), each fresh state
+	// beside every record the seat could hold; the record of the affirmative row is its zero-point
+	// report row, as the program writes it.
+	const recordOf = (seat: Seat, s: Fresh): ReportReading => (s === "off" ? { seat, kind: 1, homeScore: 0, awayScore: 0 } : reportReading(seat, s));
+	const pairsOf = (seat: Seat): [Fresh, Fresh][] => {
+		const states = freshStates(seat, null, "after");
+		const pairs: [Fresh, Fresh][] = [];
+		for (const f of states) for (const r of states) pairs.push([f, r]);
+		return pairs;
+	};
+	const [P1, P2, P3, P4] = SEATS4.map(pairsOf);
 	for (const down of GAMES) {
 		const counting = countingFor(down);
 		for (const phase of ["inside", "after", "day7"] as const) {
-			for (const p1 of pairs) for (const p2 of pairs) for (const p3 of pairs) for (const p4 of pairs) {
+			for (const p1 of P1) for (const p2 of P2) for (const p3 of P3) for (const p4 of P4) {
 				const ps = [p1, p2, p3, p4];
-				const fresh = SEATS4.map((s, i) => reading(s, ps[i][0]));
-				const recorded = SEATS4.map((s, i) => reportReading(s, ps[i][1]));
+				const fresh = SEATS4.map((s, i) => freshReading(s, ps[i][0]));
+				const recorded = SEATS4.map((s, i) => recordOf(s, ps[i][1]));
 				out.add(phase, "disputed", decideDisputed(fresh, recorded, counting, phase === "inside", phase === "day7", SEATS4, down, W));
 			}
 		}

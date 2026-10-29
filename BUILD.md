@@ -73,6 +73,23 @@ through the workflow that imports it, and that workflow's id is rebuilt the same
 exists. Its own check: change one count in `AGREE` (`scoring/src/rule.ts`) and rebuild, and the id
 moves; restore it, and the id comes back.
 
+## The games workflow
+
+The v3 workflow in `games/` is rebuilt from `build/v3-osgames.json` the same way. Every address in
+that spec and in the committed template is a placeholder, so a build names them all, and the owner:
+
+```bash
+bun build/fingerprint.ts build/v3-osgames.json --set receiverAddress=0x... --set eventAddress=0x...   --set secretOwner=0x... --set payoutAddress=0x... --owner 0x... --json
+```
+
+The template also carries the tick's schedule and shard count. They are not set on the command line:
+a change to either is an edit to the committed template, and a new id with it.
+
+The scoring program is inside this workflow's binary, so its id moves with the program. Checked
+on 27 Oct 2026 (Windows 11, Bun 1.3.14, CLI v1.22.0), with stand-in addresses: changing one count
+in `AGREE` (`scoring/src/rule.ts`, `afterN` 2 to 3) moved the binary hash and the id, and restoring
+it brought both back.
+
 ## Traps
 
 * **`cre workflow hash` without `--public_key` hashes under the wrong owner.** On v1.22.0 the

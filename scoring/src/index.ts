@@ -10,7 +10,7 @@ import * as seat2 from "./readers/seat2";
 import * as seat3 from "./readers/seat3";
 import * as seat4 from "./readers/seat4";
 import { keyFor, type Keys } from "./keys";
-import { runAsync, runSync, silent } from "./run";
+import { clean, runAsync, runSync } from "./run";
 import { SEATS, leagueRow } from "./table";
 import type { Ask, Game, HttpRequest, HttpResponse, Reading, ReaderRun, Seat } from "./types";
 
@@ -47,7 +47,7 @@ export function readGameSync(
 	const seats = seatsFor(game.league);
 	const readings = seats.map((seat) => {
 		const key = keyFor(keys, seat);
-		if (key === null) return silent(seat, "no key");
+		if (key === null) return clean(seat, "no key");
 		return runSync(seat, READERS[seat]({ game, now, key }), send);
 	});
 	return { offered: seats.length > 0, readings };
@@ -64,7 +64,7 @@ export async function readGameAsync(
 	const readings: Reading[] = [];
 	for (const seat of seats) {
 		const key = keyFor(keys, seat);
-		readings.push(key === null ? silent(seat, "no key") : await runAsync(seat, READERS[seat]({ game, now, key }), send));
+		readings.push(key === null ? clean(seat, "no key") : await runAsync(seat, READERS[seat]({ game, now, key }), send));
 	}
 	return { offered: seats.length > 0, readings };
 }

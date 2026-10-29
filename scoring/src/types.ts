@@ -45,7 +45,11 @@ export interface Reading {
 	readonly home: number | null;
 	/** The away team's points, the same way; null when the feed gave none. */
 	readonly away: number | null;
-	/** Postponed or cancelled, where the feed records it. Recorded only: it decides nothing. */
+	/**
+	 * The feed's own word that the game will not or did not play, on the game's own row: postponed or
+	 * cancelled, and nothing else. After n, a void rests on two counting seats' answers that carry one
+	 * (rule.ts, affirmsNoFinal); a row scheduled or in play carries none, and is never a void's vote.
+	 */
 	readonly recorded: "postponed" | "canceled" | null;
 	/** Why the reading is what it is, in a word or two, for the record and the tests. */
 	readonly detail: string;
@@ -55,18 +59,35 @@ export interface Reading {
 	 */
 	readonly record: { readonly id: string; readonly time: number | null } | null;
 	/**
-	 * Set on a silent reading whose feed says the game is over all the same: a final without points,
-	 * or one the feed's own count shows short of a whole game. Silent, it decides nothing at scoring;
-	 * verification, which writes no start for a game already over, reads it.
+	 * What the reader did with the feed's answer: the one class the void reads (rule.ts), since the
+	 * void's silence is only clean silence.
+	 *   "nothing"   The answer held nothing of the game: it was empty, the game was absent from it or
+	 *               its record outside the window, the request failed (a status outside 2xx) with a
+	 *               body that is not the feed's list, or a list every row of which reads and none of
+	 *               which is the game, before any row arrived, the seat is past its window by date
+	 *               arithmetic, or it was never asked. Clean silence: silent to the void. Status decides
+	 *               nothing; the body does, read by one path (readers/request.ts).
+	 *   "the game"  The game's own row, read: a final, or an answer without one.
+	 *   "unusable"  The answer touched the game and the reader could not use it: a row of the game
+	 *               without a usable id, a status word or points, a status word the reader does not
+	 *               recognize (the word verbatim on `detail`), a final short of a whole game, a part of
+	 *               the game, a row that would not parse, the game's row inside a failed answer (the
+	 *               feed's list under a status outside 2xx), a failure or the reader's own cap partway
+	 *               through the seat's reads after rows arrived, two rows that could be the game, two
+	 *               answers that disagree about it. Silent to a score; it holds the void.
+	 *   "chosen"    The game's own row, read by its hint beside another row that could be the game: an
+	 *               answer to a score, and it holds the void.
 	 */
-	readonly saysFinal?: true;
+	readonly answer: "nothing" | "the game" | "unusable" | "chosen";
 }
 
 /** One HTTP request a reader asks for. The key sits where the feed table says. */
 export interface HttpRequest {
-	readonly method: "GET";
+	readonly method: "GET" | "POST";
 	readonly url: string;
 	readonly headers: Readonly<Record<string, string>>;
+	/** A POST's body, JSON text (seat 3's board is asked for one game that way); a GET has none. */
+	readonly body?: string;
 }
 
 /** What came back. The body is the raw text; readers parse it themselves. */

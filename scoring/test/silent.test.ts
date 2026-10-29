@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { readerFor } from "../src/index";
-import { MAX_REQUESTS, runAsync, runSync } from "../src/run";
+import { Cut, MAX_REQUESTS, isCut, runAsync, runSync } from "../src/run";
 import type { Game, HttpRequest, HttpResponse, Seat } from "../src/types";
 import { CASES, NOW } from "./cases";
 import { KEY, copy, readSaved, saved, type Derive } from "./fixtures";
@@ -32,8 +32,11 @@ describe("silent", () => {
 				[401, "Unauthorized", "http 401"],
 				[429, "{}", "http 429"],
 				[500, "", "http 500"],
+				[503, '{"error":"rate limited"}', "http 503"],
+				[503, "<html>busy</html>", "http 503"],
+				[201, "", "empty body"],
 				[200, "<html>busy</html>", "unreadable"],
-				[200, "", "unreadable"],
+				[200, "", "empty body"],
 				[200, "null", "unreadable"],
 				[200, '"a string"', "unreadable"],
 			] as const) {
@@ -51,19 +54,35 @@ describe("silent", () => {
 		}
 	});
 
+	test("a cut is never silence: a transport whose own count is used up is raised by the reader, at every seat, sync and async", async () => {
+		for (const seat of SEATS) {
+			expect(() => readWith(seat, gameFor(seat), () => { throw new Cut("the run's 15 requests are used"); })).toThrow(Cut);
+			// Any error carrying `cut: true` is a cut too; a plain error with any other word is silence (above).
+			expect(() => readWith(seat, gameFor(seat), () => { throw Object.assign(new Error("used up"), { cut: true }); })).toThrow("used up");
+			expect(runAsync(seat, readerFor(seat)({ game: gameFor(seat), now: NOW, key: KEY }), async () => { throw new Cut("cut"); })).rejects.toThrow(Cut);
+		}
+		expect(isCut(new Cut("x"))).toBe(true);
+		expect([isCut(new Error("x")), isCut(null), isCut("cut")]).toEqual([false, false, false]);
+	});
+
 	test("an answer of the wrong shape, or a record the reader cannot read", () => {
-		const wrongShape: Derive = () => ({ unexpected: true });
-		for (const seat of SEATS) expect({ seat, ...detailOf(seat, gameFor(seat), wrongShape) }).toEqual({ seat, kind: "silent", detail: "unreadable" });
+		for (const seat of SEATS) {
+			const r = readWith(seat, gameFor(seat), () => ({ status: 200, body: JSON.stringify({ unexpected: true }) }));
+			expect({ seat, kind: r.kind, detail: r.detail }).toEqual({ seat, kind: "silent", detail: "unreadable" });
+		}
+		// Every record's id gone, so the game's own (whichever the one-game answer draws) is unreadable.
 		const badRecord: Derive = (seat, _p, body) => {
 			const b = copy(body) as Record<string, unknown> | unknown[];
-			if (seat === 1) ((b as { data: unknown[] }).data[0] as Record<string, unknown>).id = null;
-			if (seat === 2) ((b as { results: unknown[] }).results[0] as Record<string, unknown>).gameId = null;
+			if (seat === 1) for (const g of (b as { data: Record<string, unknown>[] }).data) g.id = null;
+			if (seat === 2) for (const g of (b as { results: Record<string, unknown>[] }).results) g.gameId = null;
 			if (seat === 4) ((b as unknown[])[0] as Record<string, unknown>).id = null;
 			if (seat === 3) (b as unknown[])[0] = 5;
 			return b;
 		};
+		// The refusal carries the game's own row's word where that row parsed: at the spare the bad row is
+		// another game's, and the game's own row says completed.
 		for (const seat of SEATS) {
-			expect({ seat, ...detailOf(seat, gameFor(seat), badRecord) }).toEqual({ seat, kind: "silent", detail: "unreadable record" });
+			expect({ seat, ...detailOf(seat, gameFor(seat), badRecord) }).toEqual({ seat, kind: "silent", detail: seat === 4 ? 'unreadable record; the game\'s row says "completed"' : "unreadable record" });
 		}
 	});
 
@@ -80,10 +99,11 @@ describe("silent", () => {
 		});
 		expect(r).toMatchObject({ kind: "silent", detail: "request bound" });
 		expect(asked).toBe(MAX_REQUESTS);
-		// The control: the real two-page answer for 2 Nov is read through to its second page.
+		// The control: a game on the second page of the real 2 Nov slate is in the teams' own answer, drawn
+		// from both pages, in one request per team and no page past the first.
 		const page2 = readSaved(2, { ...iowa, home: "Nebraska", away: "Le Moyne", start: Date.UTC(2026, 10, 3, 0, 30) / 1000, n: 23 * 3600 }, NOW);
 		expect(page2.misses).toEqual([]);
-		expect(page2.asked.some((q) => q.url.includes("skip=100"))).toBe(true);
+		expect([page2.asked.length, page2.asked.some((q) => q.url.includes("skip="))]).toEqual([2, false]);
 		expect(page2.reading).toMatchObject({ kind: "no_final", detail: "scheduled", record: { id: "342256" } });
 	});
 
@@ -167,7 +187,7 @@ describe("silent", () => {
 			return b;
 		};
 		expect(detailOf(2, lakers.game, renamed)).toEqual({ kind: "silent", detail: "unresolved team names" });
-		// The control: a game whose teams are known to the program and absent from the answer.
-		expect(detailOf(2, { ...lakers.game, away: "Boston Celtics" })).toEqual({ kind: "no_final", detail: "absent" });
+		// The control: a game whose teams are known to the program and absent from the answer: silence too, with its own reason.
+		expect(detailOf(2, { ...lakers.game, away: "Boston Celtics" })).toEqual({ kind: "silent", detail: "absent" });
 	});
 });

@@ -1,0 +1,11 @@
+{
+  "receiverAddress": "0x0000000000000000000000000000000000000000",
+  "eventAddress": "0x0000000000000000000000000000000000000000",
+  "chainSelectorName": "polygon-mainnet",
+  "chainId": 137,
+  "secretOwner": "0x0000000000000000000000000000000000000000",
+  "secretNamespace": "main",
+  "payoutAddress": "PAYOUT_ADDRESS_NOT_SET",
+  "schedule": "0 */5 * * * *",
+  "shards": 3
+}

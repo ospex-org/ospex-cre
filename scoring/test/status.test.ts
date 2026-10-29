@@ -1,5 +1,8 @@
-// Each seat's status, mapped to final or not final. Postponed and cancelled are recorded and
-// decide nothing: they never make a final.
+// Each seat's status, mapped. Postponed and cancelled, in the feed's own words, ride on the reading's
+// `recorded`, and after n a void may rest on two of them (rule.ts); they never make a final. Scheduled
+// and the words each feed names for a game short of a final are an answer, never a void's vote; a word
+// the reader does not know is silent, kept verbatim on the reading; no word is no status, which
+// reads silent.
 
 import { describe, expect, test } from "bun:test";
 import { resolveFeedTeam } from "../src/pick";
@@ -7,7 +10,13 @@ import { toRecord as seat1 } from "../src/readers/seat1";
 import { toRecord as seat2 } from "../src/readers/seat2";
 import { toRecord as seat4 } from "../src/readers/seat4";
 import { CASES, MID, NOW } from "./cases";
-import { at as at2, copy, readSaved, type Derive } from "./fixtures";
+import { KEY, at as at2, copy, locate, readSaved, saved, type Derive } from "./fixtures";
+import { readerFor } from "../src/index";
+import { NOT_A_WORD, REDACTED } from "../src/line";
+import { scoreGameSync } from "../src/program";
+import { runSync } from "../src/run";
+import type { HttpRequest, HttpResponse, Seat } from "../src/types";
+import { PAYOUT, chainOf } from "./rule-helpers";
 
 const byName = (prefix: string) => CASES.find((c) => c.name.startsWith(prefix))!;
 const lakers = byName("nba final");
@@ -23,9 +32,9 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 		["delayed", "not_final"],
 		["suspended", "not_final"],
 		["abandoned", "not_final"],
-		["unknown", "not_final"],
-		["cancelled", "not_final"], // not one of the nine: not final
-		["FINAL", "not_final"],
+		["unknown", "no_status"],
+		["cancelled", "unrecognized"], // not one of the nine: a word the reader does not know, kept verbatim
+		["FINAL", "unrecognized"],
 	];
 	test("each state, over a real record whose older field says Final", () => {
 		const derive = (state: string): Derive => (seat, _p, body) => {
@@ -35,9 +44,13 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 		};
 		for (const [state, want] of states) {
 			const r = readSaved(1, lakers.game, NOW, derive(state)).reading;
-			const kind = want === "final" ? "final" : "no_final";
+			// A final is a final; postponed and canceled ride on `recorded`; the five other words the feed
+			// names are an answer that carries none; no status is silence, and so is a word the reader does
+			// not know, the word verbatim on the reading.
+			const kind = want === "final" ? "final" : want === "no_status" || want === "unrecognized" ? "silent" : "no_final";
 			const recorded = want === "postponed" || want === "canceled" ? want : null;
-			expect({ state, kind: r.kind, recorded: r.recorded }).toEqual({ state, kind, recorded });
+			const detail = want === "unrecognized" ? `unrecognized status ${JSON.stringify(state)}` : r.detail;
+			expect({ state, kind: r.kind, recorded: r.recorded, detail: r.detail }).toEqual({ state, kind, recorded, detail });
 		}
 	});
 
@@ -55,7 +68,27 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 		expect(readSaved(1, rays, NOW, drop).reading).toMatchObject({ kind: "final", home: 7, away: 3 });
 		const rainout = byName("mlb postponed").game;
 		expect(readSaved(1, rainout, NOW, drop).reading).toMatchObject({ kind: "no_final", recorded: "postponed" });
-		expect(readSaved(1, bears.game, NOW, drop).reading).toMatchObject({ kind: "no_final", detail: "no status_state; 10/22 - 8:15 PM EDT" });
+		// The older field's word for a game not yet played is one the reader does not know: silent, verbatim.
+		expect(readSaved(1, bears.game, NOW, drop).reading).toMatchObject({ kind: "silent", detail: 'unrecognized status "10/22 - 8:15 PM EDT"' });
+	});
+
+	test("the feed's postponed flag, as a boolean and as the word: either is postponed, beside a status that says Final", () => {
+		// A real record with status_state removed, its older field saying Final and period 4: postponed by
+		// the flag alone, written true or "true"; "false" and false are not postponed, and the final stands.
+		const flagged = (postponed: unknown): Derive => (seat, _p, body) => {
+			if (seat !== 1) return body;
+			const b = copy(body) as { data: Record<string, unknown>[] };
+			for (const g of b.data) if (g.id === 21717859) Object.assign(g, { status_state: undefined, status: "Final", period: 4, postponed });
+			return b;
+		};
+		for (const postponed of [true, "true", "True"]) {
+			const r = readSaved(1, lakers.game, NOW, flagged(postponed)).reading;
+			expect({ postponed, kind: r.kind, recorded: r.recorded }).toEqual({ postponed, kind: "no_final", recorded: "postponed" });
+		}
+		for (const postponed of [false, "false", null, undefined]) {
+			const r = readSaved(1, lakers.game, NOW, flagged(postponed)).reading;
+			expect({ postponed, kind: r.kind, home: r.home, away: r.away }).toEqual({ postponed, kind: "final", home: 127, away: 105 });
+		}
 	});
 
 	test("the fallback in hockey and college, on the seat's real records", () => {
@@ -72,12 +105,12 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 			for (const g of b.data) g.game_state = "LIVE";
 			return b;
 		};
-		expect(readSaved(1, bruins.game, bruins.now, live).reading).toMatchObject({ kind: "no_final", detail: "no status_state; LIVE" });
+		expect(readSaved(1, bruins.game, bruins.now, live).reading).toMatchObject({ kind: "silent", detail: 'unrecognized status "LIVE"' });
 		// College's older field says "post" for a final, a postponed and a cancelled game alike, so
-		// without status_state even "post" is not final.
+		// without status_state even "post" is not final: a word the reader does not know, verbatim.
 		for (const prefix of ["ncaaf final, read the next afternoon", "ncaab final, read with seat 1"]) {
 			const c = byName(prefix);
-			expect({ prefix, ...readSaved(1, c.game, c.now, drop).reading }).toMatchObject({ prefix, kind: "no_final", detail: "no status_state; post" });
+			expect({ prefix, ...readSaved(1, c.game, c.now, drop).reading }).toMatchObject({ prefix, kind: "silent", detail: 'unrecognized status "post"' });
 			// The control: with status_state present, college reads like every league.
 			expect({ prefix, kind: readSaved(1, c.game, c.now).reading.kind }).toEqual({ prefix, kind: "final" });
 		}
@@ -98,7 +131,7 @@ describe("seat 1: the nine-state status_state decides where present", () => {
 			expect({ word, ...readSaved(1, sf, NOW, drop(word)).reading }).toMatchObject({ word, kind: "final", home: 23, away: 17 });
 		}
 		for (const word of ["Final/", "Final/OTT", "final", "Final OT", "Final/2", "Final/5"]) {
-			expect({ word, kind: readSaved(1, lakers.game, NOW, drop(word)).reading.kind }).toEqual({ word, kind: "no_final" });
+			expect({ word, ...readSaved(1, lakers.game, NOW, drop(word)).reading }).toMatchObject({ word, kind: "silent", detail: `unrecognized status ${JSON.stringify(word)}` });
 		}
 	});
 
@@ -171,8 +204,8 @@ describe("seat 2: final is final once its period count shows a whole game; cance
 			["in progress", "not_final"],
 			["delayed", "not_final"],
 			["suspended", "not_final"],
-			["Final", "not_final"],
-			["", "not_final"],
+			["Final", "unrecognized"],
+			["", "no_status"],
 		]) {
 			expect({ status, state: seat2("nba", { ...base, status })?.state }).toEqual({ status, state });
 		}
@@ -226,9 +259,10 @@ describe("seat 3: final only when Final is true and FinalType is Finished", () =
 		[{ Final: "True", FinalType: "Finished", HomeScore: "24", AwayScore: "20" }, "final", null],
 		[{ Final: true, FinalType: "Postponed", HomeScore: null, AwayScore: null }, "no_final", "postponed"],
 		[{ Final: true, FinalType: "Canceled", HomeScore: "0", AwayScore: "0" }, "no_final", "canceled"],
-		[{ Final: true, FinalType: "Abandoned", HomeScore: "10", AwayScore: "7" }, "no_final", null],
-		[{ Final: false, FinalType: "Finished", HomeScore: "24", AwayScore: "20" }, "no_final", null],
-		[{ Final: "false", FinalType: "Finished", HomeScore: "24", AwayScore: "20" }, "no_final", null],
+		// A FinalType the reader does not know, or Finished under a final flag it does not know: silent, verbatim.
+		[{ Final: true, FinalType: "Abandoned", HomeScore: "10", AwayScore: "7" }, "silent", null],
+		[{ Final: false, FinalType: "Finished", HomeScore: "24", AwayScore: "20" }, "silent", null],
+		[{ Final: "false", FinalType: "Finished", HomeScore: "24", AwayScore: "20" }, "silent", null],
 		[{ Final: true, FinalType: "NotFinished", HomeScore: "24", AwayScore: "20" }, "no_final", null],
 	];
 	test("each combination", () => {
@@ -237,6 +271,10 @@ describe("seat 3: final only when Final is true and FinalType is Finished", () =
 			expect({ fields, kind: r.kind, recorded: r.recorded }).toEqual({ fields, kind, recorded });
 			if (kind === "final") expect([r.home, r.away]).toEqual([24, 20]);
 		}
+		const words = (fields: Record<string, unknown>) => readSaved(3, bears.game, NOW, withResult(fields)).reading.detail;
+		expect(words({ Final: true, FinalType: "Abandoned" })).toBe('unrecognized status "Abandoned"');
+		expect(words({ Final: "TRUE", FinalType: "Finished", HomeScore: "24", AwayScore: "20" })).toBe('unrecognized final flag "TRUE"');
+		expect(words({ Final: false, FinalType: "Finished", HomeScore: "24", AwayScore: "20" })).toBe("unrecognized final flag false");
 	});
 
 	test("a final whose points do not read is silent", () => {
@@ -253,9 +291,9 @@ describe("seat 4: completed is final; it records no postponed or cancelled state
 		for (const [completed, state] of [
 			[true, "final"],
 			[false, "not_final"],
-			["true", "not_final"],
-			[null, "not_final"],
-			[undefined, "not_final"],
+			["true", "unrecognized"],
+			[null, "no_status"],
+			[undefined, "no_status"],
 		] as const) {
 			expect({ completed, state: seat4({ ...base, completed })?.state }).toEqual({ completed, state });
 		}
@@ -282,5 +320,122 @@ describe("seat 4: completed is final; it records no postponed or cancelled state
 		}
 		// The control: an entry under another team's name is not this team's.
 		expect(readSaved(4, lakers.game, NOW, spaced((s) => `${s} B`)).reading).toMatchObject({ kind: "silent", detail: "final without points" });
+	});
+});
+
+describe("the word rides a refusal for a row the reader can't parse, whether the bad row came first or second; at seat 3 the final flag's word too", () => {
+	// New England at Chicago as saved before the game: the game's own row at each seat, given a status word,
+	// with a row the reader can't parse put before it or after it in the answer as sent (after the saved
+	// answers' filter, which the word test must not pass a null row through).
+	const OWN = { 1: 1392309, 2: 340175, 3: "edcfd41f-1773-4bc9-a349-aa50931a0278", 4: "ffebea881c1d7b2dfb85b3e590c35985" } as const;
+	const isOwn = (seat: Seat, r: Record<string, any>): boolean => (seat === 1 ? r.id === OWN[1] : seat === 2 ? r.gameId === OWN[2] : seat === 3 ? String(r.ID).toLowerCase() === OWN[3] : r.id === OWN[4]);
+	const ownPath = (seat: Seat, p: string): boolean => (seat === 1 ? p.includes("/nfl/v1/games") : seat === 2 ? p.includes("league=NFL") : seat === 3 ? p === `/results/${OWN[3]}` : p.includes("americanfootball_nfl/scores"));
+	const readWithBadRow = (seat: Seat, fields: Record<string, unknown>, badFirst: boolean) => {
+		const t = saved(undefined, NOW);
+		const send = (q: HttpRequest): HttpResponse => {
+			const res = t.send(q);
+			const at = locate(q);
+			if (at === null || at.seat !== seat || res.status !== 200 || !ownPath(seat, at.path)) return res;
+			const body = JSON.parse(res.body);
+			const rows: Record<string, any>[] = seat === 1 ? body.data : seat === 2 ? body.results : body;
+			const i = rows.findIndex((r) => isOwn(seat, r));
+			if (i >= 0) {
+				Object.assign(rows[i], fields);
+				rows.splice(badFirst ? i : i + 1, 0, null as unknown as Record<string, any>);
+			}
+			return { status: 200, body: JSON.stringify(body) };
+		};
+		const r = runSync(seat, readerFor(seat)({ game: bears.game, now: NOW, key: KEY }), send);
+		expect(t.misses).toEqual([]);
+		return { kind: r.kind, answer: r.answer, detail: r.detail };
+	};
+	test("each seat, the status row before and after the bad row: silent, unusable, and the line carries the word verbatim", () => {
+		const rows: [Seat, Record<string, unknown>, string][] = [
+			[1, { status_state: "FINAL" }, 'unreadable record; the game\'s row says "FINAL"'],
+			[1, { status_state: "postponed" }, 'unreadable record; the game\'s row says "postponed"'],
+			[2, { status: "final " }, 'unreadable record; the game\'s row says "final "'],
+			[2, { status: "in progress" }, 'unreadable record; the game\'s row says "in progress"'],
+			[3, { Final: true, FinalType: "Finished " }, 'unreadable record; the hint\'s row says "Finished ", Final true'],
+			[3, { Final: true, FinalType: "Postponed" }, 'unreadable record; the hint\'s row says "Postponed", Final true'],
+			[3, { Final: "TRUE", FinalType: "Finished", HomeScore: "24", AwayScore: "17" }, 'unreadable record; the hint\'s row says "Finished", Final "TRUE"'],
+			[4, { completed: "true" }, 'unreadable record; the game\'s row says "true"'],
+			[4, { completed: false }, 'unreadable record; the game\'s row says "not completed"'],
+		];
+		for (const [seat, fields, detail] of rows) {
+			for (const badFirst of [true, false]) {
+				expect({ seat, fields, badFirst, ...readWithBadRow(seat, fields, badFirst) }).toEqual({ seat, fields, badFirst, kind: "silent", answer: "unusable", detail });
+			}
+		}
+	});
+});
+
+describe("a word on a line is a word: a feed string that is not a status word becomes the marker, and a configured secret never reaches a line", () => {
+	// New England at Chicago at hour 24, the other two counting seats postponed and cancelled, the seat under
+	// test given a status word of the test's choosing: the run waits, and its line carries the word, or the
+	// marker, or the redaction, through the one function every line goes through (src/line.ts).
+	const game = chainOf("nfl not final");
+	const spareIn = chainOf("nfl not final", { hints: [] });
+	const H24 = (game.start as number) + game.n + 600;
+	const OWN = { 1: 1392309, 2: 340175, 3: "edcfd41f-1773-4bc9-a349-aa50931a0278", 4: "ffebea881c1d7b2dfb85b3e590c35985" } as const;
+	const isOwn = (seat: Seat, r: Record<string, any>): boolean => (seat === 1 ? r.id === OWN[1] : seat === 2 ? r.gameId === OWN[2] : seat === 3 ? String(r.ID).toLowerCase() === OWN[3] : r.id === OWN[4]);
+	const ownPath = (seat: Seat, p: string): boolean => (seat === 1 ? p.includes("/nfl/v1/games") : seat === 2 ? p.includes("league=NFL") : seat === 3 ? p === `/results/${OWN[3]}` : p.includes("americanfootball_nfl/scores"));
+	const STATUS_FIELD: Readonly<Record<Seat, string>> = { 1: "status_state", 2: "status", 3: "FinalType", 4: "completed" };
+	const OFF: Readonly<Record<1 | 2 | 3, Record<string, unknown>>> = { 1: { status_state: "postponed" }, 2: { status: "canceled" }, 3: { FinalType: "Postponed" } };
+	/** The game's own row at a seat, given fields. */
+	const own = (seat: Seat, fields: Record<string, unknown>): Derive => (s, p, body) => {
+		if (s !== seat || !ownPath(seat, p)) return body;
+		const b = copy(body) as any;
+		for (const r of seat === 1 ? b.data : seat === 2 ? b.results : b) if (isOwn(seat, r)) Object.assign(r, fields);
+		return b;
+	};
+	const both = (...ds: Derive[]): Derive => (s, p, b) => ds.reduce((acc, f) => f(s, p, acc), b);
+	const others = (seat: Seat): Derive => (seat === 1 ? both(own(2, OFF[2]), own(3, OFF[3])) : seat === 2 ? both(own(1, OFF[1]), own(3, OFF[3])) : both(own(1, OFF[1]), own(2, OFF[2])));
+	const KEYS: Record<Seat, string> = { 1: KEY, 2: KEY, 3: KEY, 4: KEY };
+	/** The run's line, the seat's own answer sent back under `status`, the keys as given (a key in a query is put back to the saved one for the lookup alone). */
+	const lineOf = (seat: Seat, fields: Record<string, unknown>, status = 200, keys: Record<Seat, string> = KEYS): string => {
+		const t = saved(both(others(seat), own(seat, fields)), NOW);
+		const send = (q: HttpRequest): HttpResponse => {
+			const asSaved = { ...q, url: q.url.split(keys[4]).join(KEY) };
+			const res = t.send(asSaved);
+			const at = locate(asSaved);
+			return at !== null && at.seat === seat && ownPath(seat, at.path) ? { status, body: res.body } : res;
+		};
+		const o = scoreGameSync(seat === 4 ? spareIn : game, keys, PAYOUT, H24, send);
+		expect(t.misses).toEqual([]);
+		return o.decision.why;
+	};
+	const held = (seat: Seat, status: number, detail: string): string => `after n: seat ${seat} answered but could not be used: ${status >= 300 ? `the game's row in a ${status}; ` : ""}${detail}`;
+
+	test("a status field that echoes a request URL with a fake key, at each seat under 200, 201, 500 and 503: the line carries the marker and never the key", () => {
+		const FAKE = "FAKE-KEY-FOR-THIS-TEST-0123456789abcdef";
+		const url = `https://feed.example/v1/games?team=Chicago&apiKey=${FAKE}`;
+		for (const seat of [1, 2, 3, 4] as const) {
+			for (const status of [200, 201, 500, 503]) {
+				const why = lineOf(seat, { [STATUS_FIELD[seat]]: url }, status);
+				expect({ seat, status, why }).toEqual({ seat, status, why: held(seat, status, `unrecognized status ${NOT_A_WORD}`) });
+			}
+		}
+	});
+
+	test("a word of 40 characters is the marker; one of 32 stands verbatim, and so does a real word; a short word carrying a query's marks is no word", () => {
+		expect(lineOf(1, { status_state: "w".repeat(40) })).toBe(held(1, 200, `unrecognized status ${NOT_A_WORD}`));
+		expect(lineOf(1, { status_state: "w".repeat(32) })).toBe(held(1, 200, `unrecognized status "${"w".repeat(32)}"`));
+		expect(lineOf(1, { status_state: "PPD" })).toBe(held(1, 200, 'unrecognized status "PPD"'));
+		for (const word of ["a=b", "x?y", "h://"]) {
+			expect({ word, why: lineOf(2, { status: word }) }).toEqual({ word, why: held(2, 200, `unrecognized status ${NOT_A_WORD}`) });
+		}
+	});
+
+	test("a configured secret planted in a feed's field, a canary per seat: never on a line, under 200 and 503, in a status field and in seat 3's id", () => {
+		const CANARY: Record<Seat, string> = { 1: "CANARY-SEAT-1-KEY-2f8c1e", 2: "CANARY-SEAT-2-KEY-9a4d7b", 3: "CANARY-SEAT-3-KEY-5e0b3c", 4: "CANARY-SEAT-4-KEY-71d6f2" };
+		for (const seat of [1, 2, 3, 4] as const) {
+			for (const status of [200, 503]) {
+				const why = lineOf(seat, { [STATUS_FIELD[seat]]: CANARY[seat] }, status, CANARY);
+				expect({ seat, status, why }).toEqual({ seat, status, why: held(seat, status, `unrecognized status "${REDACTED}"`) });
+				for (const c of Object.values(CANARY)) expect({ seat, status, c, carried: why.includes(c) }).toEqual({ seat, status, c, carried: false });
+			}
+		}
+		// The board's key is seat 3's: planted as the result's id, it is redacted on that line too.
+		expect(lineOf(3, { ID: CANARY[3] }, 200, CANARY)).toBe(held(3, 200, `result without a usable id: "${REDACTED}"`));
 	});
 });
