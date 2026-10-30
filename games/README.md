@@ -105,10 +105,13 @@ not worked around: such a game is read at seats 1, 2 and 3 alone. Throughput: on
 full read per tick per shard, so twelve finals an hour per shard, and one verification an hour per shard.
 
 **Waiting.** The games set's change that stores a game's identity, its readings and the open list is
-in review. Its reads are coded as its branch gives them: the interface's ABI at that branch's head is
+merged on contracts-v2 main (`3fe47cb`). The interface's ABI at that commit, as forge builds it, is
 committed as `abi/IOspexGames.json`, and `abi.test.ts` pins every read and the open list's row to it,
-field for field in its order, so a row the games set changes fails the suite, never the tick; a page
-whose rows are shorter than the interface's eight words is refused whole, naming the row, and the
+field for field in its order, so a row the games set changes fails the suite, never the tick. One
+field is left undecoded, and the test names it: `getGameReadings` gives four and the workflow reads
+the first three, since the fourth, `endReadings`, is empty until the game ends and the program
+decides nothing on a game that has ended. A page whose rows are shorter than the interface's eight
+words is refused whole, naming the row, and the
 tick reads nothing (`chain.ts`, `checkRows`). The
 rehearsal still reads the games set at contracts-v2 main from its events, on a fork
 (`rehearsal/logs.ts`), until it is re-run against that games set. The first simulation on a pro slate, with the platform's limits enforced, is the next proof after the

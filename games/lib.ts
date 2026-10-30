@@ -299,8 +299,10 @@ const OPEN_GAME = {
 /**
  * The games set's reads the workflow takes, each as IOspexGames gives it (abi/IOspexGames.json, pinned
  * by abi.test.ts): `getGameReadings` gives the start report's readings whole and each seat's last vote
- * in the order the seats first voted, with the dispute clock; `getOpenGames` gives rows, the tuple
- * above, and the list's total. `i_token` is the games set's own public coin, not in the interface.
+ * in the order the seats first voted, with the dispute clock, and these are its first three fields: its
+ * fourth, the end's readings, is not decoded, since it is empty until the game ends and the program
+ * decides nothing on a game that has ended; `getOpenGames` gives rows, the tuple above, and the list's
+ * total. `i_token` is the games set's own public coin, not in the interface.
  */
 export const GAMES_READS = [
 	{ type: "function", name: "getGameStatus", stateMutability: "view", inputs: [{ name: "gameId", type: "uint256" }], outputs: [{ type: "uint8" }] },
