@@ -113,8 +113,8 @@ goes unused, since it is empty until the game ends and the program decides nothi
 has ended. A page whose rows are shorter than the interface's eight
 words is refused whole, naming the row, and the
 tick reads nothing (`chain.ts`, `checkRows`). The
-rehearsal still reads the games set at contracts-v2 main from its events, on a fork
-(`rehearsal/logs.ts`), until it is re-run against that games set. The first simulation on a pro slate, with the platform's limits enforced, is the next proof after the
+rehearsal reads the games set from state, re-run against it at `3fe47cb` on 30 Oct 2026
+(`rehearsal/README.md`); `rehearsal/logs.ts` stays behind `REHEARSAL_READS=events`. The first simulation on a pro slate, with the platform's limits enforced, is the next proof after the
 merge; the live feeds' answers to the one-game requests (seat 1 by team ids, seat 2 by team name) are
 the capture's to show, since no such answer is saved yet.
 
