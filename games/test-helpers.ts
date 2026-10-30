@@ -68,7 +68,7 @@ function answerOf(name: (typeof GAMES_READS)[number]["name"], values: readonly u
 	return encodeAbiParameters(fn.outputs, values as never);
 }
 
-/** getGameReadings's outputs as the games set answers it (abi/IOspexGames.json): four fields, of which the workflow decodes three. */
+/** getGameReadings's outputs as the games set answers it (abi/IOspexGames.json): four fields; the workflow decodes all four and readReadings passes the first three on to the program. */
 export const READINGS_ANSWER = (INTERFACE.abi.find((e) => e.type === "function" && e.name === "getGameReadings") as { outputs: readonly AbiParameter[] }).outputs;
 
 /**
