@@ -112,7 +112,8 @@ function writerOf(runtime: Runtime<Config>, client: InstanceType<typeof cre.capa
 			.writeReport(runtime, { receiver: runtime.config.receiverAddress, report: signed, gasConfig: { gasLimit: "1000000" } })
 			.result();
 		if (reply.txStatus !== TxStatus.SUCCESS) {
-			throw new Error(`writeReport failed: status=${reply.txStatus} ${reply.errorMessage ?? ""}`);
+			// No "=" in the wrapper's own words: the line function marks a run carrying one (src/line.ts).
+			throw new Error(`writeReport failed: status ${reply.txStatus} ${reply.errorMessage ?? ""}`);
 		}
 		return reply.txHash ? bytesToHex(reply.txHash) : null;
 	};
@@ -144,10 +145,14 @@ const onGameCreated = (runtime: Runtime<Config>, log: EVMLog): string => {
 			creation.reporters,
 		);
 	} catch (e) {
+		const message = cleanLine(e instanceof Error ? e.message : String(e), secretsOf(keys));
+		// Any other error is thrown again, carrying only its cleaned message: the platform writes a rejected
+		// handler's error as the execution's error text, so that text is a line too (a writer's error can
+		// carry whatever the platform answered).
+		if (!isCut(e)) throw new Error(message);
 		// The run's own count of requests used up: the readers raised it, the program decided nothing and
 		// nothing was written. The tick verifies the game on the hour's first tick, with the same count.
-		if (!isCut(e)) throw e;
-		const line = `game ${creation.gameId}: verification cut: ${cleanLine(e instanceof Error ? e.message : String(e), secretsOf(keys))}`;
+		const line = `game ${creation.gameId}: verification cut: ${message}`;
 		runtime.log(line);
 		return line;
 	}

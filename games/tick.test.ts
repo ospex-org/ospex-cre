@@ -412,7 +412,7 @@ describe("one tick", () => {
 		const failing = [0, 1].map((h) => {
 			const chain = fakeChainOf(games, secondTick(START) + h * 3_600);
 			const writer = recordingWriter();
-			const r = runTick({ evm: chain, games: GAMES, payout: PAYOUT, keys: KEYS, send: () => ({ status: 200, body: "[]" }), write: (b) => (decodeReport(b).gameId === "1" ? (() => { throw new Error("writeReport failed: status=2"); })() : writer.write(b)), score: scorer().score, period: PERIOD, shard: { index: 0, count: 1 } });
+			const r = runTick({ evm: chain, games: GAMES, payout: PAYOUT, keys: KEYS, send: () => ({ status: 200, body: "[]" }), write: (b) => (decodeReport(b).gameId === "1" ? (() => { throw new Error("writeReport failed: status 2"); })() : writer.write(b)), score: scorer().score, period: PERIOD, shard: { index: 0, count: 1 } });
 			return { r, written: writer.written.length };
 		});
 		expect(failing.map((f) => f.r.fullRead?.gameId).sort()).toEqual(["1", "2"]);
@@ -663,13 +663,13 @@ describe("the verification on the hour's first tick", () => {
 			keys: KEYS,
 			send: (req) => (req.url.includes(hintOf(2)) ? s3.send(req) : t.send(req)),
 			write: () => {
-				throw new Error("writeReport failed: status=2");
+				throw new Error("writeReport failed: status 2");
 			},
 			period: PERIOD,
 			shard: { index: 0, count: 1 },
 		});
-		expect(result.fullRead).toMatchObject({ gameId: "1", why: "verification", run: null, error: "writeReport failed: status=2" });
-		expect(result.lines).toContain("full read, verification: game 1 failed: writeReport failed: status=2");
+		expect(result.fullRead).toMatchObject({ gameId: "1", why: "verification", run: null, error: "writeReport failed: status 2" });
+		expect(result.lines).toContain("full read, verification: game 1 failed: writeReport failed: status 2");
 		expect(result.probes.map((p) => [p.gameId, p.kind])).toEqual([["2", "no_final"]]);
 	});
 });

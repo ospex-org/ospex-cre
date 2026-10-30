@@ -17,8 +17,9 @@
 // reading a 2xx list gets (one path, no second parser), is anything but clean silence: a row the reading
 // cannot parse or any row for the game makes it an answer the reader could not use, exactly as under a
 // 200; an error object, a page or an empty body on any status is a failure. A word on a line is a word
-// (line.ts): a quoted feed word longer than 32 characters or carrying "://", "?" or "=" becomes [not a
-// status word], and a configured secret never reaches a line. Every other reading that is not an
+// (line.ts): a feed string that is not a short plain word (16 characters or fewer of letters, digits,
+// spaces and / : . -, never a URL) becomes [not a status word], and a configured secret never reaches a
+// line, as given or escaped (line.test.ts). Every other reading that is not an
 // affirmative row holds the void, whatever the word was: a non-empty body that is not the feed's list
 // (a single object, a wrong envelope, not a list), a by-id answer that is not the requested game (seat
 // 3's row without a usable id, the spare's row under another id where no slate stands behind it), and
@@ -60,10 +61,10 @@
 //     ->  if (r !== null && r.kind !== "silent") return silent(seat, ...);
 //   with which the game's final without its id, or with an object id, alone or beside the normal row, in a 500
 //   or 503 body voids beside two affirmative rows (one path: under a 200 the same rows wait);
-//   line.ts, cleanLine: a line written without the redaction,
-//     for (const s of secrets) out = out.split(s).join(REDACTED);
+//   line.ts, cleanLine: a line written without the redaction of a quoted word by value,
+//     if (word === REDACTED || held.some((s) => word.includes(s))) return `"${REDACTED}"`;
 //     ->  deleted
-//   with which a canary key planted in a feed's field reaches the line (status.test.ts);
+//   with which a canary key planted in a feed's field is no longer redacted on the line (status.test.ts);
 //   seat3.ts, read: a result id of any shape accepted,
 //     if (id === null || !ID.test(id)) {
 //     ->  if (id === null) {

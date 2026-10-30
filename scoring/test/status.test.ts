@@ -417,11 +417,11 @@ describe("a word on a line is a word: a feed string that is not a status word be
 		}
 	});
 
-	test("a word of 40 characters is the marker; one of 32 stands verbatim, and so does a real word; a short word carrying a query's marks is no word", () => {
-		expect(lineOf(1, { status_state: "w".repeat(40) })).toBe(held(1, 200, `unrecognized status ${NOT_A_WORD}`));
-		expect(lineOf(1, { status_state: "w".repeat(32) })).toBe(held(1, 200, `unrecognized status "${"w".repeat(32)}"`));
+	test("a word of 17 characters is the marker; one of 16 stands verbatim, and so does a real word; a short word carrying a query's marks, or any character outside the plain set, is no word", () => {
+		expect(lineOf(1, { status_state: "w".repeat(17) })).toBe(held(1, 200, `unrecognized status ${NOT_A_WORD}`));
+		expect(lineOf(1, { status_state: "w".repeat(16) })).toBe(held(1, 200, `unrecognized status "${"w".repeat(16)}"`));
 		expect(lineOf(1, { status_state: "PPD" })).toBe(held(1, 200, 'unrecognized status "PPD"'));
-		for (const word of ["a=b", "x?y", "h://"]) {
+		for (const word of ["a=b", "x?y", "h://", "in_play", "[x]", "a,b"]) {
 			expect({ word, why: lineOf(2, { status: word }) }).toEqual({ word, why: held(2, 200, `unrecognized status ${NOT_A_WORD}`) });
 		}
 	});
