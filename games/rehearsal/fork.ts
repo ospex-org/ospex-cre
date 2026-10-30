@@ -7,10 +7,13 @@
 //   REHEARSAL_WORKFLOW_JSON=<path> bun rehearsal/fork.ts
 //
 // What it does, in order: configures the forwarder with a rehearsal signer set (its owner impersonated),
-// deploys the reporter and the games set at the predicted addresses, creates three games, verifies two
-// through the program and one by hand, scores one, disputes one and runs its update and its day-7
-// result, voids one at hour 24, and delivers the carried cases: a refused report, a retry, a stale and
-// an out-of-order report, and destination separation. Every step asserts the game's state.
+// deploys the reporter and the games set at the predicted addresses, creates five games, verifies two
+// through the program and three by hand, scores the college game inside n (a retry first), disputes the
+// basketball and hockey games and runs their updates and their day-7 results, holds the NFL game at hour
+// 24 on its pre-game answers and scores it on the answers read after the game, voids the MLB game after
+// n (the saved case, moved 133 days: see "The MLB case, moved"), and delivers the carried cases: a
+// refused report, a retry, a stale and an out-of-order report, and destination separation. Every step
+// asserts the game's state.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -30,9 +33,12 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { polygon } from "viem/chains";
+import { scoreGameSync } from "../../scoring/src/program";
 import { SEATS } from "../../scoring/src/table";
-import type { HttpRequest } from "../../scoring/src/types";
+import type { HttpRequest, HttpResponse, Reading } from "../../scoring/src/types";
+import { CASES } from "../../scoring/test/cases";
 import { KEY, saved, type Derive } from "../../scoring/test/fixtures";
+import { PAYOUT as CASE_PAYOUT, PAYOUT_REFUSED, chainOf } from "../../scoring/test/rule-helpers";
 import { gameOfCreation, gameOfState, readIdentity, readOpenGames, readReadings, readReporters } from "../chain";
 import { GAME_CREATED, GAME_CREATED_TOPIC, GAME_REPORTED, decodeGameCreated, encodeReport, keysFor, type Creation } from "../lib";
 import { runGame, type Run } from "../run";
@@ -252,9 +258,22 @@ function gameFor(games: Address, creation: Creation, at: "creation" | "past"): {
 	return { game: gameOfState(row, identity, readings), reporters, read: "state" };
 }
 
-/** The program's run for one game, with the saved answers as of `asOf`; the write is recorded, not sent. */
-function runOf(games: Address, creation: Creation, asOf: number, derive?: Derive, at: "creation" | "past" = "past"): { run: Run; requests: number; reads: typeof evm.reads } {
-	const t = saved(derive, asOf);
+/**
+ * The program's run for one game, with the saved answers as of `asOf`; the write is recorded, not sent.
+ * `moved`: the answers are the MLB case's, served moved (see "The MLB case, moved"); the requests recorded
+ * are the ones the saved answers were asked, each date moved back.
+ */
+function runOf(
+	games: Address,
+	creation: Creation,
+	asOf: number,
+	derive?: Derive,
+	at: "creation" | "past" = "past",
+	moved = false,
+): { run: Run; requests: number; reads: typeof evm.reads; asked: readonly HttpRequest[] } {
+	if (moved && derive !== undefined) throw new Error("a moved run takes no other derivation");
+	const t = saved(moved ? movedRows : derive, asOf);
+	const send = moved ? (req: HttpRequest): HttpResponse => t.send(movedBack(req)) : t.send;
 	const before = { ...evm.reads };
 	const written: Hex[] = [];
 	const held = gameFor(games, creation, at);
@@ -264,7 +283,7 @@ function runOf(games: Address, creation: Creation, asOf: number, derive?: Derive
 			games,
 			payout: PAYOUT.address,
 			keys: keysFor({ 4: KEY }),
-			send: t.send,
+			send,
 			write: (bytes) => {
 				written.push(bytes);
 				return null;
@@ -277,10 +296,10 @@ function runOf(games: Address, creation: Creation, asOf: number, derive?: Derive
 	const bySeat = [1, 2, 3, 4].map((s) => t.asked.filter((r) => seatOfRequest(r) === s).length).join("/");
 	const distinct = new Set(t.asked.map(requestKey)).size;
 	say(
-		`run ${creation.league} game ${creation.gameId} at clock ${new Date(run.now * 1000).toISOString()} (answers as of ${new Date(asOf * 1000).toISOString()}; read from ${held.read}): ${run.decision.action}: ${run.decision.why}; ${t.asked.length} requests (seats 1/2/3/4: ${bySeat}; ${distinct} distinct), ${reads.calls} calls + ${reads.logs} log queries + ${reads.headers} headers${t.misses.length ? `; misses: ${t.misses.join(", ")}` : ""}`,
+		`run ${creation.league} game ${creation.gameId} at clock ${new Date(run.now * 1000).toISOString()} (answers as of ${new Date(asOf * 1000).toISOString()}${moved ? `, moved ${MOVE_DAYS} days` : ""}; read from ${held.read}): ${run.decision.action}: ${run.decision.why}; ${t.asked.length} requests (seats 1/2/3/4: ${bySeat}; ${distinct} distinct), ${reads.calls} calls + ${reads.logs} log queries + ${reads.headers} headers${t.misses.length ? `; misses: ${t.misses.join(", ")}` : ""}`,
 	);
 	if (run.written !== null && written[0] !== run.written) throw new Error("the recorded write is not the run's");
-	return { run, requests: t.asked.length, reads };
+	return { run, requests: t.asked.length, reads, asked: t.asked };
 }
 
 async function createGame(games: Address, g: { league: string; home: string; away: string; date: number; hints: { seat: number; id: string }[] }): Promise<Creation> {
@@ -344,6 +363,72 @@ const seats2and4Swapped =
 		}
 		return body;
 	};
+
+// ──────────────────────────── The MLB case, moved ─────────────────────
+//
+// The one saved case the program voids after n at this head is a June game: Atlanta at the White Sox,
+// 11 Jun 2026, rained out, read at the saved cases' first clock (scoring/test/cases.ts). The games set
+// refuses every report to a game from its date plus its day-30 clock (_checkDay30), so on this fork,
+// whose clock starts on 22 Oct, the game as dated could not even be verified. Here it is created 133
+// days later and its saved answers are served moved by the same 133 days: each date in a request moves
+// back to the June date its answer was saved under, and each time in a game's row of the answer moves
+// forward. Words, ids, statuses and points are served as saved; a page's own time (when seat 2
+// answered, 22 Oct) stays. 133 days is 19 weeks, so the weekday is kept: 11 Jun and 22 Oct 2026 are
+// both Thursdays. The moved run is held to the case at its own clock: the same requests once moved
+// back, and the same decision and readings, each record's time 133 days later.
+
+const MLB_CASE = "mlb postponed: Atlanta at the White Sox";
+const MOVE_DAYS = 133;
+const MOVE = MOVE_DAYS * 86_400;
+/** A calendar date in a request: four digits, two, two, not inside a longer number. */
+const DATE_IN_REQUEST = /(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)/g;
+/** A time in a row, in the one form the saved rows carry one: ISO 8601 in UTC, to the second or the millisecond. */
+const TIME_IN_ROW = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/;
+
+/** A request as the program sent it for the moved game, with each date put back on the date its answer was saved under. */
+function movedBack(req: HttpRequest): HttpRequest {
+	const url = req.url.replace(DATE_IN_REQUEST, (_, y: string, m: string, d: string) =>
+		new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)) - MOVE * 1000).toISOString().slice(0, 10),
+	);
+	return { ...req, url };
+}
+
+/** Every time in a row moved forward, each in the form it was saved in; anything date-like in another form is refused. */
+function timesMoved(v: unknown): unknown {
+	if (typeof v === "string") {
+		if (TIME_IN_ROW.test(v)) {
+			const moved = new Date(Date.parse(v) + MOVE * 1000).toISOString();
+			return v.length === 20 ? moved.replace(/\.\d{3}Z$/, "Z") : moved;
+		}
+		if (/\d{4}-\d{2}-\d{2}/.test(v)) throw new Error(`a date in a row in a form the move does not know: ${v}`);
+		return v;
+	}
+	if (Array.isArray(v)) return v.map(timesMoved);
+	if (v !== null && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, timesMoved(x)]));
+	return v;
+}
+
+/** A saved answer with its games' rows moved: seat 1's `data`, seat 2's `results`, or the rows of an answer that is a list. */
+const movedRows: Derive = (_seat, _path, body) => {
+	if (Array.isArray(body)) return timesMoved(body);
+	const page = body as Record<string, unknown>;
+	const key = Array.isArray(page?.data) ? "data" : Array.isArray(page?.results) ? "results" : null;
+	return key === null ? body : { ...page, [key]: timesMoved(page[key]) };
+};
+
+/** The case at its own clock, as requests.ts runs it: the program on the saved answers as saved, under the wrapper's keys. */
+function caseAtItsClock(name: string): { decision: ReturnType<typeof scoreGameSync>["decision"]; asked: readonly HttpRequest[]; now: number; date: number } {
+	const c = CASES.find((x) => x.name.startsWith(name));
+	if (c === undefined) throw new Error(`no saved case ${name}`);
+	const t = saved(undefined, c.now);
+	const out = scoreGameSync(chainOf(name, { payoutRefused: PAYOUT_REFUSED }), keysFor({ 4: KEY }), CASE_PAYOUT, c.now, t.send);
+	return { decision: out.decision, asked: t.asked, now: c.now, date: c.game.start };
+}
+
+/** A reading with its record's time moved back, to set beside the case's. */
+function movedBackReading(r: Reading): Reading {
+	return r.record === null || r.record.time === null ? r : { ...r, record: { ...r.record, time: r.record.time - MOVE } };
+}
 
 // ──────────────────────────── The rehearsal ───────────────────────────
 
@@ -433,13 +518,18 @@ async function main() {
 	})).contractAddress!;
 	say(`the probe consumer at ${probe}`);
 
-	// 4. Three games, by the creator, each its creation fee.
-	await send(CREATOR, USDC, encodeFunctionData({ abi: COIN_ABI, functionName: "approve", args: [games, 4n * FEE] }));
+	// 4. Five games, by the creator, each its creation fee. The fifth is the saved MLB case, moved 133 days,
+	// with the case's league, teams and hints (none).
+	await send(CREATOR, USDC, encodeFunctionData({ abi: COIN_ABI, functionName: "approve", args: [games, 5n * FEE] }));
 	const sixers = await createGame(games, { league: "nba", home: SIXERS.home, away: SIXERS.away, date: 1_792_710_000, hints: [{ seat: 3, id: "cc394a49-c3d1-4b8c-bba2-8ebbb8326c09" }] });
 	const bears = await createGame(games, { league: "nfl", home: "Chicago Bears", away: "New England Patriots", date: 1_792_714_500, hints: [{ seat: 3, id: "edcfd41f-1773-4bc9-a349-aa50931a0278" }] });
 	const appState = await createGame(games, { league: "ncaaf", home: "Appalachian State", away: "James Madison", date: 1_792_710_000, hints: [{ seat: 3, id: "1ecc09e9-a306-4846-9a3c-b8dd63f2bb84" }] });
 	const bruins = await createGame(games, { league: "nhl", home: BRUINS.home, away: BRUINS.away, date: 1_792_710_000, hints: [{ seat: 3, id: "2fef41ed-51ca-4693-985f-5eb74b5f4875" }] });
-	check((await coinOf(games)) === 4n * FEE, "the games set holds the four fees");
+	const mlbCase = CASES.find((x) => x.name.startsWith(MLB_CASE))!.game;
+	const mlbDate = mlbCase.start + MOVE;
+	const mlb = await createGame(games, { league: mlbCase.league, home: mlbCase.home, away: mlbCase.away, date: mlbDate, hints: [...mlbCase.hints] });
+	say(`  the MLB game is the saved case "${MLB_CASE}", dated ${new Date(mlbCase.start * 1000).toISOString()}, moved ${MOVE_DAYS} days`);
+	check((await coinOf(games)) === 5n * FEE, "the games set holds the five fees");
 	const meta = { workflowId, owner: OWNER.address };
 
 	// 5. Verification through the program, as the creation handler runs it, with the saved answers as of the first clock.
@@ -462,6 +552,10 @@ async function main() {
 	check(v4.run.decision.action === "wait", "the program waits on the saved answers for the hockey game too (its start is written by hand)");
 	const d4 = await deliver(reporter, handStart(bruins.gameId, 1_792_710_000, true), { ...meta, label: "hockey start, by hand" });
 	check(d4.result === true && (await status(games, bruins.gameId)) === "verified", "the hockey game is verified by the hand-written start");
+	// The MLB game's saved answers are from after it was rained out, and none lists it as scheduled, which a
+	// start needs; its start is written by hand, as chainOf gives the case's (seat 3 silent: no hint).
+	const d4b = await deliver(reporter, handStart(mlb.gameId, mlbDate, false), { ...meta, label: "MLB start, by hand" });
+	check(d4b.result === true && (await status(games, mlb.gameId)) === "verified", "the MLB game is verified by the hand-written start");
 
 	// 6. The late clock: the 76ers' dispute record.
 	await clockTo(LATE, "late, after the night's games");
@@ -530,21 +624,25 @@ async function main() {
 	check(gotAt === disputedAt, "the day-7 clock did not move");
 
 	// The hockey game: a record now, an update an hour later, then the first record delivered again after
-	// the update. The games set takes it as an update and writes nothing; the program reads the dispute
-	// reports in the order they landed, so the re-delivered record is the newest vote on record.
+	// the update. The games set takes it as an update, and an update writes each seat's vote as the report
+	// carries it, so the re-delivered record's votes are the votes on record, which the program reads.
 	say("--- the hockey game's record, update, and a stale record after it ---");
 	const r9 = runOf(games, bruins, MID, seat4Swapped(BRUINS));
 	check(r9.run.decision.action === "dispute" && r9.run.written !== null, `the program posts the hockey record: ${r9.run.decision.why}`);
 	const d9 = await deliver(reporter, r9.run.written, { ...meta, label: "hockey dispute record" });
 	check(d9.result === true && (await status(games, bruins.gameId)) === "disputed", "the hockey game is disputed");
 	const bruinsDisputedAt = Number(await pub.readContract({ address: games, abi: GAMES_ABI, functionName: "getGameDisputedAt", args: [bruins.gameId] }));
+	const votesOfRecord = JSON.stringify(readReadings(evm, games, bruins.gameId).votes);
 	await clockTo(MID + 3_600, "an hour later");
 	const r10 = runOf(games, bruins, MID, seats2and4Swapped(BRUINS));
 	check(r10.run.decision.action === "dispute" && r10.run.written !== null, `the program posts the hockey update: ${r10.run.decision.why}`);
 	const d10 = await deliver(reporter, r10.run.written, { ...meta, label: "hockey update" });
 	check(d10.result === true, "the hockey update is taken");
+	const votesOfUpdate = JSON.stringify(readReadings(evm, games, bruins.gameId).votes);
 	const staleRecord = await deliver(reporter, r9.run.written, { ...meta, label: "the first hockey record again, after the update" });
-	check(staleRecord.result === true && (await status(games, bruins.gameId)) === "disputed", "an older dispute report after the update is taken as an update and writes nothing");
+	check(staleRecord.result === true && (await status(games, bruins.gameId)) === "disputed", "an older dispute report after the update is taken as an update, which writes each seat's vote as it carries it");
+	const votesAfter = JSON.stringify(readReadings(evm, games, bruins.gameId).votes);
+	check(votesOfUpdate !== votesOfRecord && votesAfter === votesOfRecord, "the votes on record are the first record's again: the update had changed them, and the re-delivered record wrote them back");
 	check(Number(await pub.readContract({ address: games, abi: GAMES_ABI, functionName: "getGameDisputedAt", args: [bruins.gameId] })) === bruinsDisputedAt, "the hockey day-7 clock did not move either");
 
 	say("--- destination separation ---");
@@ -554,14 +652,53 @@ async function main() {
 	const toOther = await deliver(r2, r4.run.written, { ...meta, label: "the college score to the second reporter" });
 	check(toOther.result === false && (await pub.readContract({ address: g2, abi: GAMES_ABI, functionName: "gameCount", args: [] })) === 0n, "the second reporter's games set refuses a game it does not have");
 
-	// 8. Hour 24 for the Bears: the program voids on the pre-game answers, every seat without a final.
+	// 8. Hour 24 for the Bears. On the pre-game answers every seat lists the game scheduled or not finished, and
+	// a row scheduled or in play is an answer, not a void's vote (scoring/src/rule.ts, the header's Void and
+	// decide's last two lines), so the program waits and writes nothing. On the answers read after the game,
+	// at the same clock, it scores them.
 	await clockTo(1_792_714_500 + 86_400 + 1, "the Bears' hour 24");
-	say("--- the hour-24 void ---");
+	say("--- hour 24, and the void after n ---");
 	const r7 = runOf(games, bears, NOW);
-	check(r7.run.decision.action === "void" && r7.run.written !== null, `the program voids the Bears: ${r7.run.decision.why}`);
+	check(r7.run.decision.action === "wait" && r7.run.written === null, `on the pre-game answers the program waits for the Bears: no seat says the game will not play: ${r7.run.decision.why}`);
 	const c7 = await credit(games, PAYOUT.address);
-	const d7 = await deliver(reporter, r7.run.written, { ...meta, label: "Bears void" });
-	check(d7.result === true && (await status(games, bears.gameId)) === "voided" && (await credit(games, PAYOUT.address)) === c7 + FEE, "the Bears are voided and the fee credited");
+	const d7 = await deliver(reporter, r7.run.written, { ...meta, label: "the Bears at hour 24" });
+	check(d7.status === "not sent" && (await status(games, bears.gameId)) === "verified" && (await credit(games, PAYOUT.address)) === c7, "nothing is written for the Bears: they stay verified and no fee is credited");
+	const r7b = runOf(games, bears, LATE);
+	check(r7b.run.decision.action === "score" && r7b.run.written !== null, `on the answers read after the game the program scores the Bears: ${r7b.run.decision.why}`);
+	const d7b = await deliver(reporter, r7b.run.written, { ...meta, label: "Bears score" });
+	const bearsScores = await pub.readContract({ address: games, abi: GAMES_ABI, functionName: "getGameScores", args: [bears.gameId] });
+	const bearsDecided = r7b.run.decision as { home: number; away: number };
+	check(
+		d7b.result === true && (await status(games, bears.gameId)) === "scored" && bearsScores[0] === bearsDecided.home && bearsScores[1] === bearsDecided.away && (await credit(games, PAYOUT.address)) === c7 + FEE,
+		`the Bears are scored ${bearsScores[0]}-${bearsScores[1]}, the program's, and the fee credited`,
+	);
+	const payoutBeforeBears = await coinOf(PAYOUT.address);
+	const wdBears = await send(PAYOUT, games, encodeFunctionData({ abi: GAMES_ABI, functionName: "withdraw", args: [] }));
+	check(wdBears.status === "success" && (await coinOf(PAYOUT.address)) === payoutBeforeBears + FEE && (await credit(games, PAYOUT.address)) === 0n, "a withdrawal pays the payout address the Bears' fee");
+
+	// The MLB game after n: at start + 66 hours and a second, the first second its seat 4 is past retention as it
+	// was when the case was saved (seat4.ts: 66 hours); at hour 24 itself seat 4 is asked, and its answer was
+	// never saved. The run is held to the case at its own clock, then delivered.
+	await clockTo(mlbDate + 66 * 3_600 + 1, "the MLB game's hour 66");
+	const r12 = runOf(games, mlb, NOW, undefined, "past", true);
+	const ref = caseAtItsClock(MLB_CASE);
+	say(
+		`  the case at its own clock ${new Date(ref.now * 1000).toISOString()}, the game dated ${new Date(ref.date * 1000).toISOString()}: ${ref.decision.action}: ${ref.decision.why}; ${ref.asked.length} requests`,
+	);
+	const askedKeys = (asked: readonly HttpRequest[]) => asked.map(requestKey).sort();
+	check(
+		r12.asked.length > 0 && JSON.stringify(askedKeys(r12.asked)) === JSON.stringify(askedKeys(ref.asked)),
+		`the moved run asks what the case asks at its own clock, each date ${MOVE_DAYS} days back (${r12.asked.length} requests, seats ${[1, 2, 3, 4].map((s) => r12.asked.filter((r) => seatOfRequest(r) === s).length).join("/")})`,
+	);
+	const movedReadings = r12.run.decision.readings.map(movedBackReading);
+	check(
+		r12.run.decision.action === ref.decision.action && r12.run.decision.why === ref.decision.why && JSON.stringify(movedReadings) === JSON.stringify(ref.decision.readings),
+		`the moved run decides as the case does at its own clock, and its readings are the case's, each record's time ${MOVE_DAYS} days later`,
+	);
+	check(r12.run.decision.action === "void" && r12.run.written !== null, `the program voids the MLB game after n, at hour 66: ${r12.run.decision.why}`);
+	const c12 = await credit(games, PAYOUT.address);
+	const d12 = await deliver(reporter, r12.run.written, { ...meta, label: "MLB void" });
+	check(d12.result === true && (await status(games, mlb.gameId)) === "voided" && (await credit(games, PAYOUT.address)) === c12 + FEE, "the MLB game is voided and the fee credited");
 
 	// 9. Day 7 for the 76ers: the program asks no seat and decides on the votes on record.
 	await clockTo(disputedAt + 604_800 + 1, "the 76ers' day 7");
@@ -587,7 +724,7 @@ async function main() {
 	const payoutBefore2 = await coinOf(PAYOUT.address);
 	await send(PAYOUT, games, encodeFunctionData({ abi: GAMES_ABI, functionName: "withdraw", args: [] }));
 	check((await coinOf(PAYOUT.address)) === payoutBefore2 + 3n * FEE, "the two voids' and the day-7 score's fees are withdrawn");
-	check((await coinOf(games)) === 0n, "the games set holds no coin after its four games ended");
+	check((await coinOf(games)) === 0n, "the games set holds no coin after its five games ended");
 
 	say(`--- done: ${deliveries} deliveries, every receipt the game's state; ${checks} checks, ${failed.length} failed ---`);
 	for (const f of failed) say(`  failed: ${f}`);
