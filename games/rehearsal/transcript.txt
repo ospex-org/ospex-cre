@@ -3,111 +3,130 @@
 fork: chain 137, block 95989900, 2026-10-22T17:30:21.000Z
   ok  the fork is Polygon
   ok  the forwarder at 0x76c9cf548b4179F8901cda1f8623568b58215E62 is KeystoneForwarder 1.0.0
-workflow id 0x0012e8904208ea9f239ebc8a53c500d725086696ee91144b42a5129b4ecc3288, owner 0x70997970C51812dc3A010C7d01b50e0d17dc79C8, name osgames; reporter predicted 0xB1F0EeB505f51cCb8A81f4DC8dE5bc0a0d136af8, games 0xCC7A40E86E80712379db9E974bA780a42048Bb56
+workflow id 0x00c4fe9c4ea9606d40d42196a81d8ff0f72613b61249b16374b883e5396893db, owner 0x70997970C51812dc3A010C7d01b50e0d17dc79C8, name osgames; reporter predicted 0xB1F0EeB505f51cCb8A81f4DC8dE5bc0a0d136af8, games 0xCC7A40E86E80712379db9E974bA780a42048Bb56
   ok  setConfig(don 7777, version 1, f 1, 4 signers) by the forwarder's owner 0x53bC8B33F9Fd9cf5323b260CC078967cC3f30297
 coin: deployer 10000000, creator 5000000, payout 0
   ok  the reporter at nonce 28374 is the predicted 0xB1F0EeB505f51cCb8A81f4DC8dE5bc0a0d136af8
   ok  the games set at nonce 28375 is the predicted 0xCC7A40E86E80712379db9E974bA780a42048Bb56
-deployed: reporter 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8 (560298 gas, code hash 0x3751315c1cdf5aee1eafb07cb38a7d0eec9a15c6005a4a186aaad1ea7328a745), games 0xcc7a40e86e80712379db9e974ba780a42048bb56 (3174926 gas)
+deployed: reporter 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8 (560310 gas, code hash 0xc92226a464de49c1c0782f1e0cf3b9e7a63de0c5f9b7f5dadfb90329feaef964), games 0xcc7a40e86e80712379db9e974ba780a42048bb56 (4037423 gas)
   ok  a second reporter 0x453b6c692f6056b105e08e0e7bb104d8c3cd6889 and games set 0xe43ef7ebaf45a5b38b14352c09dfc90af0109321, the same id and owner
 the probe consumer at 0x3a32ff706c293e074ad5291a8ffbc0a02711a2db
 created game 1: nba Philadelphia 76ers v Cleveland Cavaliers, date 2026-10-22T23:00:00.000Z, block 95989911, fee 1000000
 created game 2: nfl Chicago Bears v New England Patriots, date 2026-10-23T00:15:00.000Z, block 95989912, fee 1000000
 created game 3: ncaaf Appalachian State v James Madison, date 2026-10-22T23:00:00.000Z, block 95989913, fee 1000000
 created game 4: nhl Boston Bruins v Nashville Predators, date 2026-10-22T23:00:00.000Z, block 95989914, fee 1000000
-  ok  the games set holds the four fees
+created game 5: mlb Chicago White Sox v Atlanta Braves, date 2026-10-22T23:40:00.000Z, block 95989915, fee 1000000
+  the MLB game is the saved case "mlb postponed: Atlanta at the White Sox", dated 2026-06-11T23:40:00.000Z, moved 133 days
+  ok  the games set holds the five fees
 --- the starts ---
-run nba game 1 at clock 2026-10-22T17:31:13.000Z (answers as of 2026-10-22T17:30:00.000Z): start: seats 1, 2 and 3 list the game within an hour; 18 requests, 4 calls + 0 log queries + 1 headers
-  ok  the program writes the 76ers' start (18 requests)
-deliver 1 (76ers start): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 127169
+run nba game 1 at clock 2026-10-22T17:30:52.000Z (answers as of 2026-10-22T17:30:00.000Z; read from the creation event): start: seats 1, 2 and 3 list the game within an hour; 10 requests (seats 1/2/3/4: 2/4/2/2; 9 distinct), 3 calls + 0 log queries + 1 headers
+  ok  the program writes the 76ers' start (10 requests)
+deliver 1 (76ers start): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 243700
   ok  the 76ers are verified: the start landed
   ok  the start on chain is the one the program decided
-run nfl game 2 at clock 2026-10-22T17:31:13.000Z (answers as of 2026-10-22T17:30:00.000Z): start: seats 1, 2 and 3 list the game within an hour; 18 requests, 4 calls + 0 log queries + 1 headers
-  ok  the program writes the Bears' start (18 requests)
-deliver 2 (Bears start): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 127169
+run nfl game 2 at clock 2026-10-22T17:30:52.000Z (answers as of 2026-10-22T17:30:00.000Z; read from the creation event): start: seats 1, 2 and 3 list the game within an hour; 10 requests (seats 1/2/3/4: 2/4/2/2; 9 distinct), 3 calls + 0 log queries + 1 headers
+  ok  the program writes the Bears' start (10 requests)
+deliver 2 (Bears start): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 243712
   ok  the Bears are verified
-run ncaaf game 3 at clock 2026-10-22T17:31:18.000Z (answers as of 2026-10-22T17:30:00.000Z): wait: seat 1 is silent: transport; 7 requests, 4 calls + 0 log queries + 1 headers; misses: seat 1 /ncaaf/v1/games?dates[]=2026-10-20&per_page=100
+run ncaaf game 3 at clock 2026-10-22T17:30:57.000Z (answers as of 2026-10-22T17:30:00.000Z; read from the creation event): wait: seat 1 is silent: transport; 5 requests (seats 1/2/3/4: 1/2/1/1; 5 distinct), 3 calls + 0 log queries + 1 headers; misses: seat 1 /ncaaf/v1/games?dates[]=2026-10-20&dates[]=2026-10-21&dates[]=2026-10-22&dates[]=2026-10-23&team_ids[]=123&team_ids[]=128&per_page=100 (no saved page /ncaaf/v1/games?dates[]=2026-10-20&per_page=100)
   ok  the program waits on the saved answers for the college game (its start is written by hand below)
-deliver 3 (college start, by hand): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 127181
+deliver 3 (college start, by hand): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 243712
   ok  the college game is verified by the hand-written start
-run nhl game 4 at clock 2026-10-22T17:31:22.000Z (answers as of 2026-10-22T17:30:00.000Z): wait: seat 1's key was refused: http 401; 1 requests, 4 calls + 0 log queries + 1 headers
+run nhl game 4 at clock 2026-10-22T17:31:01.000Z (answers as of 2026-10-22T17:30:00.000Z; read from the creation event): wait: seat 1's key was refused: http 401; 1 requests (seats 1/2/3/4: 1/0/0/0; 1 distinct), 3 calls + 0 log queries + 1 headers
   ok  the program waits on the saved answers for the hockey game too (its start is written by hand)
-deliver 4 (hockey start, by hand): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 127181
+deliver 4 (hockey start, by hand): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 243688
   ok  the hockey game is verified by the hand-written start
-clock -> late, after the night's games: block 95989919, 2026-10-23T03:32:00.000Z
+deliver 5 (MLB start, by hand): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 243902
+  ok  the MLB game is verified by the hand-written start
+clock -> late, after the night's games: block 95989921, 2026-10-23T03:32:00.000Z
 --- the dispute record ---
-run nba game 1 at clock 2026-10-23T03:32:00.000Z (answers as of 2026-10-23T03:32:00.000Z): dispute: two finals differ; 8 requests, 5 calls + 1 log queries + 2 headers
+run nba game 1 at clock 2026-10-23T03:32:00.000Z (answers as of 2026-10-23T03:32:00.000Z; read from state): dispute: two finals differ; 5 requests (seats 1/2/3/4: 1/2/1/1; 5 distinct), 7 calls + 0 log queries + 1 headers
   ok  the program posts the record: two finals differ
-deliver 5 (76ers dispute record): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 132428
+deliver 6 (76ers dispute record): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 278079
   ok  the 76ers are disputed
   the record's time 2026-10-23T03:32:00.000Z; day 7 at 2026-10-30T03:32:00.000Z
-clock -> the next afternoon: block 95989921, 2026-10-23T19:30:00.000Z
+clock -> the next afternoon: block 95989923, 2026-10-23T19:30:00.000Z
 --- the score, with a retry ---
-run ncaaf game 3 at clock 2026-10-23T19:30:00.000Z (answers as of 2026-10-23T19:30:00.000Z): score: inside n: every counting seat, the same final; 8 requests, 5 calls + 1 log queries + 2 headers
+run ncaaf game 3 at clock 2026-10-23T19:30:00.000Z (answers as of 2026-10-23T19:30:00.000Z; read from state): score: inside n: every counting seat, the same final; 5 requests (seats 1/2/3/4: 1/2/1/1; 5 distinct), 7 calls + 0 log queries + 1 headers
   ok  the program scores the college game: inside n: every counting seat, the same final
-deliver 6 (college score, under-gassed at 215000): the forwarder transaction reverted: transaction 0xb7a2f268a479aa4330145a7871a5d5ae72b0cb04ba38bc3a5230f2075aaad201 to 0x76c9cf548b4179F8901cda1f8623568b58215E62 reverted (gas used 53802 of 215000)
-deliver 7 (college score, under-gassed at 220000): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 159688
+deliver 7 (college score, under-gassed at 215000): the forwarder transaction reverted: transaction 0xc3c19ae77a8b9e92c511b2bf3e61912224a7dfa98e6164db1cf44bb9f3f3f540 to 0x76c9cf548b4179F8901cda1f8623568b58215E62 reverted (gas used 53826 of 215000)
+deliver 8 (college score, under-gassed at 220000): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result false, gas 213286
   ok  the forwarder routes once its own floor is met
-  note: the receiver finished at the first limit the forwarder routed with, so the retry is not shown here
-  ok  the college game is scored
+  ok  a delivery the receiver could not finish: the transaction succeeds, the result is false, nothing is written
+deliver 9 (college score, the retry): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 281085
+  ok  the retry of the same transmission lands: the college game is scored
   ok  the score on chain is the program's: 34-31
   ok  the fee is credited to the payout address
   ok  a withdrawal pays the payout address the fee
 --- refused, stale and out of order ---
-deliver 8 (the same score again, a new execution): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result false, gas 108723
+deliver 10 (the same score again, a new execution): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result false, gas 108789
   ok  the score delivered again is refused: an ended game takes no report
-deliver 9 (the same score again, the same execution): the forwarder transaction reverted: transaction 0x08791d83b6f3ea0f3c06306078ef3fa5962784b48faaf04ad334da6ed47ca31b to 0x76c9cf548b4179F8901cda1f8623568b58215E62 reverted (gas used 56209 of 1000000)
+deliver 11 (the same score again, the same execution): the forwarder transaction reverted: transaction 0x78c45c0d9a73d042be5df70209ee50b63dc414827cc704b9cdb113ac994f6b79 to 0x76c9cf548b4179F8901cda1f8623568b58215E62 reverted (gas used 56233 of 1000000)
   ok  the same transmission after a success reverts at the forwarder (AlreadyAttempted)
-deliver 10 (a report under another owner): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result false, gas 84905
+deliver 12 (a report under another owner): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result false, gas 84941
   ok  a report under another owner is refused by the reporter; the forwarder records it without reverting
-deliver 11 (a report under another id): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x175b38d96aa7524998..., tx success, ReportProcessed result false, gas 84993
+deliver 13 (a report under another id): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x175b38d96aa7524998..., tx success, ReportProcessed result false, gas 85017
   ok  a report under another workflow id is refused
-deliver 12 (the Bears' start again): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result false, gas 108246
+deliver 14 (the Bears' start again): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result false, gas 108274
   ok  a second start for a verified game is refused
-run nba game 1 at clock 2026-10-23T19:30:17.000Z (answers as of 2026-10-23T19:30:00.000Z): dispute: an update: a vote changed, at seat 2; 8 requests, 6 calls + 2 log queries + 2 headers
+run nba game 1 at clock 2026-10-23T19:30:18.000Z (answers as of 2026-10-23T19:30:00.000Z; read from state): dispute: an update: a vote changed, at seat 2; 5 requests (seats 1/2/3/4: 1/2/1/1; 5 distinct), 7 calls + 0 log queries + 1 headers
   ok  the program posts an update: an update: a vote changed, at seat 2
-deliver 13 (76ers update): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 124372
+deliver 15 (76ers update): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 156675
   ok  the update is taken; the game stays disputed
   ok  the day-7 clock did not move
 --- the hockey game's record, update, and a stale record after it ---
-run nhl game 4 at clock 2026-10-23T19:30:22.000Z (answers as of 2026-10-23T19:30:00.000Z): dispute: two finals differ; 8 requests, 5 calls + 1 log queries + 2 headers
+run nhl game 4 at clock 2026-10-23T19:30:22.000Z (answers as of 2026-10-23T19:30:00.000Z; read from state): dispute: two finals differ; 5 requests (seats 1/2/3/4: 1/2/1/1; 5 distinct), 7 calls + 0 log queries + 1 headers
   ok  the program posts the hockey record: two finals differ
-deliver 14 (hockey dispute record): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 132356
+deliver 16 (hockey dispute record): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 278031
   ok  the hockey game is disputed
-clock -> an hour later: block 95989932, 2026-10-23T20:30:00.000Z
-run nhl game 4 at clock 2026-10-23T20:30:00.000Z (answers as of 2026-10-23T19:30:00.000Z): dispute: an update: a vote changed, at seat 2; 8 requests, 6 calls + 2 log queries + 2 headers
+clock -> an hour later: block 95989935, 2026-10-23T20:30:00.000Z
+run nhl game 4 at clock 2026-10-23T20:30:00.000Z (answers as of 2026-10-23T19:30:00.000Z; read from state): dispute: an update: a vote changed, at seat 2; 5 requests (seats 1/2/3/4: 1/2/1/1; 5 distinct), 7 calls + 0 log queries + 1 headers
   ok  the program posts the hockey update: an update: a vote changed, at seat 2
-deliver 15 (hockey update): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 124312
+deliver 17 (hockey update): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 156627
   ok  the hockey update is taken
-deliver 16 (the first hockey record again, after the update): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 124288
-  ok  an older dispute report after the update is taken as an update and writes nothing
+deliver 18 (the first hockey record again, after the update): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 156603
+  ok  an older dispute report after the update is taken as an update, which writes each seat's vote as it carries it
+  ok  the votes on record are the first record's again: the update had changed them, and the re-delivered record wrote them back
   ok  the hockey day-7 clock did not move either
 --- destination separation ---
-deliver 17 (the college score to the probe consumer): to 0x3a32ff706c293e074ad5291a8ffbc0a02711a2db, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 826037
+deliver 19 (the college score to the probe consumer): to 0x3a32ff706c293e074ad5291a8ffbc0a02711a2db, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 826037
   ok  another receiver takes the bytes; the games set is untouched by it
-deliver 18 (the college score to the second reporter): to 0x453b6c692f6056b105e08e0e7bb104d8c3cd6889, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result false, gas 97225
+deliver 20 (the college score to the second reporter): to 0x453b6c692f6056b105e08e0e7bb104d8c3cd6889, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result false, gas 97270
   ok  the second reporter's games set refuses a game it does not have
-clock -> the Bears' hour 24: block 95989937, 2026-10-24T00:15:01.000Z
---- the hour-24 void ---
-run nfl game 2 at clock 2026-10-24T00:15:01.000Z (answers as of 2026-10-22T17:30:00.000Z): void: after n: every seat that answers shows no final; 8 requests, 5 calls + 1 log queries + 2 headers
-  ok  the program voids the Bears: after n: every seat that answers shows no final
-deliver 19 (Bears void): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 157198
-  ok  the Bears are voided and the fee credited
-clock -> the 76ers' day 7: block 95989939, 2026-10-30T03:32:01.000Z
+clock -> the Bears' hour 24: block 95989940, 2026-10-24T00:15:01.000Z
+--- hour 24, and the void after n ---
+run nfl game 2 at clock 2026-10-24T00:15:01.000Z (answers as of 2026-10-22T17:30:00.000Z; read from state): wait: after n: 0 counting seats say the game will not or did not play, two needed; seat 1 scheduled, seat 2 scheduled, seat 3 NotFinished, seat 4 not completed; 5 requests (seats 1/2/3/4: 1/2/1/1; 5 distinct), 7 calls + 0 log queries + 1 headers
+  ok  on the pre-game answers the program waits for the Bears: no seat says the game will not play: after n: 0 counting seats say the game will not or did not play, two needed; seat 1 scheduled, seat 2 scheduled, seat 3 NotFinished, seat 4 not completed
+deliver - (the Bears at hour 24): not sent: the program wrote nothing
+  ok  nothing is written for the Bears: they stay verified and no fee is credited
+run nfl game 2 at clock 2026-10-24T00:15:01.000Z (answers as of 2026-10-23T03:32:00.000Z; read from state): score: after n: two counting seats or more, the same final; 5 requests (seats 1/2/3/4: 1/2/1/1; 5 distinct), 7 calls + 0 log queries + 1 headers
+  ok  on the answers read after the game the program scores the Bears: after n: two counting seats or more, the same final
+deliver 21 (Bears score): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 298196
+  ok  the Bears are scored 30-24, the program's, and the fee credited
+  ok  a withdrawal pays the payout address the Bears' fee
+clock -> the MLB game's hour 66: block 95989943, 2026-10-25T17:40:01.000Z
+run mlb game 5 at clock 2026-10-25T17:40:01.000Z (answers as of 2026-10-22T17:30:00.000Z, moved 133 days; read from state): void: after n: two counting seats or more say the game will not or did not play, the rest silent, and no seat shows a final; 3 requests (seats 1/2/3/4: 1/2/0/0; 3 distinct), 7 calls + 0 log queries + 1 headers
+  the case at its own clock 2026-10-22T17:30:00.000Z, the game dated 2026-06-11T23:40:00.000Z: void: after n: two counting seats or more say the game will not or did not play, the rest silent, and no seat shows a final; 3 requests
+  ok  the moved run asks what the case asks at its own clock, each date 133 days back (3 requests, seats 1/2/0/0)
+  ok  the moved run decides as the case does at its own clock, and its readings are the case's, each record's time 133 days later
+  ok  the program voids the MLB game after n, at hour 66: after n: two counting seats or more say the game will not or did not play, the rest silent, and no seat shows a final
+deliver 22 (MLB void): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 285258
+  ok  the MLB game is voided and the fee credited
+clock -> the 76ers' day 7: block 95989945, 2026-10-30T03:32:01.000Z
 --- day 7 ---
-run nba game 1 at clock 2026-10-30T03:32:01.000Z (answers as of 2026-10-23T03:32:00.000Z): void: day 7: no three sources agree; 0 requests, 6 calls + 2 log queries + 2 headers
+run nba game 1 at clock 2026-10-30T03:32:01.000Z (answers as of 2026-10-23T03:32:00.000Z; read from state): void: day 7: no three sources agree; 0 requests (seats 1/2/3/4: 0/0/0/0; 0 distinct), 7 calls + 0 log queries + 1 headers
   ok  day 7 asks no seat and decides: day 7: no three sources agree
-deliver 20 (76ers day-7 void): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 145866
+deliver 23 (76ers day-7 void): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 282196
   ok  the 76ers are voided at day 7 and the fee credited
-deliver 21 (the update after the end): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result false, gas 108526
+deliver 24 (the update after the end): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result false, gas 108573
   ok  an update after the end is refused
-clock -> the hockey game's day 7: block 95989942, 2026-10-30T19:30:27.000Z
+clock -> the hockey game's day 7: block 95989948, 2026-10-30T19:30:28.000Z
 --- day 7, after a stale record ---
-run nhl game 4 at clock 2026-10-30T19:30:27.000Z (answers as of 2026-10-23T19:30:00.000Z): score: day 7: three sources or more, the same final; 0 requests, 6 calls + 2 log queries + 2 headers
+run nhl game 4 at clock 2026-10-30T19:30:28.000Z (answers as of 2026-10-23T19:30:00.000Z; read from state): score: day 7: three sources or more, the same final; 0 requests (seats 1/2/3/4: 0/0/0/0; 0 distinct), 7 calls + 0 log queries + 1 headers
   ok  day 7 reads the stale record as the newest vote: day 7: three sources or more, the same final
-deliver 22 (hockey day-7 score): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x0012e8904208ea9f23..., tx success, ReportProcessed result true, gas 144746
+deliver 25 (hockey day-7 score): to 0xb1f0eeb505f51ccb8a81f4dc8de5bc0a0d136af8, raw 909 bytes, metadata 0x00c4fe9c4ea9606d40..., tx success, ReportProcessed result true, gas 265259
   ok  the hockey game is scored at day 7 on the votes as they landed
   finding: a DON-signed dispute report delivered again after a newer one is taken, and the program's day 7 rests on it; without it this game's day 7 would have been a 2-2 void
   ok  the two voids' and the day-7 score's fees are withdrawn
-  ok  the games set holds no coin after its four games ended
---- done: 22 deliveries, every receipt the game's state ---
+  ok  the games set holds no coin after its five games ended
+--- done: 25 deliveries, every receipt the game's state; 61 checks, 0 failed ---
