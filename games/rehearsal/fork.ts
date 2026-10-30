@@ -30,7 +30,10 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { polygon } from "viem/chains";
+import { SEATS } from "../../scoring/src/table";
+import type { HttpRequest } from "../../scoring/src/types";
 import { KEY, saved, type Derive } from "../../scoring/test/fixtures";
+import { gameOfCreation, gameOfState, readIdentity, readOpenGames, readReadings, readReporters } from "../chain";
 import { GAME_CREATED, GAME_CREATED_TOPIC, GAME_REPORTED, decodeGameCreated, encodeReport, keysFor, type Creation } from "../lib";
 import { runGame, type Run } from "../run";
 import { CONTEXT, FORWARDER, FORWARDER_ABI, metadataOf, rawReportOf, signaturesOf } from "./forwarder";
@@ -45,6 +48,14 @@ const CONTRACTS_OUT = process.env.CONTRACTS_OUT ?? join(HERE, "..", "..", "..", 
 const WORKFLOW_JSON = process.env.REHEARSAL_WORKFLOW_JSON;
 if (!WORKFLOW_JSON) throw new Error("REHEARSAL_WORKFLOW_JSON: the fingerprint's --json output for the predicted addresses");
 const TRANSCRIPT = process.env.REHEARSAL_TRANSCRIPT ?? join(HERE, "transcript.txt");
+/**
+ * How a run reads a game past its creation. "state": the workflow's own reads (chain.ts, as the tick's full
+ * read takes them), now that the games set stores the game. "events": the event stand-in (logs.ts) the
+ * rehearsal used against a games set that stored nothing, kept to compare. A start is read as the creation
+ * handler reads it, from its trigger's event, under either.
+ */
+const READS = process.env.REHEARSAL_READS ?? "state";
+if (READS !== "state" && READS !== "events") throw new Error(`REHEARSAL_READS: "state" or "events", not ${READS}`);
 
 /** anvil's default accounts, by index. Test keys, public since hardhat. */
 const KEYS: readonly Hex[] = [
@@ -118,12 +129,13 @@ function say(line: string) {
 	lines.push(line);
 	console.log(line);
 }
+/** A failed check is recorded and the run goes on, so one run shows every difference; the exit code carries it. */
+let checks = 0;
+const failed: string[] = [];
 function check(cond: boolean, what: string) {
+	checks++;
 	say(`  ${cond ? "ok " : "FAIL"} ${what}`);
-	if (!cond) {
-		writeFileSync(TRANSCRIPT, `${lines.join("\n")}\n`);
-		throw new Error(`check failed: ${what}`);
-	}
+	if (!cond) failed.push(what);
 }
 
 // ──────────────────────────── Chain helpers ───────────────────────────
@@ -160,7 +172,7 @@ interface Delivery {
 	readonly executionId: Hex;
 	readonly reportId: number;
 	readonly txHash: Hex;
-	readonly status: "success" | "reverted";
+	readonly status: "success" | "reverted" | "not sent";
 	readonly result: boolean | null;
 	readonly gasUsed: bigint;
 }
@@ -168,9 +180,13 @@ interface Delivery {
 let deliveries = 0;
 async function deliver(
 	receiver: Address,
-	report: Hex,
+	report: Hex | null,
 	o: { workflowId: Hex; owner: Address; executionId?: Hex; reportId?: number; gas?: bigint; label: string },
 ): Promise<Delivery> {
+	if (report === null) {
+		say(`deliver - (${o.label}): not sent: the program wrote nothing`);
+		return { rawReport: "0x", executionId: o.executionId ?? "0x", reportId: o.reportId ?? 0, txHash: "0x", status: "not sent", result: null, gasUsed: 0n };
+	}
 	const n = ++deliveries;
 	const executionId = o.executionId ?? keccak256(stringToHex(`rehearsal-${n}-${o.label}`));
 	const reportId = o.reportId ?? n;
@@ -204,11 +220,44 @@ async function deliver(
 	return { rawReport, executionId, reportId, txHash: receipt.transactionHash, status: receipt.status, result, gasUsed: receipt.gasUsed };
 }
 
+/** The seat a request goes to, by its host in the feed table. */
+function seatOfRequest(req: HttpRequest): number {
+	const host = new URL(req.url).host;
+	return SEATS.find((r) => r.host === host)?.seat ?? 0;
+}
+
+/** A request as the workflow's transport keys it (lib.ts, memoized): what the platform would count once. */
+function requestKey(req: HttpRequest): string {
+	const headers = Object.entries(req.headers)
+		.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+		.map(([k, v]) => `${k}: ${v}`)
+		.join("\n");
+	return `${req.method} ${req.url}\n${headers}\n${req.body ?? ""}`;
+}
+
+/**
+ * The game a run is handed, and its reporters, as the workflow reads them. At creation: the creation
+ * handler's, from its trigger's event (main.ts). Past it: the tick's full read from state (tick.ts), the
+ * open list's row, the identity, the readings and the reporters; or the event stand-in, to compare.
+ */
+function gameFor(games: Address, creation: Creation, at: "creation" | "past"): { game: ReturnType<typeof gameOfCreation>; reporters: readonly Address[]; read: string } {
+	if (READS === "events") return { game: gameFromLogs(evm, games, creation), reporters: creation.reporters, read: "the event stand-in" };
+	if (at === "creation") return { game: gameOfCreation(creation), reporters: creation.reporters, read: "the creation event" };
+	const open = readOpenGames(evm, games);
+	const row = open.rows.find((r) => r.gameId === creation.gameId);
+	if (row === undefined) throw new Error(`game ${creation.gameId} is not on the open list of ${open.total}`);
+	const identity = readIdentity(evm, games, row.gameId);
+	const readings = readReadings(evm, games, row.gameId);
+	const reporters = readReporters(evm, games, row.gameId);
+	return { game: gameOfState(row, identity, readings), reporters, read: "state" };
+}
+
 /** The program's run for one game, with the saved answers as of `asOf`; the write is recorded, not sent. */
-function runOf(games: Address, creation: Creation, asOf: number, derive?: Derive): { run: Run; requests: number; reads: typeof evm.reads } {
+function runOf(games: Address, creation: Creation, asOf: number, derive?: Derive, at: "creation" | "past" = "past"): { run: Run; requests: number; reads: typeof evm.reads } {
 	const t = saved(derive, asOf);
 	const before = { ...evm.reads };
 	const written: Hex[] = [];
+	const held = gameFor(games, creation, at);
 	const run = runGame(
 		{
 			evm,
@@ -221,12 +270,14 @@ function runOf(games: Address, creation: Creation, asOf: number, derive?: Derive
 				return null;
 			},
 		},
-		gameFromLogs(evm, games, creation),
-		creation.reporters,
+		held.game,
+		held.reporters,
 	);
 	const reads = { calls: evm.reads.calls - before.calls, logs: evm.reads.logs - before.logs, headers: evm.reads.headers - before.headers };
+	const bySeat = [1, 2, 3, 4].map((s) => t.asked.filter((r) => seatOfRequest(r) === s).length).join("/");
+	const distinct = new Set(t.asked.map(requestKey)).size;
 	say(
-		`run ${creation.league} game ${creation.gameId} at clock ${new Date(run.now * 1000).toISOString()} (answers as of ${new Date(asOf * 1000).toISOString()}): ${run.decision.action}: ${run.decision.why}; ${t.asked.length} requests, ${reads.calls} calls + ${reads.logs} log queries + ${reads.headers} headers${t.misses.length ? `; misses: ${t.misses.join(", ")}` : ""}`,
+		`run ${creation.league} game ${creation.gameId} at clock ${new Date(run.now * 1000).toISOString()} (answers as of ${new Date(asOf * 1000).toISOString()}; read from ${held.read}): ${run.decision.action}: ${run.decision.why}; ${t.asked.length} requests (seats 1/2/3/4: ${bySeat}; ${distinct} distinct), ${reads.calls} calls + ${reads.logs} log queries + ${reads.headers} headers${t.misses.length ? `; misses: ${t.misses.join(", ")}` : ""}`,
 	);
 	if (run.written !== null && written[0] !== run.written) throw new Error("the recorded write is not the run's");
 	return { run, requests: t.asked.length, reads };
@@ -393,21 +444,21 @@ async function main() {
 
 	// 5. Verification through the program, as the creation handler runs it, with the saved answers as of the first clock.
 	say("--- the starts ---");
-	const v1 = runOf(games, sixers, NOW);
+	const v1 = runOf(games, sixers, NOW, undefined, "creation");
 	check(v1.run.decision.action === "start" && v1.run.written !== null, `the program writes the 76ers' start (${v1.requests} requests)`);
-	const d1 = await deliver(reporter, v1.run.written!, { ...meta, label: "76ers start" });
+	const d1 = await deliver(reporter, v1.run.written, { ...meta, label: "76ers start" });
 	check(d1.result === true && (await status(games, sixers.gameId)) === "verified", "the 76ers are verified: the start landed");
 	check(Number(await pub.readContract({ address: games, abi: GAMES_ABI, functionName: "getGameStart", args: [sixers.gameId] })) === (v1.run.decision as { start: number }).start, "the start on chain is the one the program decided");
-	const v2 = runOf(games, bears, NOW);
+	const v2 = runOf(games, bears, NOW, undefined, "creation");
 	check(v2.run.decision.action === "start" && v2.run.written !== null, `the program writes the Bears' start (${v2.requests} requests)`);
-	const d2 = await deliver(reporter, v2.run.written!, { ...meta, label: "Bears start" });
+	const d2 = await deliver(reporter, v2.run.written, { ...meta, label: "Bears start" });
 	check(d2.result === true && (await status(games, bears.gameId)) === "verified", "the Bears are verified");
-	const v3 = runOf(games, appState, NOW);
+	const v3 = runOf(games, appState, NOW, undefined, "creation");
 	check(v3.run.decision.action === "wait", "the program waits on the saved answers for the college game (its start is written by hand below)");
 	const startByHand = handStart(appState.gameId, 1_792_710_000, true);
 	const d3 = await deliver(reporter, startByHand, { ...meta, label: "college start, by hand" });
 	check(d3.result === true && (await status(games, appState.gameId)) === "verified", "the college game is verified by the hand-written start");
-	const v4 = runOf(games, bruins, NOW);
+	const v4 = runOf(games, bruins, NOW, undefined, "creation");
 	check(v4.run.decision.action === "wait", "the program waits on the saved answers for the hockey game too (its start is written by hand)");
 	const d4 = await deliver(reporter, handStart(bruins.gameId, 1_792_710_000, true), { ...meta, label: "hockey start, by hand" });
 	check(d4.result === true && (await status(games, bruins.gameId)) === "verified", "the hockey game is verified by the hand-written start");
@@ -417,7 +468,7 @@ async function main() {
 	say("--- the dispute record ---");
 	const r5 = runOf(games, sixers, LATE, seat4Swapped(SIXERS));
 	check(r5.run.decision.action === "dispute" && r5.run.written !== null, `the program posts the record: ${r5.run.decision.why}`);
-	const d5 = await deliver(reporter, r5.run.written!, { ...meta, label: "76ers dispute record" });
+	const d5 = await deliver(reporter, r5.run.written, { ...meta, label: "76ers dispute record" });
 	check(d5.result === true && (await status(games, sixers.gameId)) === "disputed", "the 76ers are disputed");
 	const disputedAt = Number(await pub.readContract({ address: games, abi: GAMES_ABI, functionName: "getGameDisputedAt", args: [sixers.gameId] }));
 	say(`  the record's time ${new Date(disputedAt * 1000).toISOString()}; day 7 at ${new Date((disputedAt + 604_800) * 1000).toISOString()}`);
@@ -436,7 +487,7 @@ async function main() {
 	// there until the forwarder routes, so the first delivery that is not reverted is the attempt.
 	let under: Delivery | null = null;
 	for (const gas of [215_000n, 220_000n, 225_000n, 230_000n, 235_000n, 240_000n, 250_000n, 260_000n]) {
-		const d = await deliver(reporter, r4.run.written!, { ...meta, label: `college score, under-gassed at ${gas}`, gas });
+		const d = await deliver(reporter, r4.run.written, { ...meta, label: `college score, under-gassed at ${gas}`, gas });
 		if (d.status === "reverted") continue;
 		under = d;
 		break;
@@ -445,7 +496,7 @@ async function main() {
 	let retry: Delivery;
 	if (under!.result === false) {
 		check((await status(games, appState.gameId)) === "verified" && (await credit(games, PAYOUT.address)) === creditBefore, "a delivery the receiver could not finish: the transaction succeeds, the result is false, nothing is written");
-		retry = await deliver(reporter, r4.run.written!, { ...meta, label: "college score, the retry", executionId: under!.executionId, reportId: under!.reportId });
+		retry = await deliver(reporter, r4.run.written, { ...meta, label: "college score, the retry", executionId: under!.executionId, reportId: under!.reportId });
 		check(retry.result === true && (await status(games, appState.gameId)) === "scored", "the retry of the same transmission lands: the college game is scored");
 	} else {
 		say("  note: the receiver finished at the first limit the forwarder routed with, so the retry is not shown here");
@@ -461,19 +512,19 @@ async function main() {
 	check(wd.status === "success" && (await coinOf(PAYOUT.address)) === payoutCoinBefore + FEE && (await credit(games, PAYOUT.address)) === 0n, "a withdrawal pays the payout address the fee");
 
 	say("--- refused, stale and out of order ---");
-	const again = await deliver(reporter, r4.run.written!, { ...meta, label: "the same score again, a new execution" });
+	const again = await deliver(reporter, r4.run.written, { ...meta, label: "the same score again, a new execution" });
 	check(again.result === false && (await status(games, appState.gameId)) === "scored", "the score delivered again is refused: an ended game takes no report");
-	const same = await deliver(reporter, r4.run.written!, { ...meta, label: "the same score again, the same execution", executionId: under!.executionId, reportId: under!.reportId });
+	const same = await deliver(reporter, r4.run.written, { ...meta, label: "the same score again, the same execution", executionId: under!.executionId, reportId: under!.reportId });
 	check(same.status === "reverted", "the same transmission after a success reverts at the forwarder (AlreadyAttempted)");
-	const wrongOwner = await deliver(reporter, r5.run.written!, { workflowId, owner: PAYOUT.address, label: "a report under another owner" });
+	const wrongOwner = await deliver(reporter, r5.run.written, { workflowId, owner: PAYOUT.address, label: "a report under another owner" });
 	check(wrongOwner.status === "success" && wrongOwner.result === false, "a report under another owner is refused by the reporter; the forwarder records it without reverting");
-	const wrongId = await deliver(reporter, r5.run.written!, { workflowId: keccak256(stringToHex("another id")), owner: OWNER.address, label: "a report under another id" });
+	const wrongId = await deliver(reporter, r5.run.written, { workflowId: keccak256(stringToHex("another id")), owner: OWNER.address, label: "a report under another id" });
 	check(wrongId.result === false, "a report under another workflow id is refused");
-	const staleStart = await deliver(reporter, v2.run.written!, { ...meta, label: "the Bears' start again" });
+	const staleStart = await deliver(reporter, v2.run.written, { ...meta, label: "the Bears' start again" });
 	check(staleStart.result === false && (await status(games, bears.gameId)) === "verified", "a second start for a verified game is refused");
 	const r6 = runOf(games, sixers, MID, seats2and4Swapped(SIXERS));
 	check(r6.run.decision.action === "dispute" && r6.run.written !== null, `the program posts an update: ${r6.run.decision.why}`);
-	const d6 = await deliver(reporter, r6.run.written!, { ...meta, label: "76ers update" });
+	const d6 = await deliver(reporter, r6.run.written, { ...meta, label: "76ers update" });
 	check(d6.result === true && (await status(games, sixers.gameId)) === "disputed", "the update is taken; the game stays disputed");
 	const gotAt = Number(await pub.readContract({ address: games, abi: GAMES_ABI, functionName: "getGameDisputedAt", args: [sixers.gameId] }));
 	check(gotAt === disputedAt, "the day-7 clock did not move");
@@ -484,23 +535,23 @@ async function main() {
 	say("--- the hockey game's record, update, and a stale record after it ---");
 	const r9 = runOf(games, bruins, MID, seat4Swapped(BRUINS));
 	check(r9.run.decision.action === "dispute" && r9.run.written !== null, `the program posts the hockey record: ${r9.run.decision.why}`);
-	const d9 = await deliver(reporter, r9.run.written!, { ...meta, label: "hockey dispute record" });
+	const d9 = await deliver(reporter, r9.run.written, { ...meta, label: "hockey dispute record" });
 	check(d9.result === true && (await status(games, bruins.gameId)) === "disputed", "the hockey game is disputed");
 	const bruinsDisputedAt = Number(await pub.readContract({ address: games, abi: GAMES_ABI, functionName: "getGameDisputedAt", args: [bruins.gameId] }));
 	await clockTo(MID + 3_600, "an hour later");
 	const r10 = runOf(games, bruins, MID, seats2and4Swapped(BRUINS));
 	check(r10.run.decision.action === "dispute" && r10.run.written !== null, `the program posts the hockey update: ${r10.run.decision.why}`);
-	const d10 = await deliver(reporter, r10.run.written!, { ...meta, label: "hockey update" });
+	const d10 = await deliver(reporter, r10.run.written, { ...meta, label: "hockey update" });
 	check(d10.result === true, "the hockey update is taken");
-	const staleRecord = await deliver(reporter, r9.run.written!, { ...meta, label: "the first hockey record again, after the update" });
+	const staleRecord = await deliver(reporter, r9.run.written, { ...meta, label: "the first hockey record again, after the update" });
 	check(staleRecord.result === true && (await status(games, bruins.gameId)) === "disputed", "an older dispute report after the update is taken as an update and writes nothing");
 	check(Number(await pub.readContract({ address: games, abi: GAMES_ABI, functionName: "getGameDisputedAt", args: [bruins.gameId] })) === bruinsDisputedAt, "the hockey day-7 clock did not move either");
 
 	say("--- destination separation ---");
-	const toProbe = await deliver(probe, r4.run.written!, { ...meta, label: "the college score to the probe consumer" });
+	const toProbe = await deliver(probe, r4.run.written, { ...meta, label: "the college score to the probe consumer" });
 	const probeCount = await pub.readContract({ address: probe, abi: PROBE_ABI, functionName: "count", args: [] });
 	check(toProbe.result === true && probeCount === 1n, "another receiver takes the bytes; the games set is untouched by it");
-	const toOther = await deliver(r2, r4.run.written!, { ...meta, label: "the college score to the second reporter" });
+	const toOther = await deliver(r2, r4.run.written, { ...meta, label: "the college score to the second reporter" });
 	check(toOther.result === false && (await pub.readContract({ address: g2, abi: GAMES_ABI, functionName: "gameCount", args: [] })) === 0n, "the second reporter's games set refuses a game it does not have");
 
 	// 8. Hour 24 for the Bears: the program voids on the pre-game answers, every seat without a final.
@@ -509,7 +560,7 @@ async function main() {
 	const r7 = runOf(games, bears, NOW);
 	check(r7.run.decision.action === "void" && r7.run.written !== null, `the program voids the Bears: ${r7.run.decision.why}`);
 	const c7 = await credit(games, PAYOUT.address);
-	const d7 = await deliver(reporter, r7.run.written!, { ...meta, label: "Bears void" });
+	const d7 = await deliver(reporter, r7.run.written, { ...meta, label: "Bears void" });
 	check(d7.result === true && (await status(games, bears.gameId)) === "voided" && (await credit(games, PAYOUT.address)) === c7 + FEE, "the Bears are voided and the fee credited");
 
 	// 9. Day 7 for the 76ers: the program asks no seat and decides on the votes on record.
@@ -518,9 +569,9 @@ async function main() {
 	const r8 = runOf(games, sixers, LATE);
 	check(r8.run.decision.action === "void" && r8.requests === 0 && r8.run.written !== null, `day 7 asks no seat and decides: ${r8.run.decision.why}`);
 	const c8 = await credit(games, PAYOUT.address);
-	const d8 = await deliver(reporter, r8.run.written!, { ...meta, label: "76ers day-7 void" });
+	const d8 = await deliver(reporter, r8.run.written, { ...meta, label: "76ers day-7 void" });
 	check(d8.result === true && (await status(games, sixers.gameId)) === "voided" && (await credit(games, PAYOUT.address)) === c8 + FEE, "the 76ers are voided at day 7 and the fee credited");
-	const afterEnd = await deliver(reporter, r6.run.written!, { ...meta, label: "the update after the end" });
+	const afterEnd = await deliver(reporter, r6.run.written, { ...meta, label: "the update after the end" });
 	check(afterEnd.result === false, "an update after the end is refused");
 
 	// 10. Day 7 for the hockey game: the votes on record are the re-delivered first record's, so three agree.
@@ -529,7 +580,7 @@ async function main() {
 	const r11 = runOf(games, bruins, MID);
 	check(r11.run.decision.action === "score" && r11.requests === 0 && r11.run.written !== null, `day 7 reads the stale record as the newest vote: ${r11.run.decision.why}`);
 	const c11 = await credit(games, PAYOUT.address);
-	const d11 = await deliver(reporter, r11.run.written!, { ...meta, label: "hockey day-7 score" });
+	const d11 = await deliver(reporter, r11.run.written, { ...meta, label: "hockey day-7 score" });
 	check(d11.result === true && (await status(games, bruins.gameId)) === "scored" && (await credit(games, PAYOUT.address)) === c11 + FEE, "the hockey game is scored at day 7 on the votes as they landed");
 	say("  finding: a DON-signed dispute report delivered again after a newer one is taken, and the program's day 7 rests on it; without it this game's day 7 would have been a 2-2 void");
 
@@ -538,12 +589,16 @@ async function main() {
 	check((await coinOf(PAYOUT.address)) === payoutBefore2 + 3n * FEE, "the two voids' and the day-7 score's fees are withdrawn");
 	check((await coinOf(games)) === 0n, "the games set holds no coin after its four games ended");
 
-	say(`--- done: ${deliveries} deliveries, every receipt the game's state ---`);
+	say(`--- done: ${deliveries} deliveries, every receipt the game's state; ${checks} checks, ${failed.length} failed ---`);
+	for (const f of failed) say(`  failed: ${f}`);
 	writeFileSync(TRANSCRIPT, `${lines.join("\n")}\n`);
-	say(`transcript: ${TRANSCRIPT}`);
+	console.log(`transcript: ${TRANSCRIPT}`);
+	if (failed.length > 0) process.exit(1);
 }
 
 main().catch((e) => {
+	say(`--- stopped: ${String((e as Error)?.message ?? e).split("\n")[0]}; ${deliveries} deliveries, ${checks} checks, ${failed.length} failed ---`);
+	writeFileSync(TRANSCRIPT, `${lines.join("\n")}\n`);
 	console.error(e);
-	process.exit(1);
+	process.exit(2);
 });
