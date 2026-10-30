@@ -26,8 +26,8 @@ and destination separation each behave as the spec says.
   fixes the forwarder, the owner, the workflow id and the games set; the games set admits the reporter
   by its code hash.
 * **The workflow id is the build's.** `build/fingerprint.ts` run for the predicted addresses, the
-  rehearsal's owner and payout: `0x003674814d214455f3b9dad1012bb73236e5d667e420bea576188ca4fe1faf66`
-  (binary `6ed83bc7…`, config `b57a9e0d…`). The reporter takes a report only under that id and owner.
+  rehearsal's owner and payout: `0x00c4fe9c4ea9606d40d42196a81d8ff0f72613b61249b16374b883e5396893db`
+  (binary `817f4734…`, config `b57a9e0d…`). The reporter takes a report only under that id and owner.
 * **The runs are the wrapper's.** `runGame` with the chain read over the fork (`rpc.ts`, a
   synchronous JSON-RPC, since the wrapper's reads are synchronous as the CRE runtime is) and the
   program's saved feed answers (`scoring/test/fixtures.ts`) as of the saved cases' clocks; the fork's
@@ -86,38 +86,38 @@ fourth, the transmitter the fifth, the signers the sixth to ninth.
 
 ## The run, 30 Oct 2026
 
-Windows 11, anvil (Foundry 1.6.0-nightly), Bun 1.3.14, viem 2.34.0; ospex-cre at `64caaa6` with this
-directory's harness, ospex-contracts-v2 at `3fe47cb`; 135 seconds; 61 checks, 25 deliveries, every
+Windows 11, anvil (Foundry 1.6.0-nightly), Bun 1.3.14, viem 2.34.0; ospex-cre at `7470bfd` with this
+directory's harness, ospex-contracts-v2 at `3fe47cb`; 131 seconds; 61 checks, 25 deliveries, every
 delivery read back from the chain; exit 0 (`transcript.txt`). Requests are what a run asked, by seat
 1/2/3/4, and how many were distinct: the workflow's transport answers a request asked twice in one run
 from memory, so the platform counts the distinct ones.
 
 | | Game | The program's run | Requests | Chain reads | Delivery | Gas |
 |---|---|---|---|---|---|---|
-| 1 | NBA | start, at the first clock | 10 (2/4/2/2; 9 distinct) | 3 calls, 1 header | verified; the start on chain is the program's | 243,676 |
+| 1 | NBA | start, at the first clock | 10 (2/4/2/2; 9 distinct) | 3 calls, 1 header | verified; the start on chain is the program's | 243,700 |
 | 2 | NFL | start | 10 (2/4/2/2; 9) | 3, 1 | verified | 243,712 |
 | 3 | college football | wait (seat 1's answer for one date was not saved at that clock) | 5 (1/2/1/1; 5) | 3, 1 | the start written by hand | 243,712 |
-| 4 | NHL | wait (seat 1 answered 401 in the saved answers) | 1 (1/0/0/0; 1) | 3, 1 | the start written by hand | 243,676 |
-| 5 | MLB, moved | not run: its saved answers hold the game only as postponed | | | the start written by hand | 243,878 |
-| 6 | NBA | dispute record (seat 4's final derived to differ) | 5 (1/2/1/1; 5) | 7 calls, 1 header | disputed; the record's time read back | 278,103 |
-| 7, 8, 9 | college football | score, "inside n: every counting seat, the same final" | 5 (1/2/1/1; 5) | 7, 1 | at 215,000 gas the forwarder reverts before routing; at 220,000 it routes and the receiver cannot finish: result false, nothing written; the retry of the same transmission lands: 34-31, the fee credited, the withdrawal pays | —; 213,285; 281,073 |
-| 10 | | the same score again, a new execution | | | refused: an ended game takes no report | 108,741 |
+| 4 | NHL | wait (seat 1 answered 401 in the saved answers) | 1 (1/0/0/0; 1) | 3, 1 | the start written by hand | 243,688 |
+| 5 | MLB, moved | not run: its saved answers hold the game only as postponed | | | the start written by hand | 243,902 |
+| 6 | NBA | dispute record (seat 4's final derived to differ) | 5 (1/2/1/1; 5) | 7 calls, 1 header | disputed; the record's time read back | 278,079 |
+| 7, 8, 9 | college football | score, "inside n: every counting seat, the same final" | 5 (1/2/1/1; 5) | 7, 1 | at 215,000 gas the forwarder reverts before routing; at 220,000 it routes and the receiver cannot finish: result false, nothing written; the retry of the same transmission lands: 34-31, the fee credited, the withdrawal pays | —; 213,286; 281,085 |
+| 10 | | the same score again, a new execution | | | refused: an ended game takes no report | 108,789 |
 | 11 | | the same score, the same execution | | | the forwarder reverts: already attempted | |
 | 12 | | the record under another owner | | | refused by the reporter, recorded by the forwarder | 84,941 |
 | 13 | | the record under another workflow id | | | refused | 85,017 |
-| 14 | NFL | the start again | | | refused: a start is written once | 108,298 |
-| 15 | NBA | an update, "a vote changed, at seat 2" | 5 (1/2/1/1; 5) | 7, 1 | taken; the day-7 clock did not move | 156,687 |
-| 16 | NHL | dispute record | 5 (1/2/1/1; 5) | 7, 1 | disputed | 278,019 |
-| 17 | NHL | an update, an hour later | 5 (1/2/1/1; 5) | 7, 1 | taken | 156,603 |
-| 18 | NHL | the first record again, after the update | | | taken as an update, which writes each seat's vote as the report carries it: the votes read back are the first record's again; the clock did not move | 156,639 |
-| 19 | | the college score to the probe consumer | | | taken by it; the games set untouched | 826,049 |
-| 20 | | the college score to a second reporter, same id and owner, another games set | | | refused: that set has no such game | 97,282 |
+| 14 | NFL | the start again | | | refused: a start is written once | 108,274 |
+| 15 | NBA | an update, "a vote changed, at seat 2" | 5 (1/2/1/1; 5) | 7, 1 | taken; the day-7 clock did not move | 156,675 |
+| 16 | NHL | dispute record | 5 (1/2/1/1; 5) | 7, 1 | disputed | 278,031 |
+| 17 | NHL | an update, an hour later | 5 (1/2/1/1; 5) | 7, 1 | taken | 156,627 |
+| 18 | NHL | the first record again, after the update | | | taken as an update, which writes each seat's vote as the report carries it: the votes read back are the first record's again; the clock did not move | 156,603 |
+| 19 | | the college score to the probe consumer | | | taken by it; the games set untouched | 826,037 |
+| 20 | | the college score to a second reporter, same id and owner, another games set | | | refused: that set has no such game | 97,270 |
 | | NFL | hour 24, on the pre-game answers: wait, "0 counting seats say the game will not or did not play, two needed" | 5 (1/2/1/1; 5) | 7, 1 | not sent: the program wrote nothing; the game still verified, no fee credited | |
-| 21 | NFL | hour 24, on the answers read after the game: score, "after n: two counting seats or more, the same final" | 5 (1/2/1/1; 5) | 7, 1 | scored 30-24; the fee credited; the withdrawal pays | 298,184 |
+| 21 | NFL | hour 24, on the answers read after the game: score, "after n: two counting seats or more, the same final" | 5 (1/2/1/1; 5) | 7, 1 | scored 30-24; the fee credited; the withdrawal pays | 298,196 |
 | 22 | MLB, moved | void after n, at hour 66: "two counting seats or more say the game will not or did not play, the rest silent, and no seat shows a final" | 3 (1/2/0/0; 3) | 7, 1 | voided; the fee credited | 285,258 |
 | 23 | NBA | day 7, "no three sources agree" | 0 | 7, 1 | voided; the fee credited | 282,196 |
 | 24 | NBA | the update after the end | | | refused | 108,573 |
-| 25 | NHL | day 7, "three sources or more, the same final" | 0 | 7, 1 | scored | 265,295 |
+| 25 | NHL | day 7, "three sources or more, the same final" | 0 | 7, 1 | scored | 265,259 |
 
 The payout address withdrew the five fees in three withdrawals (the college score's; the NFL
 score's; then the MLB void's, the NBA day-7 void's and the NHL day-7 score's together), and the games
@@ -137,10 +137,10 @@ same decisions and check outcomes.
   At 220,000, the first limit it routes with, the reporter and the games set at `3fe47cb` cannot
   finish the college score: the forwarder records result false and nothing is written. The retry of
   the same transmission, which the forwarder allows when the first attempt neither succeeded nor met
-  an invalid receiver, lands. A report that lands costs 156,603 to 298,184 gas here, now that the
+  an invalid receiver, lands. A report that lands costs 156,603 to 298,196 gas here, now that the
   games set stores readings (the earlier run of the day reached 299,308), and a refused one 84,941 to
-  108,741. The wrapper writes with a gas limit of 1,000,000 (`games/main.ts:112`), 3.3 times the
-  largest.
+  108,789. The wrapper writes with a gas limit of 1,000,000 (`games/main.ts:112`), at least 3.3
+  times the largest.
 * **An older dispute report after a newer one is the newest vote.** The games set takes a later
   dispute report as an update, and an update writes each seat's vote as the report carries it; the
   program reads the votes on record from state. Delivery 18 put the first hockey record after the
@@ -155,10 +155,12 @@ same decisions and check outcomes.
   own row says the game was postponed or cancelled, and a row that says it is scheduled or in play is
   an answer, not a void's vote (`scoring/src/rule.ts` lines 33–35; `decide` voids or waits at lines
   192–193). Every seat listed the game scheduled or not finished, so the program waits and writes
-  nothing. This is the one expectation in the harness that changed; the check after it now says what
-  follows from the wait (nothing written, the game still verified, no fee credited) where it said
-  what followed from the void. The game then ends as it would in production: on the answers read
-  after the game, at the same clock, the program scores it 30-24 after n.
+  nothing. Three check conditions in the harness changed: this decision; the check after it, which
+  now says what follows from the wait (nothing written, the game still verified, no fee credited)
+  where it said what followed from the void; and the fees the games set holds once the games are
+  created, five where they were four, for the MLB game. The NFL game then ends as it would in
+  production: on the answers read after the game, at the same clock, the program scores it 30-24
+  after n.
 * **Requests per run.** A start asks 10 feed requests on the saved answers, 9 of them distinct; a
   scoring run asks at most 5, and day 7 none. `requests.ts` over the 41 saved cases: a verification
   asks at most 10 and sends 9, a scoring run sends at most 5. The saved transport has no cap; the
