@@ -17,7 +17,8 @@ import { lastRecorded } from "../scoring/src/rule";
 import { chainOf } from "../scoring/test/rule-helpers";
 import INTERFACE from "./abi/IOspexGames.json";
 import { gameOfCreation, gameOfState, pageOfPlace, placeNamed, placeOf, readIdentity, readOpenGames, readReadings, readReporters, recordOfVotes, type Evm, type OpenGame } from "./chain";
-import { GAMES, REPORTER, RETIRED, creationOf, fakeChain, fakeChainOf } from "./test-helpers";
+import { readCall } from "./lib";
+import { GAMES, READINGS_ANSWER, REPORTER, RETIRED, creationOf, fakeChain, fakeChainOf } from "./test-helpers";
 
 const RECORD_A = [
 	{ seat: 1, kind: 2 as const, homeScore: 114, awayScore: 106 },
@@ -157,6 +158,9 @@ describe("the chain reads, from state", () => {
 		expect(recordOfVotes([])).toEqual(SEATS4.map((seat) => ({ seat, kind: 0, homeScore: 0, awayScore: 0 })));
 		expect(readReporters(chain, GAMES, 42n)).toEqual([REPORTER, RETIRED]);
 		expect(chain.names()).toEqual(["getGameIdentity", "getGameReadings", "getGameReporters"]);
+		// The fake answers the readings as the games set does, in its four fields: the end's readings last, empty for a game not ended.
+		const answer = fakeChainOf([c], 1).call(GAMES, readCall("getGameReadings", [42n]));
+		expect(answer).toBe(encodeAbiParameters(READINGS_ANSWER, [a.startReadings!, [RECORD_B[3], RECORD_B[1], RECORD_B[0]], BigInt(a.start! + 7_200), []]));
 	});
 
 	test("a game before any report is the creation event's identity and terms, unverified", () => {

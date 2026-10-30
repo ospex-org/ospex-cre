@@ -4,9 +4,11 @@
 // before it reaches the chain.
 
 import { describe, expect, test } from "bun:test";
-import { encodeAbiParameters, encodeEventTopics, type Hex } from "viem";
+import { encodeAbiParameters, encodeEventTopics, type AbiParameter, type Hex } from "viem";
 import type { Report } from "../scoring/src/chain";
 import INTERFACE from "./abi/IOspexGames.json";
+import { readReadings, type Evm } from "./chain";
+import { GAMES } from "./test-helpers";
 import {
 	GAME_CREATED,
 	GAME_CREATED_TOPIC,
@@ -147,6 +149,44 @@ describe("the games set's interface, pinned to its ABI file", () => {
 			expect(theirs, fn.name).toBeDefined();
 			expect([fn.name, fn.inputs.map(shape), fn.outputs.map(shape), fn.stateMutability]).toEqual([fn.name, theirs!.inputs.map(shape), theirs!.outputs!.map(shape), theirs!.stateMutability]);
 		}
+	});
+
+	test("getGameReadings is four fields in the games set's order, and the workflow declares all four; the fourth is the end's readings, a reading list as the start's is", () => {
+		const theirs = entry("function", "getGameReadings")!.outputs!;
+		expect(theirs.map((o) => [o.name, o.type])).toEqual([
+			["startReadings", "tuple[]"],
+			["votes", "tuple[]"],
+			["disputedAt", "uint64"],
+			["endReadings", "tuple[]"],
+		]);
+		expect(shape(theirs[3]!)).toEqual(shape({ ...theirs[0]!, name: "endReadings" }));
+		expect(GAMES_READS.find((f) => f.name === "getGameReadings")!.outputs.map((o) => o.name)).toEqual(["startReadings", "votes", "disputedAt", "endReadings"]);
+	});
+
+	test("the games set's answer, all four fields as the interface encodes them, decodes all four back; the readings the program is given leave the end's out", () => {
+		const four = entry("function", "getGameReadings")!.outputs! as readonly AbiParameter[];
+		const start = [
+			{ seat: 1, kind: 1, homeScore: 0, awayScore: 0 },
+			{ seat: 2, kind: 1, homeScore: 0, awayScore: 0 },
+			{ seat: 3, kind: 0, homeScore: 0, awayScore: 0 },
+			{ seat: 4, kind: 1, homeScore: 0, awayScore: 0 },
+		];
+		const votes = [
+			{ seat: 4, kind: 2, homeScore: 110, awayScore: 106 },
+			{ seat: 2, kind: 2, homeScore: 114, awayScore: 106 },
+		];
+		// Values no other field holds, so a decoder that took them anywhere would show.
+		const end = [
+			{ seat: 1, kind: 2, homeScore: 31, awayScore: 28 },
+			{ seat: 2, kind: 2, homeScore: 31, awayScore: 28 },
+			{ seat: 3, kind: 2, homeScore: 31, awayScore: 28 },
+		];
+		const data = encodeAbiParameters(four, [start, votes, 1_793_090_400n, end]);
+		// The workflow's declaration decodes all four, the end's readings last.
+		expect(readAnswer("getGameReadings", data)).toEqual([start, votes, 1_793_090_400n, end]);
+		// Decoded and unused: the readings the wrapper hands the program are the first three alone.
+		const evm: Evm = { call: () => data, latest: () => ({ number: 1n, timestamp: 1 }) };
+		expect(readReadings(evm, GAMES, 7n)).toEqual({ startReadings: start, votes, disputedAt: 1_793_090_400 });
 	});
 
 	test("the open list's row is OpenGame in the games set's order: gameId, status, start, window, day7Clock, disputedAt, league, date", () => {

@@ -4,9 +4,10 @@
 // for a real game without a chain or a feed. The reads are decoded from the calldata the wrapper sends,
 // so the fake answers the same calls the chain would, and nothing else.
 
-import { decodeFunctionData, encodeAbiParameters, type Address, type Hex } from "viem";
+import { decodeFunctionData, encodeAbiParameters, type AbiParameter, type Address, type Hex } from "viem";
 import type { ChainGame, PayoutRefused } from "../scoring/src/chain";
 import { lastRecorded } from "../scoring/src/rule";
+import INTERFACE from "./abi/IOspexGames.json";
 import type { Evm } from "./chain";
 import { GAMES_READS, type Creation } from "./lib";
 
@@ -66,6 +67,9 @@ function answerOf(name: (typeof GAMES_READS)[number]["name"], values: readonly u
 	const fn = GAMES_READS.find((f) => f.name === name)!;
 	return encodeAbiParameters(fn.outputs, values as never);
 }
+
+/** getGameReadings's outputs as the games set answers it (abi/IOspexGames.json): four fields; the workflow decodes all four and readReadings passes the first three on to the program. */
+export const READINGS_ANSWER = (INTERFACE.abi.find((e) => e.type === "function" && e.name === "getGameReadings") as { outputs: readonly AbiParameter[] }).outputs;
 
 /**
  * A chain holding some games: each one's status, start, start readings and dispute records come from
@@ -152,7 +156,9 @@ export function fakeChainOf(games: readonly ChainGame[], now: number, opts: Fake
 				case "getGameReadings": {
 					// As the games set stores them: the start report's readings whole; each seat's last vote that
 					// is not silent, in the order the seats first voted (here: the last seat first, so a fold that
-					// trusted the order would show).
+					// trusted the order would show); the dispute clock; and the end's readings, in all four fields
+					// the games set answers. The games here carry no end's readings, so that field is empty, as it
+					// is for every game the open list holds.
 					const g = gameOf((args as [bigint])[0]);
 					const start = g.startReadings === null ? [] : g.startReadings.map((r) => ({ seat: r.seat, kind: r.kind, homeScore: r.homeScore, awayScore: r.awayScore }));
 					const votes =
@@ -162,7 +168,7 @@ export function fakeChainOf(games: readonly ChainGame[], now: number, opts: Fake
 									.filter((v) => v.kind !== 0)
 									.reverse()
 									.map((v) => ({ seat: v.seat, kind: v.kind, homeScore: v.homeScore, awayScore: v.awayScore }));
-					return answerOf("getGameReadings", [start, votes, BigInt(g.dispute?.at ?? 0)]);
+					return encodeAbiParameters(READINGS_ANSWER, [start, votes, BigInt(g.dispute?.at ?? 0), []]);
 				}
 				default:
 					throw new Error(`a read the fake chain does not answer: ${functionName}`);

@@ -1,5 +1,5 @@
 {
- "source": "ospex-contracts-v2 src/games/IOspexGames.sol at 190c306aee9867158dc24f0072b28882c84155f4, as forge 0.8.26 builds it (out/IOspexGames.sol/IOspexGames.json, the abi field)",
+ "source": "ospex-contracts-v2 src/games/IOspexGames.sol at 3fe47cbc475804ede32affc414536d8b553e827b, as forge builds it with solc 0.8.26 (out/IOspexGames.sol/IOspexGames.json, the abi field)",
  "abi": [
   {
    "type": "function",
@@ -293,6 +293,33 @@
      "name": "disputedAt",
      "type": "uint64",
      "internalType": "uint64"
+    },
+    {
+     "name": "endReadings",
+     "type": "tuple[]",
+     "internalType": "struct Reading[]",
+     "components": [
+      {
+       "name": "seat",
+       "type": "uint8",
+       "internalType": "uint8"
+      },
+      {
+       "name": "kind",
+       "type": "uint8",
+       "internalType": "enum ReadingKind"
+      },
+      {
+       "name": "homeScore",
+       "type": "uint32",
+       "internalType": "uint32"
+      },
+      {
+       "name": "awayScore",
+       "type": "uint32",
+       "internalType": "uint32"
+      }
+     ]
     }
    ],
    "stateMutability": "view"
