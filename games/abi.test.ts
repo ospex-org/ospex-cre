@@ -1,11 +1,10 @@
 // The on-chain shapes, pinned: the one report shape as the reporter decodes it (abi.encode(Report) in
 // Solidity, computed with cast), the games set's event topics and read selectors, and the decoders
 // of the two events the workflow reads. Any drift in a field's order, width or signedness fails here
-// before it reaches the chain. The one output the workflow leaves undecoded is named here too:
-// getGameReadings's fourth, the end's readings.
+// before it reaches the chain.
 
 import { describe, expect, test } from "bun:test";
-import { decodeAbiParameters, encodeAbiParameters, encodeEventTopics, type AbiParameter, type Hex } from "viem";
+import { encodeAbiParameters, encodeEventTopics, type AbiParameter, type Hex } from "viem";
 import type { Report } from "../scoring/src/chain";
 import INTERFACE from "./abi/IOspexGames.json";
 import { readReadings, type Evm } from "./chain";
@@ -36,15 +35,6 @@ function shape(p: Param): unknown {
 	return { name: p.name ?? "", type: p.type, indexed: p.indexed ?? false, components: (p.components ?? []).map(shape) };
 }
 const entry = (type: string, name: string) => INTERFACE.abi.find((e) => e.type === type && e.name === name) as { inputs: Param[]; outputs?: Param[]; stateMutability?: string } | undefined;
-
-/**
- * The interface's outputs the workflow does not decode, by read, named. Only trailing ones: decoding
- * the leading fields of an answer reads the same head words the whole answer has, so the fields kept
- * decode as they would with all of them. getGameReadings's fourth, `endReadings`, is the readings of
- * the score or void that ended the game, empty until it ends; the program decides nothing on a game
- * that has ended, so no decision has one to read.
- */
-const NOT_DECODED: Readonly<Record<string, readonly string[]>> = { getGameReadings: ["endReadings"] };
 
 // cast abi-encode "f((uint256,uint8,uint64,uint32,uint32,(uint8,uint8,uint32,uint32)[],address))" ...
 const SCORE_GOLDEN =
@@ -148,7 +138,7 @@ describe("the one report shape", () => {
 });
 
 describe("the games set's interface, pinned to its ABI file", () => {
-	test("every read the workflow makes is the interface's, inputs and outputs field for field in its order, an output left undecoded only at the end and only where named; the coin is the games set's own", () => {
+	test("every read the workflow makes is the interface's, inputs and outputs field for field in its order; the coin is the games set's own", () => {
 		for (const fn of GAMES_READS) {
 			if (fn.name === "i_token") {
 				// A public immutable of the games set, not in its interface: its selector is pinned below.
@@ -157,13 +147,11 @@ describe("the games set's interface, pinned to its ABI file", () => {
 			}
 			const theirs = entry("function", fn.name);
 			expect(theirs, fn.name).toBeDefined();
-			const kept = theirs!.outputs!.slice(0, fn.outputs.length);
-			const left = theirs!.outputs!.slice(fn.outputs.length).map((o) => o.name ?? "");
-			expect([fn.name, fn.inputs.map(shape), fn.outputs.map(shape), fn.stateMutability, left]).toEqual([fn.name, theirs!.inputs.map(shape), kept.map(shape), theirs!.stateMutability, NOT_DECODED[fn.name] ?? []]);
+			expect([fn.name, fn.inputs.map(shape), fn.outputs.map(shape), fn.stateMutability]).toEqual([fn.name, theirs!.inputs.map(shape), theirs!.outputs!.map(shape), theirs!.stateMutability]);
 		}
 	});
 
-	test("getGameReadings is four fields in the games set's order; the workflow decodes the first three, and the fourth is the end's readings, a reading list as the start's is", () => {
+	test("getGameReadings is four fields in the games set's order, and the workflow declares all four; the fourth is the end's readings, a reading list as the start's is", () => {
 		const theirs = entry("function", "getGameReadings")!.outputs!;
 		expect(theirs.map((o) => [o.name, o.type])).toEqual([
 			["startReadings", "tuple[]"],
@@ -172,10 +160,10 @@ describe("the games set's interface, pinned to its ABI file", () => {
 			["endReadings", "tuple[]"],
 		]);
 		expect(shape(theirs[3]!)).toEqual(shape({ ...theirs[0]!, name: "endReadings" }));
-		expect(GAMES_READS.find((f) => f.name === "getGameReadings")!.outputs.map((o) => o.name)).toEqual(["startReadings", "votes", "disputedAt"]);
+		expect(GAMES_READS.find((f) => f.name === "getGameReadings")!.outputs.map((o) => o.name)).toEqual(["startReadings", "votes", "disputedAt", "endReadings"]);
 	});
 
-	test("the games set's answer, all four fields as the interface encodes them, reads as its first three; the end's readings reach no read", () => {
+	test("the games set's answer, all four fields as the interface encodes them, decodes all four back; the readings the program is given leave the end's out", () => {
 		const four = entry("function", "getGameReadings")!.outputs! as readonly AbiParameter[];
 		const start = [
 			{ seat: 1, kind: 1, homeScore: 0, awayScore: 0 },
@@ -194,10 +182,9 @@ describe("the games set's interface, pinned to its ABI file", () => {
 			{ seat: 3, kind: 2, homeScore: 31, awayScore: 28 },
 		];
 		const data = encodeAbiParameters(four, [start, votes, 1_793_090_400n, end]);
-		// The bytes carry the end's readings: the interface's own outputs decode them back.
-		expect(decodeAbiParameters(four, data)[3]).toEqual(end);
-		// The workflow's outputs give the first three, and nothing of the fourth.
-		expect(readAnswer("getGameReadings", data)).toEqual([start, votes, 1_793_090_400n]);
+		// The workflow's declaration decodes all four, the end's readings last.
+		expect(readAnswer("getGameReadings", data)).toEqual([start, votes, 1_793_090_400n, end]);
+		// Decoded and unused: the readings the wrapper hands the program are the first three alone.
 		const evm: Evm = { call: () => data, latest: () => ({ number: 1n, timestamp: 1 }) };
 		expect(readReadings(evm, GAMES, 7n)).toEqual({ startReadings: start, votes, disputedAt: 1_793_090_400 });
 	});

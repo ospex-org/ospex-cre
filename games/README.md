@@ -107,10 +107,10 @@ full read per tick per shard, so twelve finals an hour per shard, and one verifi
 **Waiting.** The games set's change that stores a game's identity, its readings and the open list is
 merged on contracts-v2 main (`3fe47cb`). The interface's ABI at that commit, as forge builds it, is
 committed as `abi/IOspexGames.json`, and `abi.test.ts` pins every read and the open list's row to it,
-field for field in its order, so a row the games set changes fails the suite, never the tick. One
-field is left undecoded, and the test names it: `getGameReadings` gives four and the workflow reads
-the first three, since the fourth, `endReadings`, is empty until the game ends and the program
-decides nothing on a game that has ended. A page whose rows are shorter than the interface's eight
+field for field in its order, so a row the games set changes fails the suite, never the tick.
+`getGameReadings` gives four fields and the workflow decodes all four; the fourth, `endReadings`,
+goes unused, since it is empty until the game ends and the program decides nothing on a game that
+has ended. A page whose rows are shorter than the interface's eight
 words is refused whole, naming the row, and the
 tick reads nothing (`chain.ts`, `checkRows`). The
 rehearsal still reads the games set at contracts-v2 main from its events, on a fork
