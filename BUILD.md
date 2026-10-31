@@ -110,6 +110,25 @@ on 27 Oct 2026 (Windows 11, Bun 1.3.14, CLI v1.22.0), with stand-in addresses: c
 in `AGREE` (`scoring/src/rule.ts`, `afterN` 2 to 3) moved the binary hash and the id, and restoring
 it brought both back.
 
+## CLI versions
+
+Two versions of the CRE CLI are used, each for its own commands.
+
+* **`cre-1.22.0` compiles, hashes, deploys and simulates.** The registered workflow's binary hash,
+  config hash and id are bound to v1.22.0's build. Don't run `cre update` (it also times out on
+  Starlink); install a version by hand.
+* **`cre`, v1.39.0, is for the Vault secrets commands only.** On v1.22.0, `secrets create` and
+  `secrets list` send the allowlist transaction but fail to decode the reply
+  (`proto: unknown field "requestId"`).
+* **`simulate` and `deploy` print different binary hashes for the same source.** `simulate` prints
+  the SHA-256 of the raw wasm; `deploy` and `workflow hash` print the SHA-256 of the
+  Brotli-compressed wasm.
+* **On Windows, run in Git Bash.** Run the fingerprint step as
+  `CRE_BIN=cre-1.22.0 bun build/fingerprint.ts …`. The script runs the CLI that `CRE_BIN` names, or
+  `cre` when it is unset, and prints which binary it ran and the version that binary reports. Pass
+  paths as `"$(cygpath -w …)"`, and bridge the seat keys in front of the command as
+  `SEAT1_KEY="$OSPEX_SEAT1_KEY" …`: names only, never values.
+
 ## Traps
 
 * **`cre workflow hash` without `--public_key` hashes under the wrong owner.** On v1.22.0 the

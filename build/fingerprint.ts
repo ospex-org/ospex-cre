@@ -3,6 +3,10 @@
 //
 //   bun build/fingerprint.ts build/v2-osverify.json
 //   bun build/fingerprint.ts <spec.json> --set receiverAddress=0x... [--set k=v ...] [--owner 0x...] [--json]
+//   CRE_BIN=cre-1.22.0 bun build/fingerprint.ts <spec.json> ...
+//
+// The CLI it runs is CRE_BIN, or `cre` when CRE_BIN is unset or empty. Its output names that binary
+// and the first line of the binary's `version` output.
 //
 // It writes the config from the committed template (build/config.ts), then runs the CRE CLI's
 // read-only `cre workflow hash`, which compiles the workflow from source and hashes it as a deploy
@@ -69,20 +73,22 @@ const configPath = join(outDir, `${spec.name}.config.json`);
 writeFileSync(configPath, config);
 
 // The tools. A different version is reported, not refused: the id comparison below is the check.
+// CRE_BIN names the CLI, for a machine where `cre` is not the version the spec pins.
+const creBin = process.env.CRE_BIN || "cre";
 const version = (cmd: string, flag: string): string => {
 	const r = spawnSync(cmd, [flag], { encoding: "utf8", shell: process.platform === "win32" });
 	return `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split(/\r?\n/)[0] ?? "";
 };
-const creVersion = version("cre", "version");
+const creVersion = version(creBin, "version");
 const bunVersion = version("bun", "--version");
 const toolNotes: string[] = [];
-if (!creVersion.includes(spec.tools.cre)) toolNotes.push(`cre is "${creVersion}", the spec pins ${spec.tools.cre}`);
+if (!creVersion.includes(spec.tools.cre)) toolNotes.push(`${creBin} is "${creVersion}", the spec pins ${spec.tools.cre}`);
 if (bunVersion !== spec.tools.bun) toolNotes.push(`bun is ${bunVersion}, the spec pins ${spec.tools.bun}`);
 
 // The CLI's production target reads an RPC URL from the environment; `hash` never calls it.
 const env = { ...process.env, ETH_MAINNET_RPC_URL: process.env.ETH_MAINNET_RPC_URL ?? "https://ethereum-rpc.publicnode.com" };
 const run = spawnSync(
-	"cre",
+	creBin,
 	["workflow", "hash", `./${spec.workflow}`, "--target", spec.target, "--non-interactive", "--public_key", owner, "--config", configPath],
 	{ cwd: root, env, encoding: "utf8", shell: process.platform === "win32", maxBuffer: 16 * 1024 * 1024 },
 );
@@ -91,7 +97,7 @@ const grab = (label: string): string | null => out.match(new RegExp(`${label} ha
 const binary = grab("Binary");
 const cliConfig = grab("Config");
 const workflow = grab("Workflow");
-if (run.status !== 0 || binary === null || cliConfig === null || workflow === null) fail(`cre workflow hash did not finish:\n${out.trim()}`);
+if (run.status !== 0 || binary === null || cliConfig === null || workflow === null) fail(`${creBin} workflow hash did not finish:\n${out.trim()}`);
 if (cliConfig !== configSha) fail(`the CLI hashed a config other than the one written (${cliConfig} vs ${configSha})`);
 
 const id = `0x${workflow}`;
@@ -106,7 +112,7 @@ const result = {
 	name: spec.name,
 	owner,
 	config: values,
-	tools: { cre: creVersion, bun: bunVersion },
+	tools: { cre: creVersion, creBin, bun: bunVersion },
 	hashes: { config: configSha, binary, id },
 	matches: Object.fromEntries(checks.map(([k, got, want]) => [k, want === undefined ? "no expectation" : got === want])),
 	notes: toolNotes,
@@ -115,6 +121,7 @@ if (args.json) console.log(JSON.stringify(result, null, 2));
 else {
 	console.log(`${spec.name}: ${id}`);
 	for (const [k, got, want] of checks) console.log(`  ${k.padEnd(7)} ${got}  ${want === undefined ? "(no expectation)" : got === want ? "matches" : `DIFFERS from ${want}`}`);
+	console.log(`  ${"cli".padEnd(7)} ${creBin}, ${JSON.stringify(creVersion)}`);
 	for (const n of toolNotes) console.log(`  note: ${n}`);
 }
 process.exit(mismatched.length === 0 ? 0 : 1);
