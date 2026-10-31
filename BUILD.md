@@ -123,8 +123,11 @@ Two versions of the CRE CLI are used, each for its own commands.
 * **`simulate` and `deploy` print different binary hashes for the same source.** `simulate` prints
   the SHA-256 of the raw wasm; `deploy` and `workflow hash` print the SHA-256 of the
   Brotli-compressed wasm.
-* **On Windows, run in Git Bash.** Pass paths as `"$(cygpath -w …)"`, and bridge the seat keys in
-  front of the command as `SEAT1_KEY="$OSPEX_SEAT1_KEY" …`: names only, never values.
+* **On Windows, run in Git Bash.** Run the fingerprint step as
+  `CRE_BIN=cre-1.22.0 bun build/fingerprint.ts …`. The script runs the CLI that `CRE_BIN` names, or
+  `cre` when it is unset, and prints which binary it ran and the version that binary reports. Pass
+  paths as `"$(cygpath -w …)"`, and bridge the seat keys in front of the command as
+  `SEAT1_KEY="$OSPEX_SEAT1_KEY" …`: names only, never values.
 
 ## Traps
 
