@@ -41,7 +41,7 @@ staging-settings:
 # ==========================================================================
 production-settings:
   account:
-    workflow-owner-address: "0x40047BAFcdEd16C938058b7b67186299a2893561"
+    workflow-owner-address: "0x89fe160bBBe59eAF428f23F095B71E5C0EdCDfa3"
   rpcs:
     - chain-name: polygon-mainnet
       url: https://polygon-bor-rpc.publicnode.com
