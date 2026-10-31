@@ -1,15 +1,20 @@
 {
   "name": "osgames",
-  "what": "v3's games workflow, the wrapper on the scoring program; its id is what the games set's Chainlink reporter fixes. Every address here is a placeholder: a build sets the reporter, the games set, the secret owner and the payout wallet with --set, and the owner with --owner, before the id is computed",
+  "what": "v3's games workflow, the wrapper on the scoring program; its id is what the games set's Chainlink reporter fixes. The addresses are the deploy's: the reporter and the games set as the deploy script predicted them from the deployer's nonce on 31 Oct 2026 (k + 1 and k + 2), the workflow owner, the secret owner (the same wallet) and the payout wallet. The committed template keeps its placeholders; this spec sets every address over it, and names the owner",
   "workflow": "games",
   "target": "production-settings",
-  "owner": "0x0000000000000000000000000000000000000000",
+  "owner": "0x89fe160bBBe59eAF428f23F095B71E5C0EdCDfa3",
   "configTemplate": "games/config.production.example.json",
   "config": {
-    "receiverAddress": "0x0000000000000000000000000000000000000000",
-    "eventAddress": "0x0000000000000000000000000000000000000000",
-    "secretOwner": "0x0000000000000000000000000000000000000000",
-    "payoutAddress": "PAYOUT_ADDRESS_NOT_SET"
+    "receiverAddress": "0x2Fa61B65Cd1CC04b2B910fB665FCc48237561c01",
+    "eventAddress": "0x1b424d0dDB5C4aa4551845898093ae8D58052fD3",
+    "secretOwner": "0x89fe160bBBe59eAF428f23F095B71E5C0EdCDfa3",
+    "payoutAddress": "0x5215b234F68159aE80699DA7C722BB949a4f399C"
   },
-  "tools": { "cre": "v1.22.0", "bun": "1.3.14" }
+  "tools": { "cre": "v1.22.0", "bun": "1.3.14" },
+  "expect": {
+    "config": "752fa64b5aa480fd382b419622a193b780279ffc595ec3565ed2f665402b1905",
+    "binary": "817f4734bbe65b2af0db614a15d5237f4a3226c817094e2ee0a48a979025a41e",
+    "id": "0x000411d08fb9976d6e7c8695b591783fbc060b1f1648dd8113271fb618193119"
+  }
 }

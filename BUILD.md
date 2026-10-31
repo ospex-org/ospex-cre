@@ -75,11 +75,31 @@ moves; restore it, and the id comes back.
 
 ## The games workflow
 
-The v3 workflow in `games/` is rebuilt from `build/v3-osgames.json` the same way. Every address in
-that spec and in the committed template is a placeholder, so a build names them all, and the owner:
+The v3 workflow in `games/` is rebuilt from `build/v3-osgames.json` the same way. The spec carries
+the deploy's addresses (the reporter and the games set as the deploy script predicted them from the
+deployer's nonce on 31 Oct 2026, the workflow owner, the secret owner, which is the same wallet, and
+the payout wallet) and the hashes expected of them. The committed template keeps its placeholders;
+the spec's values are set over it, and the owner is given:
 
 ```bash
-bun build/fingerprint.ts build/v3-osgames.json --set receiverAddress=0x... --set eventAddress=0x...   --set secretOwner=0x... --set payoutAddress=0x... --owner 0x... --json
+bun build/fingerprint.ts build/v3-osgames.json --owner 0x89fe160bBBe59eAF428f23F095B71E5C0EdCDfa3
+```
+
+Expected for v3's games workflow, `osgames`, at the commit that set these values:
+
+| | |
+|---|---|
+| config | `752fa64b5aa480fd382b419622a193b780279ffc595ec3565ed2f665402b1905` (397 bytes) |
+| binary | `817f4734bbe65b2af0db614a15d5237f4a3226c817094e2ee0a48a979025a41e` |
+| id | `0x000411d08fb9976d6e7c8695b591783fbc060b1f1648dd8113271fb618193119` |
+
+A build with other addresses, such as the rehearsal's stand-ins (`games/rehearsal/README.md`), names
+each with `--set` and the owner with `--owner`; the spec's expected values then do not apply, since
+they belong to the spec's own inputs:
+
+```bash
+bun build/fingerprint.ts build/v3-osgames.json --set receiverAddress=0x... --set eventAddress=0x... \
+  --set secretOwner=0x... --set payoutAddress=0x... --owner 0x... --json
 ```
 
 The template also carries the tick's schedule and shard count. They are not set on the command line:

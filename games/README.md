@@ -44,7 +44,7 @@ is in it, since those live in the program, inside the fingerprint.
 
 Built: the creation event as the EVM log trigger, so a new game is verified and its start written;
 the tick, a cron on the DON in shards, for the ends; the chain reads from state; the report writer;
-the fingerprinted files with the payout as a named placeholder; the never-line tests; and the fork
+the fingerprinted files, the deploy's addresses and the payout wallet in `../build/v3-osgames.json`; the never-line tests; and the fork
 delivery (`rehearsal/`), every report kind through the production forwarder's own bytecode into the
 games set, with the game's state as the receipt.
 
@@ -125,5 +125,6 @@ cd games && bun install --frozen-lockfile && bun run typecheck && bun test
 cd .. && cre workflow build ./games --target production-settings
 ```
 
-The id is rebuilt from `build/v3-osgames.json` the way `BUILD.md` describes, with every address set
-on the command line and the owner given; nothing in the committed template is a real address.
+The id is rebuilt from `build/v3-osgames.json` the way `BUILD.md` describes: the spec carries the
+deploy's addresses, the owner and the hashes expected of them; nothing in the committed template is a
+real address, the spec's values are set over it.
