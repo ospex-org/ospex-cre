@@ -26,14 +26,16 @@ const VALID = {
 	payoutAddress: "0x00000000000000000000000000000000000a1a1a",
 	schedule: "0 */5 * * * *",
 	shards: 3,
+	runLineUrl: "https://db.example.test/rest/v1/run_lines",
+	runLinePublishableKey: "sb_publishable_test-stand-in",
 };
 
 describe("never: nothing outside the fingerprint chooses the feeds or the counts", () => {
-	test("the config is seven deploy values and the tick's shape, and refuses any other field", () => {
+	test("the config is seven deploy values, the tick's shape and the run-line's route, and refuses any other field", () => {
 		const ok = configSchema.safeParse(VALID);
 		expect(ok.success).toBe(true);
 		expect(Object.keys(ok.success ? ok.data : {}).sort()).toEqual(
-			["chainId", "chainSelectorName", "eventAddress", "payoutAddress", "receiverAddress", "schedule", "secretNamespace", "secretOwner", "shards"],
+			["chainId", "chainSelectorName", "eventAddress", "payoutAddress", "receiverAddress", "runLinePublishableKey", "runLineUrl", "schedule", "secretNamespace", "secretOwner", "shards"],
 		);
 		for (const extra of [{ seats: [1, 2] }, { agree: 2 }, { counting: [1, 2, 3] }, { feeds: {} }, { rule: "afterN" }, { duration: { nba: 1 } }, { probe: 3 }, { reserve: 10 }]) {
 			const r = configSchema.safeParse({ ...VALID, ...extra });

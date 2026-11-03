@@ -1,8 +1,8 @@
 // The tick: what one cron fire does for its shard of the open list, under the platform's quotas. The
 // clocks (hour 24, day 7, the hour for a disputed game), the probe at seat 3 by its hint after the
 // game's identity is read, the full read on a final or a clock, one per tick, the verification on the
-// hour's first tick, and the budgets: never more than 15 chain reads or 15 feed requests in one tick,
-// whatever the open list holds.
+// hour's first tick, and the budgets: never more than 15 chain reads or 14 feed requests in one tick,
+// whatever the open list holds (the fifteenth request is the run-line's push).
 //
 // The never-line's tick half: a probe never writes, and the full read writes only what the program
 // decided. The break that turns it red (tick.ts, probeOne): after `if (!read) return;`, any bytes
@@ -25,7 +25,7 @@ import { PAYOUT, chainOf } from "../scoring/test/rule-helpers";
 import type { HttpRequest, HttpResponse } from "../scoring/src/types";
 import { encodeAbiParameters } from "viem";
 import { placeNamed, type OpenGame } from "./chain";
-import { CLOCK_WINDOW, EXPECTED_DURATION, HOURLY_TICK, READS_PER_EXECUTION, REQUESTS_PER_EXECUTION, VERIFY_BEFORE, VERIFY_NEAR, decodeReport, keysFor, readCall } from "./lib";
+import { CLOCK_WINDOW, EXPECTED_DURATION, FEED_REQUESTS, HOURLY_TICK, READS_PER_EXECUTION, VERIFY_BEFORE, VERIFY_NEAR, decodeReport, keysFor, readCall } from "./lib";
 import { GAMES, fakeChainOf, recordingWriter } from "./test-helpers";
 import { countsOf, dueOf, hourCount, onTheHour, otherCount, runTick, sameVote, tickOfHour, type TickDeps, type TickResult } from "./tick";
 
@@ -334,12 +334,12 @@ describe("one tick", () => {
 		expect(next.result.fullRead?.gameId).not.toBe(read);
 	});
 
-	test("the budgets on open lists of 0, 1, 5, 14, 15, 16, 40 and 130 games, all final or none: never past 15 reads or 15 requests, one full read, the rest waiting", () => {
+	test("the budgets on open lists of 0, 1, 5, 14, 15, 16, 40 and 130 games, all final or none: never past 15 reads or the feeds' 14 requests, one full read, the rest waiting", () => {
 		for (const count of [0, 1, 5, 14, 15, 16, 40, 130]) {
 			for (const says of ["live", "final"] as const) {
 				const games = Array.from({ length: count }, (_, i) => gameOf(i + 1, { start: START + i }));
 				const f = tick(games, PROBING, { says: () => says });
-				expect({ count, says, under: f.result.reads <= READS_PER_EXECUTION && f.result.requests <= REQUESTS_PER_EXECUTION }).toEqual({ count, says, under: true });
+				expect({ count, says, under: f.result.reads <= READS_PER_EXECUTION && f.result.requests <= FEED_REQUESTS }).toEqual({ count, says, under: true });
 				// The list's total, and the pages a tick reads: its first, and the one the other ticks' count names.
 				const own = Math.ceil(count / 64);
 				const headPage = own <= 1 ? 0 : placeNamed(otherCount(PROBING, PERIOD), own, 64) % own;
@@ -644,9 +644,9 @@ describe("the verification on the hour's first tick", () => {
 		const chain = fakeChainOf([g], at);
 		const writer = recordingWriter();
 		const cut = runTick({ evm: chain, games: GAMES, payout: PAYOUT, keys: KEYS, send: answers, write: writer.write, score: sender(20), period: PERIOD, shard: { index: 0, count: 1 } });
-		expect(cut.fullRead).toEqual({ gameId: "1", why: "hour 24", run: null, error: "the run's 15 requests are used", cut: true });
-		expect(cut.lines).toContain("full read, hour 24: game 1 cut: the run's 15 requests are used");
-		expect([writer.written.length, cut.requests]).toEqual([0, 15]);
+		expect(cut.fullRead).toEqual({ gameId: "1", why: "hour 24", run: null, error: "the run's 14 requests are used", cut: true });
+		expect(cut.lines).toContain("full read, hour 24: game 1 cut: the run's 14 requests are used");
+		expect([writer.written.length, cut.requests]).toEqual([0, 14]);
 		// The same stand-in within the count: the score is written, and the full read is not a cut.
 		const ok = runTick({ evm: fakeChainOf([g], at), games: GAMES, payout: PAYOUT, keys: KEYS, send: answers, write: writer.write, score: sender(5), period: PERIOD, shard: { index: 0, count: 1 } });
 		expect([ok.fullRead?.cut, ok.fullRead?.run?.decision.action, writer.written.length, ok.requests]).toEqual([false, "score", 1, 5]);

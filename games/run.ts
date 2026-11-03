@@ -12,6 +12,7 @@ import type { Address, Hex } from "viem";
 import type { Decision, ChainGame, Report } from "../scoring/src/chain";
 import type { Keys } from "../scoring/src/keys";
 import { cleanLine } from "../scoring/src/line";
+import type { Observer } from "../scoring/src/observe";
 import { scoreGameSync } from "../scoring/src/program";
 import type { HttpRequest, HttpResponse } from "../scoring/src/types";
 import { readPayoutRefused, type Evm } from "./chain";
@@ -32,6 +33,8 @@ export interface Deps {
 	readonly write: (report: Hex) => string | null;
 	/** The program. Tests may hand in a stand-in; the workflow hands in nothing and gets the real one. */
 	readonly score?: typeof scoreGameSync;
+	/** Told how each read of a seat ended, for the execution's run-line (runline.ts); it decides nothing. */
+	readonly observe?: Observer;
 }
 
 /** What one run did. */
@@ -55,7 +58,7 @@ export function runGame(deps: Deps, game: Omit<ChainGame, "payoutRefused">, repo
 	const held: ChainGame = { ...game, payoutRefused: refused };
 	// The chain's clock: read here, or handed in by a tick that read it already for this run.
 	const now = clock ?? deps.evm.latest().timestamp;
-	const outcome = (deps.score ?? scoreGameSync)(held, deps.keys, deps.payout, now, deps.send);
+	const outcome = (deps.score ?? scoreGameSync)(held, deps.keys, deps.payout, now, deps.send, deps.observe);
 	if (outcome.report === null) return { game: held, now, decision: outcome.decision, report: null, written: null, txHash: null };
 	const written = encodeReport(outcome.report);
 	const txHash = deps.write(written);

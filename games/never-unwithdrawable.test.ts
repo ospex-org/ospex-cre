@@ -32,6 +32,8 @@ const VALID = {
 	payoutAddress: PAYOUT,
 	schedule: "0 */5 * * * *",
 	shards: 3,
+	runLineUrl: "https://db.example.test/rest/v1/run_lines",
+	runLinePublishableKey: "sb_publishable_test-stand-in",
 };
 
 describe("never: the dollar goes where it cannot be withdrawn", () => {
