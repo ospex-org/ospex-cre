@@ -75,7 +75,11 @@ moves; restore it, and the id comes back.
 
 ## The games workflow
 
-The v3 workflow in `games/` is rebuilt from `build/v3-osgames.json` the same way. The spec carries
+The live v3 workflow, `osgames`, is rebuilt from `build/v3-osgames.json` the same way, at the commit
+that set its values (`ad8d194`, merged as `d8263c2`; main `1058f20` changed nothing under `games/` or
+`scoring/`). Later commits build `osgames2`, the workflow with the run-line, registered beside it under
+its own name: at those commits `games/workflow.yaml` names `osgames2`, so the fingerprint script refuses
+the `osgames` spec there, and `osgames2` gets its own spec at its deploy. The spec carries
 the deploy's addresses (the reporter and the games set as the deploy script predicted them from the
 deployer's nonce on 31 Oct 2026, the workflow owner, the secret owner, which is the same wallet, and
 the payout wallet) and the hashes expected of them. The committed template keeps its placeholders;
