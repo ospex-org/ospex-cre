@@ -6,8 +6,10 @@
 // main.ts's own two handlers against the stand-in SDK (stand-in-sdk.ts), with a canary in every place a
 // secret could come from: each seat's key in the vault (the spare's rides in its request's query, the
 // one key the workflow holds), the push's key in the vault, and every feed answer's headers echoing the
-// URL and the keys it received, the spare's quota header among them. The push meets an endpoint that
-// takes it, one that refuses it echoing the key, and one whose failure echoes everything it was sent.
+// URL and the keys it received, the spare's quota header among them. The push's key comes in three
+// shapes (a signed token, an opaque string, a secret key), and the push meets an endpoint that takes it,
+// one that refuses it echoing the key, and one whose failure echoes everything it was sent, the key
+// bare among it.
 // No canary reaches a row, the push's body or URL, a header the workflow built, or any line. The push's
 // key leaves in its one header, filled by the enclave (the control: it does travel, there and only
 // there). And the config takes the project's publishable key and nothing else.
@@ -17,9 +19,9 @@
 //     return WHOLE.test(v) ? Number(v) : null;
 //     ->  return WHOLE.test(v) ? Number(v) : (v as unknown as number);
 //   with which the spare's echoed key lands in its row, on the log and in the push;
-//   runline.ts, said: a failed push's words kept as they came,
-//     const text = cleanLine(message, secrets).replace(JWT, ...)...;
-//     ->  const text = message;
+//   runline.ts, causeOf: a failed push's words written as they came,
+//     return CAUSES.find(([pattern]) => pattern.test(message))?.[1] ?? "other";
+//     ->  return message;
 //   with which the push's key and the spare's key land on the push's line;
 //   lib.ts, PUBLISHABLE_KEY: any of the project's keys taken,
 //     /^sb_publishable_[A-Za-z0-9_-]{8,}$/  ->  /^sb_[A-Za-z0-9_-]{8,}$/
@@ -50,17 +52,24 @@ const CONFIG: Config = {
 	runLinePublishableKey: "sb_publishable_secrets-test-stand-in",
 };
 
-/** The push's key as the role's key would look: a signed token, its parts canaries of their own. */
-const PUSH_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoicnVuX2xpbmVfd3JpdGVyIn0.REVIEW_PUSH_CANARY";
-const VAULT: Readonly<Record<string, string>> = {
+/**
+ * The push's key in three shapes: a signed token, as the role's key will be; an opaque string; and a
+ * secret key, which the vault must never hold but a test can. Each part is a canary of its own.
+ */
+const PUSH_KEYS = [
+	"eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoicnVuX2xpbmVfd3JpdGVyIn0.REVIEW_PUSH_CANARY_TOKEN",
+	"REVIEW_PUSH_CANARY_OPAQUE",
+	"sb_secret_REVIEW_PUSH_CANARY_SECRET",
+] as const;
+const SEAT_KEYS: Readonly<Record<string, string>> = {
 	SEAT1_KEY: "REVIEW_SEAT1_CANARY",
 	SEAT2_KEY: "REVIEW_SEAT2_CANARY",
 	SEAT3_KEY: "REVIEW_SEAT3_CANARY",
 	SEAT4_KEY: "REVIEW_SEAT4_CANARY",
-	RUN_LINE_KEY: PUSH_KEY,
 };
-/** Everything that must never be written: each key, the push key's parts, and the feeds' own words and addresses. */
-const CANARIES = [...Object.values(VAULT), "REVIEW_PUSH_CANARY", "eyJhbGciOiJIUzI1NiJ9", "eyJyb2xlIjoicnVuX2xpbmVfd3JpdGVyIn0", "REVIEW_BODY_CANARY", "apiKey="];
+const vaultOf = (pushKey: string): Readonly<Record<string, string>> => ({ ...SEAT_KEYS, RUN_LINE_KEY: pushKey });
+/** Everything that must never be written: each key, the push keys' parts, and the feeds' own words and addresses. */
+const CANARIES = [...Object.values(SEAT_KEYS), ...PUSH_KEYS, "REVIEW_PUSH_CANARY", "eyJhbGciOiJIUzI1NiJ9", "eyJyb2xlIjoicnVuX2xpbmVfd3JpdGVyIn0", "REVIEW_BODY_CANARY", "apiKey="];
 
 const sdk = await standIn(CONFIG);
 
@@ -70,8 +79,9 @@ const PUSHES: readonly Push[] = ["taken", "refused, echoing the key", "failed, e
 function endpoint(mode: Push): World["push"] {
 	return (req: PushSeen) => {
 		if (mode === "taken") return { status: 201, body: "" };
-		if (mode === "refused, echoing the key") return { status: 401, body: JSON.stringify({ code: "PGRST301", message: `bad token ${req.filled.Authorization}`, hint: VAULT.SEAT4_KEY }) };
-		throw new Error(`upstream refused ${req.filled.Authorization} for ${req.url} with ${JSON.stringify(req.filled)}; the spare said apiKey=${VAULT.SEAT4_KEY} at https://feed.example.test/x?apiKey=${VAULT.SEAT4_KEY}`);
+		if (mode === "refused, echoing the key") return { status: 401, body: JSON.stringify({ code: "PGRST301", message: `bad token ${req.filled.Authorization}`, hint: SEAT_KEYS.SEAT4_KEY }) };
+		const bare = req.filled.Authorization.replace(/^Bearer /, "");
+		throw new Error(`upstream refused ${req.filled.Authorization} (key ${bare}) for ${req.url} with ${JSON.stringify(req.filled)}; the spare said apiKey=${SEAT_KEYS.SEAT4_KEY} at https://feed.example.test/x?apiKey=${SEAT_KEYS.SEAT4_KEY}`);
 	};
 }
 
@@ -83,7 +93,7 @@ function endpoint(mode: Push): World["push"] {
 function echoing(now: number, quota: string): World["feed"] {
 	const t = saved(undefined, now);
 	return (seat: Seat, req: HttpRequest) => {
-		const a = t.send({ ...req, url: req.url.split(VAULT.SEAT4_KEY).join(KEY) });
+		const a = t.send({ ...req, url: req.url.split(SEAT_KEYS.SEAT4_KEY).join(KEY) });
 		const headers: Record<string, string[]> = { "x-echo-url": [req.url], "x-echo-keys": [Object.values(req.headers).join(" ")], "x-echo-body": ["REVIEW_BODY_CANARY"] };
 		if (seat === 4) headers["X-Requests-Remaining"] = [quota];
 		return { ...a, headers };
@@ -95,19 +105,22 @@ const NFL: ChainGame = { ...chainOf("nfl not final"), id: "1", status: "unverifi
 
 const rowsOf = (r: Run): Row[] => r.logs.filter((l) => l.startsWith("run-line {")).map((l) => JSON.parse(l.slice("run-line ".length)) as Row);
 
-/** The two handlers, each with the quota header as given and each push. */
-function runs(quota: string): { what: string; run: Run }[] {
-	const out: { what: string; run: Run }[] = [];
-	for (const push of PUSHES) {
-		out.push({ what: `tick, push ${push}`, run: sdk.handle(1, tickPayload(LATE), { evm: fakeChainOf([SIXERS], LATE), vault: VAULT, feed: echoing(LATE, quota), push: endpoint(push), writeError: null }) });
-		out.push({ what: `creation, push ${push}`, run: sdk.handle(0, creationLog(NFL), { evm: fakeChainOf([NFL], NOW), vault: VAULT, feed: echoing(NOW, quota), push: endpoint(push), writeError: null }) });
+/** The two handlers, each with the quota header as given, each shape of the push's key and each push. */
+function runs(quota: string, keys: readonly string[] = PUSH_KEYS): { what: string; pushKey: string; run: Run }[] {
+	const out: { what: string; pushKey: string; run: Run }[] = [];
+	for (const pushKey of keys) {
+		const vault = vaultOf(pushKey);
+		for (const push of PUSHES) {
+			out.push({ what: `tick, key ${pushKey.slice(0, 12)}, push ${push}`, pushKey, run: sdk.handle(1, tickPayload(LATE), { evm: fakeChainOf([SIXERS], LATE), vault, feed: echoing(LATE, quota), push: endpoint(push), writeError: null }) });
+			out.push({ what: `creation, key ${pushKey.slice(0, 12)}, push ${push}`, pushKey, run: sdk.handle(0, creationLog(NFL), { evm: fakeChainOf([NFL], NOW), vault, feed: echoing(NOW, quota), push: endpoint(push), writeError: null }) });
+		}
 	}
 	return out;
 }
 
 describe("never: a key, a keyed URL or a feed's words in a row, the push or a line", () => {
 	test("canaries in every key and every feed answer's headers, a quota header carrying the spare's key, three pushes: no canary in any row, the push's body, URL or built headers, or any line", () => {
-		for (const { what, run } of runs(VAULT.SEAT4_KEY)) {
+		for (const { what, pushKey, run } of runs(SEAT_KEYS.SEAT4_KEY)) {
 			const rows = rowsOf(run);
 			expect({ what, rows: rows.length, pushes: run.pushes.length }).toEqual({ what, rows: 4, pushes: 1 });
 			const push = run.pushes[0];
@@ -131,19 +144,19 @@ describe("never: a key, a keyed URL or a feed's words in a row, the push or a li
 				named: ["RUN_LINE_KEY"],
 				url: "https://db.example.test/rest/v1/run_lines?on_conflict=run_key,seat",
 			});
-			expect({ what, filled: push.filled.Authorization, apikey: push.filled.apikey }).toEqual({ what, filled: `Bearer ${PUSH_KEY}`, apikey: CONFIG.runLinePublishableKey });
+			expect({ what, filled: push.filled.Authorization, apikey: push.filled.apikey }).toEqual({ what, filled: `Bearer ${pushKey}`, apikey: CONFIG.runLinePublishableKey });
 			const elsewhere = Object.entries(push.filled).filter(([k]) => k !== "Authorization").map(([, v]) => v).join(" ");
 			expect({ what, elsewhere: elsewhere.includes("REVIEW_PUSH_CANARY") }).toEqual({ what, elsewhere: false });
 		}
 	});
 
 	test("the control: a whole-number quota header is the spare's sample, and the feeds' requests did carry their keys, the header seats as the enclave's stand-ins", () => {
-		const { run } = runs("412")[0];
+		const { run } = runs("412", [PUSH_KEYS[0]])[0];
 		expect(rowsOf(run)[3]).toMatchObject({ seat: 4, requests: 1, quota: [412], remaining: 412 });
 		const header = run.feeds.filter((f) => f.seat !== 4).flatMap((f) => Object.values(f.headers));
 		expect(header.filter((v) => /^\{\{\.SEAT[123]_KEY\}\}$/.test(v)).length).toBeGreaterThan(0);
 		expect(header.some((v) => v.includes("REVIEW_SEAT"))).toBe(false);
-		expect(run.feeds.filter((f) => f.seat === 4).every((f) => f.url.includes(VAULT.SEAT4_KEY))).toBe(true);
+		expect(run.feeds.filter((f) => f.seat === 4).every((f) => f.url.includes(SEAT_KEYS.SEAT4_KEY))).toBe(true);
 	});
 
 	test("the config takes the project's publishable key and nothing else, and a route without a query, a user or a remote http", () => {

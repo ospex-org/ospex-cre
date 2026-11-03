@@ -116,14 +116,13 @@ function executionOf(runtime: Runtime<Config>): Execution {
 	return execution(rawOf(runtime), () => runtime.now().getTime());
 }
 
-/** Where the execution's record goes: its key and kind, the route from the config, the log, and the secrets kept off a line. */
-function deliveryOf(runtime: Runtime<Config>, runKey: string | null, kind: Kind, secrets: readonly string[]): Delivery {
+/** Where the execution's record goes: its key and kind, the route from the config, and the log. */
+function deliveryOf(runtime: Runtime<Config>, runKey: string | null, kind: Kind): Delivery {
 	return {
 		runKey,
 		kind,
 		route: { url: runtime.config.runLineUrl, publishableKey: runtime.config.runLinePublishableKey },
 		log: (line) => runtime.log(line),
-		secrets,
 	};
 }
 
@@ -165,7 +164,7 @@ const onGameCreated = (runtime: Runtime<Config>, log: EVMLog): string => {
 	const client = new cre.capabilities.EVMClient(resolveChainSelector(runtime.config.chainSelectorName, runtime.config.chainId));
 	const keys = keysFor(queryKeysOf(runtime));
 	const ex = executionOf(runtime);
-	const delivery = deliveryOf(runtime, keyFrom(() => creationKey(bytesToHex(log.txHash), log.index)), "creation", secretsOf(keys));
+	const delivery = deliveryOf(runtime, keyFrom(() => creationKey(bytesToHex(log.txHash), log.index)), "creation");
 	// The run, then its record: the rows to the log and the one push, which only follows the run's result or its error.
 	return recorded(delivery, ex, () => {
 		let run;
@@ -213,7 +212,7 @@ const onTick =
 		// The execution's feed transport, counted and remembered; the tick counts and remembers again with
 		// its own count, which is the one that holds a probe or a full read back.
 		const ex = executionOf(runtime);
-		const delivery = deliveryOf(runtime, keyFrom(() => tickKey(index, scheduled)), "tick", secretsOf(keys));
+		const delivery = deliveryOf(runtime, keyFrom(() => tickKey(index, scheduled)), "tick");
 		return recorded(delivery, ex, () => {
 			const tick = runTick({
 				evm: evmOf(runtime, client),

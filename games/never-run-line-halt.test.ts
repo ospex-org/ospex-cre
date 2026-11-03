@@ -10,7 +10,7 @@
 //
 // The breaks that turn this red, each applied once and restored:
 //   runline.ts, pushOnce: the push's failure let through,
-//     return `run-line push: no answer: ${said(e, d.secrets)}`;
+//     return `run-line push: no answer: ${causeOf(e)}`;
 //     ->  throw e;
 //   with which an unreachable or hanging endpoint makes the handler throw where it returned;
 //   runline.ts, pushRequest: the cap dropped,
@@ -61,8 +61,8 @@ function endpoint(mode: Mode): World["push"] {
 const LINE: Readonly<Record<Mode, string>> = {
 	accepted: "run-line push: http 201",
 	refused: "run-line push: http 401 PGRST301",
-	unreachable: "run-line push: no answer: dial tcp 203.0.113.9:443: connect: connection refused",
-	hanging: "run-line push: no answer: context deadline exceeded after 5s",
+	unreachable: "run-line push: no answer: connection refused",
+	hanging: "run-line push: no answer: timed out",
 };
 
 const SIXERS: ChainGame = { ...chainOf("nba final, read after the game"), id: "1" };

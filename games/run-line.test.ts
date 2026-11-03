@@ -21,7 +21,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type { ChainGame } from "../scoring/src/chain";
-import { isCut } from "../scoring/src/run";
+import { Cut, isCut } from "../scoring/src/run";
 import { seatRow } from "../scoring/src/table";
 import type { HttpRequest, HttpResponse, Seat } from "../scoring/src/types";
 import { LATE, NOW } from "../scoring/test/cases";
@@ -124,7 +124,7 @@ function creation(game: ChainGame, now: number, feed: (req: HttpRequest) => Http
 		events.push("write");
 		return writer.write(r);
 	};
-	const d: Delivery = { runKey: CREATION_KEY, kind: "creation", route: ROUTE, log: (l) => logs.push(l), secrets: [] };
+	const d: Delivery = { runKey: CREATION_KEY, kind: "creation", route: ROUTE, log: (l) => logs.push(l) };
 	const run = recorded(d, ex, () => runGame({ evm: fakeChain(game, now), games: GAMES, payout: PAYOUT, keys, send: ex.feeds, write, observe: ex.record }, game, [REPORTER]));
 	return { run, logs, rows: rowsOf(logs), raw, events, written: writer.written };
 }
@@ -140,7 +140,7 @@ function tickOf(games: readonly ChainGame[], now: number, feed: (req: HttpReques
 		events.push("write");
 		return writer.write(r);
 	};
-	const d: Delivery = { runKey: TICK_KEY, kind: "tick", route: ROUTE, log: (l) => logs.push(l), secrets: [] };
+	const d: Delivery = { runKey: TICK_KEY, kind: "tick", route: ROUTE, log: (l) => logs.push(l) };
 	const result = recorded(d, ex, () =>
 		runTick({ evm: fakeChainOf(games, now), games: GAMES, payout: PAYOUT, keys: KEYS, send: ex.feeds, write, observe: ex.record, period: PERIOD, shard: { index: 0, count: 1 }, ...o }),
 	);
@@ -292,7 +292,7 @@ describe("the run-line: the card's done list", () => {
 		ex.feeds(feed(3));
 		expect(raw.sent.length).toBe(14);
 		const logs: string[] = [];
-		deliver({ runKey: TICK_KEY, kind: "tick", route: ROUTE, log: (l) => logs.push(l), secrets: [] }, ex);
+		deliver({ runKey: TICK_KEY, kind: "tick", route: ROUTE, log: (l) => logs.push(l) }, ex);
 		expect([raw.sent.length, isPush(raw.sent[14]), ex.sent(), logs.at(-1)]).toEqual([15, true, 15, "run-line push: http 201"]);
 		expect(rowsOf(logs)[0]).toMatchObject({ seat: 1, requests: 14 });
 		let sixteenth: unknown = null;
@@ -383,7 +383,7 @@ describe("the run-line: what the rows rest on", () => {
 		const ex = execution(raw.send, ticking());
 		ex.feeds({ method: "GET", url: `https://${seatRow(1).host}/a`, headers: {} });
 		const logs: string[] = [];
-		deliver({ runKey: null, kind: "tick", route: ROUTE, log: (l) => logs.push(l), secrets: [] }, ex);
+		deliver({ runKey: null, kind: "tick", route: ROUTE, log: (l) => logs.push(l) }, ex);
 		expect([rowsOf(logs).length, logs.at(-1), raw.sent.filter(isPush).length]).toEqual([4, "run-line push: not sent: the trigger gave no run key", 0]);
 	});
 
@@ -402,6 +402,45 @@ describe("the run-line: what the rows rest on", () => {
 		const back = [500, 400, 400, Number.NaN, 10, 20];
 		let j = 0;
 		expect(run(() => back[j++]).row.elapsed_ms).toEqual([null, null, 10]);
+	});
+
+	test("a push with no answer: its line names the cause from a fixed list and never the failure's words; a refused push its status and the database's code, nothing else of the body", () => {
+		const line = (fail: () => never): string => {
+			const raw = rawOf(() => ({ status: 200, body: "[]" }), { push: fail });
+			const ex = execution(raw.send, ticking());
+			ex.feeds({ method: "GET", url: `https://${seatRow(1).host}/c`, headers: {} });
+			const logs: string[] = [];
+			deliver({ runKey: TICK_KEY, kind: "tick", route: ROUTE, log: (l) => logs.push(l) }, ex);
+			return logs.at(-1) as string;
+		};
+		const WORDS = "REVIEW_WORDS_CANARY https://db.example.test/?apikey=x Bearer abc";
+		const causes: [string, string][] = [
+			[`Post "${WORDS}": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`, "timed out"],
+			[`dial tcp ${WORDS}: connect: connection refused`, "connection refused"],
+			[`read: connection reset by peer ${WORDS}`, "connection dropped"],
+			[`dial tcp: lookup ${WORDS}: no such host`, "host not found"],
+			[`tls: failed to verify certificate ${WORDS}`, "tls"],
+			[`something else entirely ${WORDS}`, "other"],
+		];
+		for (const [message, cause] of causes) {
+			const l = line(() => {
+				throw new Error(message);
+			});
+			expect({ cause, l }).toEqual({ cause, l: `run-line push: no answer: ${cause}` });
+		}
+		expect(line(() => { throw new Cut("the run's 15 requests are used"); })).toBe("run-line push: no answer: the count is used");
+		const refused = (status: number, body: string): string => {
+			const raw = rawOf(() => ({ status: 200, body: "[]" }), { push: () => ({ status, body, headers: {} }) });
+			const ex = execution(raw.send, ticking());
+			ex.feeds({ method: "GET", url: `https://${seatRow(1).host}/c`, headers: {} });
+			const logs: string[] = [];
+			deliver({ runKey: TICK_KEY, kind: "tick", route: ROUTE, log: (l) => logs.push(l) }, ex);
+			return logs.at(-1) as string;
+		};
+		expect(refused(401, JSON.stringify({ code: "PGRST301", message: WORDS }))).toBe("run-line push: http 401 PGRST301");
+		expect(refused(409, JSON.stringify({ code: "23505", details: WORDS }))).toBe("run-line push: http 409 23505");
+		expect(refused(400, JSON.stringify({ code: WORDS }))).toBe("run-line push: http 400");
+		expect(refused(502, WORDS)).toBe("run-line push: http 502");
 	});
 
 	test("a request that raises is a request: its row counts it, with a null status, and the reader reads the seat silent", () => {

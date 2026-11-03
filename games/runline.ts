@@ -29,8 +29,8 @@
 // name and the execution's kind. The push's own key is a vault secret, which the enclave fills into the
 // push's one header; the workflow never holds it.
 
-import { cleanLine } from "../scoring/src/line";
 import type { Observer, ReadOutcome } from "../scoring/src/observe";
+import { isCut } from "../scoring/src/run";
 import { SEATS, SPARE } from "../scoring/src/table";
 import type { HttpRequest, HttpResponse, Seat } from "../scoring/src/types";
 import { FEED_REQUESTS, REQUESTS_PER_EXECUTION, counted, memoized } from "./lib";
@@ -298,26 +298,30 @@ export function pushRequest(rows: readonly Row[], route: Route): Sent {
 	};
 }
 
-/** What one execution's record needs to be written: its key and kind, the route, the log, and the secrets to keep off a line. */
+/** What one execution's record needs to be written: its key and kind, the route, and the log. */
 export interface Delivery {
 	readonly runKey: string | null;
 	readonly kind: Kind;
 	readonly route: Route;
 	readonly log: (line: string) => void;
-	/** The configured secret values (scoring/src/line.ts, secretsOf), redacted from the push's line. */
-	readonly secrets: readonly string[];
 }
 
-const JWT = /eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g;
-const BEARER = /\b(Bearer)\s+[^\s"',;]+/gi;
-const SECRET_KEY = /\bsb_secret_[A-Za-z0-9_-]+/g;
-const SAID = 160;
+/**
+ * Why a push had no answer, in this file's own words: the failure's text is matched against a fixed
+ * list and never written, so nothing it carries (a URL, a header the platform echoed) reaches a line.
+ */
+const CAUSES: readonly (readonly [RegExp, string])[] = [
+	[/deadline exceeded|time ?out|timed out/i, "timed out"],
+	[/connection refused/i, "connection refused"],
+	[/connection reset|broken pipe|EOF/i, "connection dropped"],
+	[/no such host|name resolution|lookup/i, "host not found"],
+	[/tls|certificate|x509/i, "tls"],
+];
 
-/** What a failed push said, for its line: the configured secrets, anything shaped like a token and a bearer's value redacted, cut short. */
-function said(e: unknown, secrets: readonly string[]): string {
+function causeOf(e: unknown): string {
+	if (isCut(e)) return "the count is used";
 	const message = e instanceof Error ? e.message : String(e);
-	const text = cleanLine(message, secrets).replace(JWT, "[redacted]").replace(BEARER, "$1 [redacted]").replace(SECRET_KEY, "[redacted]").replace(/\s+/g, " ").trim();
-	return text.length > SAID ? `${text.slice(0, SAID)}...` : text;
+	return CAUSES.find(([pattern]) => pattern.test(message))?.[1] ?? "other";
 }
 
 const CODE = /^(PGRST[0-9]{3}|[0-9A-Z]{5})$/;
@@ -332,13 +336,16 @@ function codeOf(body: string): string {
 	}
 }
 
-/** The one push, and its line: the status the database answered, or that none came. It never throws. */
+/**
+ * The one push, and its line: the status the database answered with its error code, or that none came
+ * and why, from the fixed list. It never throws.
+ */
 function pushOnce(push: (req: Sent) => HttpResponse, rows: readonly Row[], d: Delivery): string {
 	let res: HttpResponse;
 	try {
 		res = push(pushRequest(rows, d.route));
 	} catch (e) {
-		return `run-line push: no answer: ${said(e, d.secrets)}`;
+		return `run-line push: no answer: ${causeOf(e)}`;
 	}
 	return `run-line push: http ${res.status}${codeOf(res.body)}`;
 }
