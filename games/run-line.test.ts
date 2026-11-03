@@ -130,7 +130,7 @@ function creation(game: ChainGame, now: number, feed: (req: HttpRequest) => Http
 }
 
 /** A tick through the execution's transports, its record delivered. */
-function tickOf(games: readonly ChainGame[], now: number, feed: (req: HttpRequest) => HttpResponse, o: { readsLimit?: number; requestsLimit?: number } = {}) {
+function tickOf(games: readonly ChainGame[], now: number, feed: (req: HttpRequest) => HttpResponse, o: { readsLimit?: number; requestsLimit?: number; keys?: ReturnType<typeof keysFor> } = {}) {
 	const events: string[] = [];
 	const raw = rawOf(feed, { events });
 	const ex = execution(raw.send, ticking());
@@ -327,6 +327,59 @@ describe("the run-line: the card's done list", () => {
 		// Given the platform's whole fifteen, the same final reads: the fourteen is what held it.
 		const whole = tickOf(games, at, seat3(ninth), { readsLimit: 100, requestsLimit: 15 });
 		expect(whole.result.fullRead?.gameId).toBe(order[8]);
+	});
+
+	test("3. a probe that asks nothing: the spare closed past its retention, or without its key, is the spare's skip, beside another game's probe that asks", () => {
+		// A later tick of the hour, 67 hours and more after the first game's start: the spare, which a game
+		// without a usable seat 3 hint is probed at, keeps 66 hours. The second game started three hours
+		// before and is probed at seat 3 by its hint, which answers that it is still in play.
+		const start = SIXERS.start as number;
+		const base = start + 67 * 3_600;
+		const at = base - (base % 3_600) + 3_600 + 4 * PERIOD + 10;
+		const inPlay = (req: HttpRequest): HttpResponse => {
+			const m = /\/results\/([0-9a-f-]+)$/.exec(req.url);
+			return { status: 200, body: m === null ? "[]" : JSON.stringify([{ ID: m[1], EventID: m[1], OddType: "Game", Final: false, FinalType: "NotFinished", HomeScore: 50, AwayScore: 48 }]) };
+		};
+		const asking: ChainGame = { ...SIXERS, id: "2", start: at - 3 * 3_600, date: at - 3 * 3_600 };
+		const closed: ChainGame = { ...SIXERS, id: "1", hints: [], status: "disputed", dispute: { at: start + 7_200, records: [SIXERS.startReadings ?? []] } };
+		const c = tickOf([closed, asking], at, inPlay);
+		expect([c.result.probes.map((p) => p.seat), c.result.lines]).toEqual([[3], ["game 1: seat 4 is closed, not probed"]]);
+		expect(counts(c.rows)).toEqual([
+			{ seat: 1, requests: 0, answered: 0, silent: 0, skipped: 0 },
+			{ seat: 2, requests: 0, answered: 0, silent: 0, skipped: 0 },
+			{ seat: 3, requests: 1, answered: 1, silent: 0, skipped: 0 },
+			{ seat: 4, requests: 0, answered: 0, silent: 0, skipped: 1 },
+		]);
+		// The spare without its key: the same skip, the same game beside it.
+		const keyless: ChainGame = { ...SIXERS, id: "1", hints: [], start: at - 3 * 3_600, date: at - 3 * 3_600 };
+		const k = tickOf([keyless, asking], at, inPlay, { keys: keysFor({}) });
+		expect(k.result.lines).toEqual(["game 1: seat 4 has no key, not probed"]);
+		expect(counts(k.rows)[3]).toEqual({ seat: 4, requests: 0, answered: 0, silent: 0, skipped: 1 });
+	});
+
+	test("3. a probe the count cuts: the spare's read behind an id that answered nothing is its skip, the cut still raised, the rows still logged and pushed", () => {
+		// The spare probed by its id with one request left: the id answers nothing, so the reader asks the
+		// slate behind it, and the count refuses that second request. The tick's own result is unchanged
+		// by the record: the cut is raised out of it, as it was before the record existed.
+		const start = SIXERS.start as number;
+		const base = start + 3 * 3_600;
+		const at = base - (base % 3_600) + 3_600 + 4 * PERIOD + 10;
+		// The spare's own id for the game, as the saved case records it; the case's hints carry seat 3's alone.
+		const game: ChainGame = { ...SIXERS, hints: [{ seat: 4, id: "110e33c79c5ec8c0377702aff685f83b" }], start: at - 3 * 3_600, date: at - 3 * 3_600 };
+		const raw = rawOf(() => ({ status: 200, body: "[]" }));
+		const ex = execution(raw.send, ticking());
+		const logs: string[] = [];
+		let thrown: unknown = null;
+		try {
+			recorded({ runKey: TICK_KEY, kind: "tick", route: ROUTE, log: (l) => logs.push(l) }, ex, () =>
+				runTick({ evm: fakeChainOf([game], at), games: GAMES, payout: PAYOUT, keys: KEYS, send: ex.feeds, write: recordingWriter().write, observe: ex.record, period: PERIOD, shard: { index: 0, count: 1 }, requestsLimit: 1 }),
+			);
+		} catch (e) {
+			thrown = e;
+		}
+		expect([isCut(thrown), (thrown as Error).message]).toEqual([true, "the run's 1 requests are used"]);
+		expect(counts(rowsOf(logs))[3]).toEqual({ seat: 4, requests: 1, answered: 0, silent: 0, skipped: 1 });
+		expect([raw.sent.filter(isPush).length, logs.at(-1)]).toEqual([1, "run-line push: http 201"]);
 	});
 
 	test("9. the batch: one POST of every row as one JSON array, to the table's URL with the key pair to skip on, its four headers and its time cap, the key a vault stand-in", () => {
