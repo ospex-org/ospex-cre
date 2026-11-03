@@ -78,7 +78,17 @@ export const MAX_SHARDS = 9;
  * - schedule: the tick's cron; a slower tick is a config change, inside the fingerprint.
  * - shards: how many ticks run per schedule, each on its own pages of the open list, staggered inside
  *   the minute; each is one execution with its own quotas, so this is the throughput of finals.
+ * - runLineUrl: where the run-line's one push goes (runline.ts), the database's Data API URL for its
+ *   table: https, a host and `/rest/v1/<table>`, nothing after it. A loopback http URL is taken too, for
+ *   the simulation's stand-in; deployed, it reaches nothing, and the push is a gap in the record.
+ * - runLinePublishableKey: the database project's publishable key, sent as the push's `apikey` header.
+ *   It is public by design. Anything else is refused here, a secret key or any JWT among them, so no
+ *   project-wide database secret can ride in the config. The push's own key is not here: it is a vault
+ *   secret the enclave fills, and never enters the workflow.
  */
+export const RUN_LINE_URL = /^(https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+|http:\/\/(127\.0\.0\.1|localhost):[0-9]{1,5})\/rest\/v1\/[a-z_][a-z0-9_]{0,62}$/;
+export const PUBLISHABLE_KEY = /^sb_publishable_[A-Za-z0-9_-]{8,}$/;
+
 export const configSchema = z
 	.object({
 		receiverAddress: filledAddress,
@@ -90,6 +100,8 @@ export const configSchema = z
 		payoutAddress: filledAddress,
 		schedule: z.string().regex(SCHEDULE, "a cron at a whole number of minutes: 0 */N * * * *").refine((s) => 60 % periodMinutes(s) === 0, "the minutes must divide the hour"),
 		shards: z.number().int().min(1).max(MAX_SHARDS),
+		runLineUrl: z.string().regex(RUN_LINE_URL, "the Data API URL of the run-line's table: https://<host>/rest/v1/<table>"),
+		runLinePublishableKey: z.string().regex(PUBLISHABLE_KEY, "the project's publishable key, and nothing else"),
 	})
 	.strict()
 	.superRefine((c, ctx) => {
@@ -142,6 +154,14 @@ export function shardScheduleOf(schedule: string, index: number, shards: number)
  */
 export const READS_PER_EXECUTION = 15;
 export const REQUESTS_PER_EXECUTION = 15;
+
+/**
+ * The requests an execution keeps for its run-line (runline.ts): one push, after the report is written,
+ * through the same count of 15. The feeds get the rest, in the transport's count and in the tick's
+ * admission alike, so the push is the reserved fifteenth request and never a sixteenth.
+ */
+export const RUN_LINE_REQUESTS = 1;
+export const FEED_REQUESTS = REQUESTS_PER_EXECUTION - RUN_LINE_REQUESTS;
 
 /**
  * The most requests one full read may send, from the readers' own reads: each reader asks for the one
@@ -601,7 +621,7 @@ export function memoized(send: (req: HttpRequest) => HttpResponse): (req: HttpRe
  * nothing. A full read is started only when its worst case fits the count (requestsFor), so the cut
  * is the backstop, not the plan.
  */
-export function counted(send: (req: HttpRequest) => HttpResponse, limit: number): { send: (req: HttpRequest) => HttpResponse; used: () => number } {
+export function counted<Q = HttpRequest, R = HttpResponse>(send: (req: Q) => R, limit: number): { send: (req: Q) => R; used: () => number } {
 	let used = 0;
 	return {
 		used: () => used,

@@ -292,8 +292,9 @@ describe("the worst case is the readers' own: one game, one request per seat", (
 	test("a feed that pages past the assumption: the tick's count cuts the run, nothing is written, and the line says cut", () => {
 		// One game, final at seat 3, created without the spare's id. Seat 1 answers the two teams' games
 		// with a cursor behind every page, so its reader pages to the program's bound of twelve: the probe
-		// (1), seat 1 (12) and seat 2 (2) are the count's fifteen, and the spare's request is the cut. The
-		// control: one page, and the run ends with its decision, nothing cut.
+		// (1), seat 1 (12) and seat 2's first team (1) are the feeds' fourteen (the fifteenth is the
+		// run-line's push), and seat 2's second request is the cut. The control: one page, and the run ends
+		// with its decision, nothing cut.
 		const [home, away] = teamsOf("nba");
 		const listed: Listed = { home, away, time: START, final: { home: 114, away: 106 } };
 		const game = chainGameOf("nba", listed, {});
@@ -306,9 +307,9 @@ describe("the worst case is the readers' own: one game, one request per seat", (
 		};
 		const cut = run(12);
 		expect(cut.result.probes.map((p) => [p.seat, p.final])).toEqual([[3, true]]);
-		expect(cut.result.fullRead).toMatchObject({ gameId: "1", why: "final at seat 3", run: null, error: "the run's 15 requests are used", cut: true });
-		expect(cut.result.lines).toContain("full read, final at seat 3: game 1 cut: the run's 15 requests are used");
-		expect([cut.writer.written.length, cut.result.requests, sends(cut.feed.sent)]).toEqual([0, 15, [MAX_REQUESTS, 2, 1, 0]]);
+		expect(cut.result.fullRead).toMatchObject({ gameId: "1", why: "final at seat 3", run: null, error: "the run's 14 requests are used", cut: true });
+		expect(cut.result.lines).toContain("full read, final at seat 3: game 1 cut: the run's 14 requests are used");
+		expect([cut.writer.written.length, cut.result.requests, sends(cut.feed.sent)]).toEqual([0, 14, [MAX_REQUESTS, 1, 1, 0]]);
 		const whole = run(1);
 		expect([whole.result.fullRead?.cut, whole.result.fullRead?.error, whole.result.requests, sends(whole.feed.sent)]).toEqual([false, null, 5, [1, 2, 1, 1]]);
 	});

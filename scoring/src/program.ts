@@ -29,11 +29,16 @@
 // fetch). A transport that throws makes that seat silent, never the run's decision, with one
 // exception: a cut (run.ts, Cut), the caller's own count of requests used up, is raised through the
 // run, which then decides nothing and builds no report.
+//
+// A caller may hand in an observer (observe.ts), told how each read of a seat the run reaches ended:
+// answered, silent or skipped. It is told beside the run and never asked anything, and a fault in it is
+// swallowed, so nothing it does reaches a reading, the decision or the report.
 
 import { READING_KIND, type ChainGame, type Decision, type Report, type ReportReading } from "./chain";
 import { readerFor, seatsFor } from "./index";
 import { keyFor, type Keys } from "./keys";
 import { cleanLine, secretsOf } from "./line";
+import { noter, readOutcomeOf, type Observer, type ReadOutcome } from "./observe";
 import { checkBoard, type BoardCheck, type BoardRun } from "./readers/board3";
 import { hintOf } from "./readers/seat3";
 import { toReport } from "./report";
@@ -48,6 +53,9 @@ import type { Window } from "./window";
 type Job = { readonly kind: "read"; readonly seat: Seat; readonly run: ReaderRun } | { readonly kind: "board"; readonly run: BoardRun };
 type Done = Reading | BoardCheck;
 type Plan = Generator<Job, Decision, Done>;
+
+/** Tells the caller's observer how one read of a seat ended (observe.ts); never throws. */
+type Note = (seat: Seat, outcome: ReadOutcome) => void;
 
 /** The key of every seat the run may ask, once each is known to be there. */
 type Held = Readonly<Partial<Record<Seat, string>>>;
@@ -148,7 +156,7 @@ function mayAsk(game: ChainGame, seat: Seat, now: number): boolean {
 	return notAsked(seat, game.start, now, silentForGame(game), day7At) === null;
 }
 
-function* plan(game: ChainGame, keys: Keys, now: number): Plan {
+function* plan(game: ChainGame, keys: Keys, now: number, note: Note): Plan {
 	if (leagueRow(game.league) === null) return nothing("league not offered");
 	if (ENDED.has(game.status)) return nothing("the game has ended");
 	if (!wholeSeconds(game.date) || !wholeSeconds(game.n) || !wholeSeconds(game.day7) || !wholeSeconds(now)) {
@@ -157,9 +165,12 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
 	const seats = seatsFor(game.league);
 	// A seat this run never asks needs no key: its key can hide nothing, since it is never read.
 	const k = held(keys, seats.filter((s) => mayAsk(game, s, now)));
-	if (typeof k === "number") return nothing(`seat ${k} has no key`);
+	if (typeof k === "number") {
+		note(k, "skipped");
+		return nothing(`seat ${k} has no key`);
+	}
 
-	if (game.status === "unverified") return yield* verifying(game, k, now);
+	if (game.status === "unverified") return yield* verifying(game, k, now, note);
 
 	const start = game.start;
 	if (start === null || !wholeSeconds(start)) return nothing("no start on chain");
@@ -170,7 +181,7 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
 
 	if (game.status === "verified") {
 		if (now < start) return nothing("before the start");
-		const readings = yield* readAll(game, start, k, now, (s) => notAsked(s, start, now, down, null));
+		const readings = yield* readAll(game, start, k, now, (s) => notAsked(s, start, now, down, null), note);
 		return decideVerified(readings, countingFor(down), now < start + game.n, seats, w);
 	}
 
@@ -180,7 +191,7 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
 	if (record === null || !wholeSeconds(record.at)) return nothing("no dispute record on chain");
 	if (record.records.length === 0 || !record.records.every((r) => inSeatOrder(r, seats))) return nothing("no dispute record on chain");
 	const day7At = record.at + game.day7;
-	const fresh = yield* readAll(game, start, k, now, (s) => notAsked(s, start, now, down, day7At));
+	const fresh = yield* readAll(game, start, k, now, (s) => notAsked(s, start, now, down, day7At), note);
 	const recorded = lastRecorded(record.records, seats);
 	return decideDisputed(fresh, recorded, countingFor(down), now < start + game.n, now >= day7At, seats, down, w);
 }
@@ -192,12 +203,13 @@ function* plan(game: ChainGame, keys: Keys, now: number): Plan {
  * created without a hint, so a final it might give for a hint that failed verification can never
  * count; and a closed seat.
  */
-function* readAll(game: ChainGame, start: number, keys: Held, now: number, skip: (seat: Seat) => string | null): Generator<Job, Reading[], Done> {
+function* readAll(game: ChainGame, start: number, keys: Held, now: number, skip: (seat: Seat) => string | null, note: Note): Generator<Job, Reading[], Done> {
 	const g: Game = { league: game.league, home: game.home, away: game.away, start, n: game.n, hints: game.hints };
 	const out: Reading[] = [];
 	for (const seat of seatsFor(game.league)) {
 		const why = skip(seat);
 		if (why !== null) {
+			note(seat, "skipped");
 			out.push(clean(seat, why));
 			continue;
 		}
@@ -217,7 +229,7 @@ function* readAll(game: ChainGame, start: number, keys: Held, now: number, skip:
  * is read again as scoring's first run will read it, and confirmStart writes the start only if that
  * read agrees.
  */
-function* verifying(game: ChainGame, keys: Held, now: number): Plan {
+function* verifying(game: ChainGame, keys: Held, now: number, note: Note): Plan {
 	// The range the games set accepts a start in: [date - START_BOUND, date + START_BOUND], both ends in.
 	const range = { league: game.league, home: game.home, away: game.away, start: game.date - START_BOUND, n: 2 * START_BOUND + 1 };
 	const byTeam = function* (seat: Seat, hints: Game["hints"]): Generator<Job, Reading, Done> {
@@ -227,8 +239,10 @@ function* verifying(game: ChainGame, keys: Held, now: number): Plan {
 	const r2 = yield* byTeam(2, []);
 	let board: BoardCheck;
 	const hint = hintOf(game.hints);
-	if ("none" in hint) board = { kind: "fails", why: hint.none };
-	else board = (yield { kind: "board", run: checkBoard({ game: { ...range, hints: game.hints }, now, key: keyOf(keys, 3) }) }) as BoardCheck;
+	if ("none" in hint) {
+		note(3, "skipped");
+		board = { kind: "fails", why: hint.none };
+	} else board = (yield { kind: "board", run: checkBoard({ game: { ...range, hints: game.hints }, now, key: keyOf(keys, 3) }) }) as BoardCheck;
 	// The board drops a finished game: before a hint missing from it stands seat 3 down, seat 3's
 	// result for the hint says whether the game is already over (verify.ts).
 	const result =
@@ -244,23 +258,29 @@ function* verifying(game: ChainGame, keys: Held, now: number): Plan {
 	// and without the date; seat 3 by its result when it counts, and not at all when it doesn't.
 	const g: Game = { league: game.league, home: game.home, away: game.away, start: chosen.start, n: game.n, hints: game.hints };
 	const down: Seat | null = chosen.readings.find((r) => r.seat === 3)?.kind === "silent" ? 3 : null;
-	const again = yield* readAll(game, chosen.start, keys, now, (s) => notAsked(s, chosen.start, now, down, null));
+	const again = yield* readAll(game, chosen.start, keys, now, (s) => notAsked(s, chosen.start, now, down, null), note);
 	return confirmStart(chosen, g, again);
 }
 
-/** The transport for one job, noting the first answer that refuses the key. */
-function watched<T extends HttpResponse | Promise<HttpResponse>>(send: (req: HttpRequest) => T): { send: (req: HttpRequest) => T; refused: () => number | null } {
+/**
+ * The transport for one job, noting the first answer that refuses the key, and how many requests the
+ * job asked (sent, or answered from the caller's memory).
+ */
+function watched<T extends HttpResponse | Promise<HttpResponse>>(send: (req: HttpRequest) => T): { send: (req: HttpRequest) => T; refused: () => number | null; asked: () => number } {
 	let refused: number | null = null;
+	let asked = 0;
 	const note = (res: HttpResponse): HttpResponse => {
 		if (refused === null && REFUSED.has(res.status)) refused = res.status;
 		return res;
 	};
 	return {
 		send: (req) => {
+			asked++;
 			const res = send(req);
 			return (res instanceof Promise ? res.then(note) : note(res)) as T;
 		},
 		refused: () => refused,
+		asked: () => asked,
 	};
 }
 
@@ -302,22 +322,39 @@ async function boardAsync(run: BoardRun, send: (req: HttpRequest) => Promise<Htt
 	return step.value;
 }
 
-/** Decides one game with a synchronous transport (the Chainlink workflow's), and builds its report. */
+/**
+ * Decides one game with a synchronous transport (the Chainlink workflow's), and builds its report. The
+ * observer, when handed in, is told how each read the run reaches ended (observe.ts): a read cut by the
+ * caller's count is skipped, a read whose answer refused the key silent, and every other read by what
+ * its reader asked and whether its reading is usable.
+ */
 export function scoreGameSync(
 	game: ChainGame,
 	keys: Keys,
 	payout: string,
 	now: number,
 	send: (req: HttpRequest) => HttpResponse,
+	observer?: Observer,
 ): Outcome {
-	const p = plan(game, keys, now);
+	const note = noter(observer);
+	const p = plan(game, keys, now, note);
 	let step = p.next(undefined as unknown as Done);
 	while (!step.done) {
 		const job = step.value;
 		const t = watched(send);
-		const done = job.kind === "read" ? runSync(job.seat, job.run, t.send) : boardSync(job.run, t.send);
+		let done: Done;
+		try {
+			done = job.kind === "read" ? runSync(job.seat, job.run, t.send) : boardSync(job.run, t.send);
+		} catch (e) {
+			if (isCut(e)) note(seatOf(job), "skipped");
+			throw e;
+		}
 		const status = t.refused();
-		if (status !== null) return refusedKey(job, status);
+		if (status !== null) {
+			note(seatOf(job), "silent");
+			return refusedKey(job, status);
+		}
+		note(seatOf(job), readOutcomeOf(t.asked(), done.kind !== "silent"));
 		step = p.next(done);
 	}
 	return outcomeOf(game, step.value, payout, keys);
@@ -331,7 +368,7 @@ export async function scoreGameAsync(
 	now: number,
 	send: (req: HttpRequest) => Promise<HttpResponse>,
 ): Promise<Outcome> {
-	const p = plan(game, keys, now);
+	const p = plan(game, keys, now, noter(undefined));
 	let step = p.next(undefined as unknown as Done);
 	while (!step.done) {
 		const job = step.value;

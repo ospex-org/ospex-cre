@@ -11,7 +11,8 @@
 // date until it leaves the list, the nearer games first, so a game created before the feeds list it
 // is verified when they do, however late, with nothing from anywhere but the chain and the feeds.
 //
-// The tick budgets the platform's quotas per execution: 15 chain reads and 15 feed requests. One full
+// The tick budgets the platform's quotas per execution: 15 chain reads and 15 requests, of which the
+// feeds get 14 and the run-line's push keeps one (lib.ts, FEED_REQUESTS). One full
 // read per tick, started only with its reads in hand and the most requests the program may send for
 // it (lib.ts, requestsFor, from the readers' own reads, one game at a time), so the count never cuts a
 // run short of the seats the program would read; probes while reads and requests remain. A full read
@@ -38,16 +39,17 @@ import { readerFor } from "../scoring/src/index";
 import { keyFor } from "../scoring/src/keys";
 import { OPEN_FOR } from "../scoring/src/rule";
 import { cleanLine, secretsOf } from "../scoring/src/line";
+import { noter, readOutcomeOf } from "../scoring/src/observe";
 import { isCut, runSync } from "../scoring/src/run";
 import type { Game, HttpRequest, HttpResponse, Reading, Seat } from "../scoring/src/types";
 import { NO_READINGS, gameOfState, placeNamed, readIdentity, readOpenGames, readReadings, readReporters, type Evm, type Identity, type OpenGame, type PlacedGame, type Readings, type Shard } from "./chain";
 import {
 	CLOCK_WINDOW,
 	EXPECTED_DURATION,
+	FEED_REQUESTS,
 	HOURLY_TICK,
 	OPEN_PAGE,
 	READS_PER_EXECUTION,
-	REQUESTS_PER_EXECUTION,
 	VERIFY_BEFORE,
 	VERIFY_NEAR,
 	counted,
@@ -62,7 +64,7 @@ export interface TickDeps extends Deps {
 	/** The seconds between two ticks, from the schedule: the hour's first tick is the one within a period of the hour. */
 	readonly period: number;
 	readonly shard: Shard;
-	/** The quotas, for a test that lowers them; the workflow takes the platform's. */
+	/** The quotas, for a test that lowers them; the workflow takes the platform's, less the run-line's push for requests. */
 	readonly readsLimit?: number;
 	readonly requestsLimit?: number;
 	/** The open list's page, for a test that shortens it; the workflow takes lib.ts's. */
@@ -190,7 +192,8 @@ export function sameVote(vote: ReportReading | undefined, r: Reading): boolean {
 /** One tick for one shard. */
 export function runTick(deps: TickDeps): TickResult {
 	const readsLimit = deps.readsLimit ?? READS_PER_EXECUTION;
-	const requestsLimit = deps.requestsLimit ?? REQUESTS_PER_EXECUTION;
+	const requestsLimit = deps.requestsLimit ?? FEED_REQUESTS;
+	const note = noter(deps.observe);
 	const lines: string[] = [];
 	// Every line through the one function before it is written (scoring/src/line.ts): the configured
 	// secret values redacted, a feed's word that is not a word marked.
@@ -339,16 +342,30 @@ export function runTick(deps: TickDeps): TickResult {
 		const seat = probeSeatFor({ hints: identity.hints, startReadings: held.startReadings.length === 0 ? null : held.startReadings });
 		const openFor = OPEN_FOR[seat];
 		if (openFor !== null && now - (row.start as number) > openFor) {
+			note(seat, "skipped");
 			lines.push(`game ${row.gameId}: seat ${seat} is closed, not probed`);
 			return;
 		}
 		const key = keyFor(deps.keys, seat);
 		if (key === null) {
+			note(seat, "skipped");
 			lines.push(`game ${row.gameId}: seat ${seat} has no key, not probed`);
 			return;
 		}
 		const game: Game = { league: identity.league, home: identity.home, away: identity.away, start: row.start as number, n: row.window, hints: identity.hints };
-		const reading = runSync(seat, readerFor(seat)({ game, now, key }), send);
+		// The probe's own reads, sent or from memory, for the run-line: a reader that asks nothing is a skip.
+		let asked = 0;
+		let reading: Reading;
+		try {
+			reading = runSync(seat, readerFor(seat)({ game, now, key }), (req) => {
+				asked++;
+				return send(req);
+			});
+		} catch (e) {
+			if (isCut(e)) note(seat, "skipped");
+			throw e;
+		}
+		note(seat, readOutcomeOf(asked, reading.kind !== "silent"));
 		let changed: boolean | null = null;
 		let read = callsForFullRead(reading);
 		if (row.status === "disputed") {

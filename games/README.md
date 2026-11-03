@@ -16,11 +16,13 @@ is in it, since those live in the program, inside the fingerprint.
 | `chain.ts` | what the workflow reads about a game, from state: a shard's pages of the games set's open list, each game's clocks, date, league and place on the shard's walk; a game's identity, its start readings and each seat's last vote, its reporters; and what the games set refuses as a payout. A page whose rows are shorter than the interface's is refused whole |
 | `run.ts` | one run for one game: decide, write; written against interfaces so a test runs it with a fake chain and saved feed answers |
 | `tick.ts` | one cron fire for one shard of the open list: the clocks, the probe at seat 3, the full read on a final or a clock, the verification on the hour's first tick, under the platform's quotas |
+| `runline.ts` | the run-line: each execution's record of every seat it asked (requests, reads answered, silent or skipped, each request's time and status, the spare's quota), its run key, the transports it sits below, and the one push of its rows to the database's table |
 | `abi/IOspexGames.json` | the games set's interface ABI as forge builds it at the commit the reads are coded to; `abi.test.ts` pins every read and the open list's row to it |
-| `*.test.ts` | `bun test`: the ABI pins, the four never-lines' wrapper halves, the chain reads, the tick, the worst case derived from the readers and the viability table (`budget.test.ts`), every game's entry within the bound on a stable 500-game list (`parity.test.ts`) |
+| `*.test.ts` | `bun test`: the ABI pins, the four never-lines' wrapper halves, the chain reads, the tick, the worst case derived from the readers and the viability table (`budget.test.ts`), every game's entry within the bound on a stable 500-game list (`parity.test.ts`), the run-line's done list (`run-line.test.ts`) and its three never-lines (`never-run-line-*.test.ts`) |
+| `stand-in-sdk.ts` | a stand-in for the CRE SDK, so a test runs `main.ts`'s own handlers with a fake chain, enclave and reporter |
 | `config.production.example.json` | the config template the reproducible build writes from; every address a placeholder |
-| `secrets.yaml` | the four seat keys' names in the vault |
-| `workflow.yaml` | the CRE target: `osgames` on the onchain registry |
+| `secrets.yaml` | the four seat keys' names in the vault, and the run-line push's key |
+| `workflow.yaml` | the CRE target: `osgames2` on the onchain registry, beside the live `osgames`, never in its place |
 | `rehearsal/` | the fork delivery: the runs delivered through the production forwarder's own bytecode on a fork of Polygon, with its record |
 
 ## What the wrapper hands the program
@@ -77,7 +79,8 @@ feeds first carry it, however late, and never skipped for good. A game whose ful
 line records the wait, and the next due game that fits takes the read the same tick. A full read
 never runs on the tick itself.
 
-**The quotas.** The platform allows a run 15 chain reads and 15 feed requests. A tick reads the header
+**The quotas.** The platform allows a run 15 chain reads and 15 requests; the feeds get 14 and the
+run-line's push keeps the fifteenth, in the transport's count and in the tick's admission alike. A tick reads the header
 and up to three pages, probes at two reads each (the identity and the readings), and runs at most one
 full read, started only with its reads in hand (six, or the four a probe left to read) and the most
 requests the program may send for it. The readers ask for one game at a time (seat 1 for the two
@@ -118,6 +121,27 @@ rehearsal reads the games set from state, re-run against it at `3fe47cb` on 30 O
 merge; the live feeds' answers to the one-game requests (seat 1 by team ids, seat 2 by team name) are
 the capture's to show, since no such answer is saved yet.
 
+## The run-line
+
+Each execution keeps a record of the seats it asked (`runline.ts`), one row per seat, and writes it
+when it asked any seat; a tick that asks nothing writes nothing. A row holds the requests actually sent
+to the seat (below the run's memory and its count: an answer from memory is not a request, and a
+request the count refuses is never sent), how each of the seat's reads ended (answered, silent, or
+skipped: the seat silent for the game, closed, without its key, a reader that asks nothing, or the count
+used up), each request's status and its time in DON time, and for the spare each request's quota header
+and the last one. A seat the execution never asked still has its row, at zero. The program tells the
+record how each read ended through an observer it never asks anything (`../scoring/src/observe.ts`).
+
+The rows go to `runtime.log`, one line each. Then, after the run, its report written or its error
+caught, one push carries them all as one JSON array to the database's Data API (`runLineUrl`, with the
+project's publishable key as `apikey` and the role's key, a vault secret the enclave fills, as the
+bearer), asking the database to skip any row whose (run key, seat) it already holds. The run key comes
+from the trigger and the workflow's name (the creation log's transaction and index, or the shard and the
+cron's scheduled time), so every node and every retry of one execution sends the same rows, and the
+table keeps them once. The push asks the enclave to give up after five seconds. It is never retried,
+and whatever it meets, the run's result stands as it was. A push that fails leaves a gap: the run key's
+rows are on the log and not in the table.
+
 ## Build and test
 
 ```bash
@@ -125,6 +149,8 @@ cd games && bun install --frozen-lockfile && bun run typecheck && bun test
 cd .. && cre workflow build ./games --target production-settings
 ```
 
-The id is rebuilt from `build/v3-osgames.json` the way `BUILD.md` describes: the spec carries the
-deploy's addresses, the owner and the hashes expected of them; nothing in the committed template is a
-real address, the spec's values are set over it.
+The live `osgames` is rebuilt from `build/v3-osgames.json` at its own commit, the way `BUILD.md`
+describes: the spec carries the deploy's addresses, the owner and the hashes expected of them; nothing
+in the committed template is a real address, the spec's values are set over it. `osgames2`, the
+workflow with the run-line, gets its own spec at its deploy, when the new reporter's address is
+predicted and the run-line's route is set.

@@ -354,6 +354,11 @@ transport, each seat's key and the payout address.
   run, and scores, posts an update, or reaches day 7 (above). A game that has ended takes nothing.
 * **What it returns:** its decision and the report ([`src/report.ts`](src/report.ts), the games
   set's `Report`, enum numbers included). A wait returns no report.
+* **What it tells.** A caller may hand the synchronous run an observer
+  ([`src/observe.ts`](src/observe.ts)), told how each read of a seat the run reaches ended:
+  answered, silent (asked, nothing usable) or skipped (reached and not asked). It is never asked
+  anything and a fault in it is swallowed, so the decision and the report are the same with it,
+  without it, and with one that throws (`test/observe.test.ts`, every saved case).
 * **What a key and the payout can do.** A key decides only whether the run can read at all. A
   seat whose key is missing, or isn't text a request carries as given (visible ASCII, no space; and
   for seat 4, whose key goes in the query, one query value as given: letters, digits and

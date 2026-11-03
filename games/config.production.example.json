@@ -7,5 +7,7 @@
   "secretNamespace": "main",
   "payoutAddress": "PAYOUT_ADDRESS_NOT_SET",
   "schedule": "0 */5 * * * *",
-  "shards": 3
+  "shards": 3,
+  "runLineUrl": "RUN_LINE_URL_NOT_SET",
+  "runLinePublishableKey": "RUN_LINE_PUBLISHABLE_KEY_NOT_SET"
 }

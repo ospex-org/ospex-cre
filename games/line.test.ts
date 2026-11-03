@@ -46,6 +46,8 @@ const CONFIG: Config = {
 	payoutAddress: PAYOUT,
 	schedule: "0 */5 * * * *",
 	shards: 1,
+	runLineUrl: "https://db.example.test/rest/v1/run_lines",
+	runLinePublishableKey: "sb_publishable_line-test-stand-in",
 };
 
 /** The vault for these tests: what the enclave fills into a header's stand-in, and the query key the run reads. */
