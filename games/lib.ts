@@ -81,13 +81,12 @@ export const MAX_SHARDS = 9;
  * - runLineUrl: where the run-line's one push goes (runline.ts), the database's Data API URL for its
  *   table: https, a host and `/rest/v1/<table>`, nothing after it. A loopback http URL is taken too, for
  *   the simulation's stand-in; deployed, it reaches nothing, and the push is a gap in the record.
- * - runLinePublishableKey: the database project's publishable key, sent as the push's `apikey` header.
- *   It is public by design. Anything else is refused here, a secret key or any JWT among them, so no
- *   project-wide database secret can ride in the config. The push's own key is not here: it is a vault
- *   secret the enclave fills, and never enters the workflow.
+ *
+ * No key is in it. The push's two keys, the role's own and the database project's publishable key, are
+ * vault secrets the enclave fills (runline.ts), so either can change without a new workflow id. The
+ * schema has no field for a key and, being strict, refuses a config that adds one.
  */
 export const RUN_LINE_URL = /^(https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+|http:\/\/(127\.0\.0\.1|localhost):[0-9]{1,5})\/rest\/v1\/[a-z_][a-z0-9_]{0,62}$/;
-export const PUBLISHABLE_KEY = /^sb_publishable_[A-Za-z0-9_-]{8,}$/;
 
 export const configSchema = z
 	.object({
@@ -101,7 +100,6 @@ export const configSchema = z
 		schedule: z.string().regex(SCHEDULE, "a cron at a whole number of minutes: 0 */N * * * *").refine((s) => 60 % periodMinutes(s) === 0, "the minutes must divide the hour"),
 		shards: z.number().int().min(1).max(MAX_SHARDS),
 		runLineUrl: z.string().regex(RUN_LINE_URL, "the Data API URL of the run-line's table: https://<host>/rest/v1/<table>"),
-		runLinePublishableKey: z.string().regex(PUBLISHABLE_KEY, "the project's publishable key, and nothing else"),
 	})
 	.strict()
 	.superRefine((c, ctx) => {

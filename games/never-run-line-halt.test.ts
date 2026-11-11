@@ -39,9 +39,8 @@ const CONFIG: Config = {
 	schedule: "0 */5 * * * *",
 	shards: 1,
 	runLineUrl: "https://db.example.test/rest/v1/run_lines",
-	runLinePublishableKey: "sb_publishable_halt-test-stand-in",
 };
-const VAULT = { SEAT1_KEY: "s1", SEAT2_KEY: "s2", SEAT3_KEY: "s3", SEAT4_KEY: "SEATKEY", RUN_LINE_KEY: "push-key-stand-in" };
+const VAULT = { SEAT1_KEY: "s1", SEAT2_KEY: "s2", SEAT3_KEY: "s3", SEAT4_KEY: "SEATKEY", RUN_LINE_KEY: "push-key-stand-in", RUN_LINE_APIKEY: "apikey-stand-in" };
 
 const sdk = await standIn(CONFIG);
 

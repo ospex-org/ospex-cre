@@ -26,8 +26,8 @@
 // the table.
 //
 // Nothing here carries a key, a URL or a feed's words: a row holds numbers, the run key, the workflow's
-// name and the execution's kind. The push's own key is a vault secret, which the enclave fills into the
-// push's one header; the workflow never holds it.
+// name and the execution's kind. The push's two keys, the role's own and the project's publishable key,
+// are vault secrets, which the enclave fills into the push's two headers; the workflow never holds either.
 
 import type { Observer, ReadOutcome } from "../scoring/src/observe";
 import { isCut } from "../scoring/src/run";
@@ -39,6 +39,8 @@ import { FEED_REQUESTS, REQUESTS_PER_EXECUTION, counted, memoized } from "./lib"
 export const WORKFLOW_NAME = "osgames2";
 /** The vault secret holding the push's key: the database role that may only add rows to the table. */
 export const RUN_LINE_SECRET = "RUN_LINE_KEY";
+/** The vault secret holding the push's `apikey`: the database project's publishable key. Public by design, and in the vault so that it can change without a new workflow id. */
+export const RUN_LINE_APIKEY_SECRET = "RUN_LINE_APIKEY";
 /** The push's time cap, as the request's own timeout. */
 export const RUN_LINE_TIMEOUT = "5s";
 /** The spare's quota header: the requests its key has left. */
@@ -48,7 +50,7 @@ export const ON_CONFLICT = "run_key,seat";
 
 export type Kind = "creation" | "tick";
 
-/** A request as the execution's transport sends it: a reader's, or the push's, which adds its timeout and the vault secret the enclave fills into its header. */
+/** A request as the execution's transport sends it: a reader's, or the push's, which adds its timeout and names the vault secret whose stand-in sits inside a header's value. */
 export interface Sent extends HttpRequest {
 	readonly timeout?: string;
 	readonly secrets?: readonly string[];
@@ -271,16 +273,18 @@ export function tickKey(shard: number, scheduled: bigint): string | null {
 
 // ──────────────────────────── The push ────────────────────────────────
 
-/** Where the push goes, from the config: the table's Data API URL and the project's publishable key. */
+/** Where the push goes, from the config: the table's Data API URL. */
 export interface Route {
 	readonly url: string;
-	readonly publishableKey: string;
 }
 
 /**
  * The push: one POST of every row as one JSON array, skipping the rows whose (run key, seat) the table
- * holds already, with nothing sent back. Its key is the vault secret's stand-in in its one header,
- * which the enclave fills; the body is the rows and nothing else.
+ * holds already, with nothing sent back. Its two keys are vault secrets' stand-ins, each in its one
+ * header, which the enclave fills: the project's publishable key whole in `apikey`, the role's key
+ * after "Bearer". The request names the role's key alone: a header that is wholly a stand-in is named
+ * to the vault by the transport (main.ts, rawOf), as a seat's is, and is not named a second time here.
+ * The body is the rows and nothing else.
  */
 export function pushRequest(rows: readonly Row[], route: Route): Sent {
 	return {
@@ -288,7 +292,7 @@ export function pushRequest(rows: readonly Row[], route: Route): Sent {
 		url: `${route.url}?on_conflict=${ON_CONFLICT}`,
 		headers: {
 			"Content-Type": "application/json",
-			apikey: route.publishableKey,
+			apikey: `{{.${RUN_LINE_APIKEY_SECRET}}}`,
 			Authorization: `Bearer {{.${RUN_LINE_SECRET}}}`,
 			Prefer: "resolution=ignore-duplicates,return=minimal",
 		},

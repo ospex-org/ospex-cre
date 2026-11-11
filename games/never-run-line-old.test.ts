@@ -43,7 +43,6 @@ const CONFIG: Config = {
 	schedule: "0 */5 * * * *",
 	shards: 1,
 	runLineUrl: "https://db.example.test/rest/v1/run_lines",
-	runLinePublishableKey: "sb_publishable_old-test-stand-in",
 };
 const sdk = await standIn(CONFIG);
 
@@ -65,7 +64,7 @@ describe("never: the old workflow retired, or a game moved", () => {
 		const t = saved(undefined, LATE);
 		const r = sdk.handle(1, tickPayload(LATE), {
 			evm: fakeChainOf([old], LATE, { approved: [REPORTER, OLD], reporters: { "1": [OLD] } }),
-			vault: { SEAT1_KEY: "s1", SEAT2_KEY: "s2", SEAT3_KEY: "s3", SEAT4_KEY: "SEATKEY", RUN_LINE_KEY: "k" },
+			vault: { SEAT1_KEY: "s1", SEAT2_KEY: "s2", SEAT3_KEY: "s3", SEAT4_KEY: "SEATKEY", RUN_LINE_KEY: "k", RUN_LINE_APIKEY: "a" },
 			feed: (_seat, req) => t.send(req),
 			push: () => ({ status: 201, body: "" }),
 			writeError: null,

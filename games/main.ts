@@ -74,9 +74,10 @@ function evmOf(runtime: Runtime<Config>, client: InstanceType<typeof cre.capabil
 // ──────────────────────────── The transport, through the enclave ──────
 
 /**
- * One request, one answer, through confidential HTTP: a header whose value is a seat's stand-in is
- * filled inside the enclave from the vault, so that key never enters the workflow, and so is the
- * push's header, by the secret its request names. The response's status, body and headers come back as
+ * One request, one answer, through confidential HTTP: a header whose value is wholly a vault secret's
+ * stand-in, a seat's key or the push's `apikey`, is named to the vault here and filled inside the
+ * enclave, so that key never enters the workflow, and so is the push's bearer, by the secret its
+ * request names. The response's status, body and headers come back as
  * they came; the readers get the status and the body (runline.ts, observed). A request already made in
  * this run is answered from memory, and the run refuses a request past its count before sending it
  * (runline.ts, execution).
@@ -121,7 +122,7 @@ function deliveryOf(runtime: Runtime<Config>, runKey: string | null, kind: Kind)
 	return {
 		runKey,
 		kind,
-		route: { url: runtime.config.runLineUrl, publishableKey: runtime.config.runLinePublishableKey },
+		route: { url: runtime.config.runLineUrl },
 		log: (line) => runtime.log(line),
 	};
 }
