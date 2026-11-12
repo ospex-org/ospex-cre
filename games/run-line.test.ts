@@ -49,7 +49,7 @@ import { GAMES, REPORTER, fakeChain, fakeChainOf, recordingWriter } from "./test
 import { runTick } from "./tick";
 
 const KEYS = keysFor({ 4: KEY });
-const ROUTE = { url: "https://db.example.test/rest/v1/run_lines", publishableKey: "sb_publishable_test-stand-in" };
+const ROUTE = { url: "https://db.example.test/rest/v1/run_lines" };
 const CREATION_KEY = `${WORKFLOW_NAME}:creation:0x${"ab".repeat(32)}:3`;
 const TICK_KEY = `${WORKFLOW_NAME}:tick:0:1793750400`;
 const PERIOD = 300;
@@ -382,7 +382,7 @@ describe("the run-line: the card's done list", () => {
 		expect([raw.sent.filter(isPush).length, logs.at(-1)]).toEqual([1, "run-line push: http 201"]);
 	});
 
-	test("9. the batch: one POST of every row as one JSON array, to the table's URL with the key pair to skip on, its four headers and its time cap, the key a vault stand-in", () => {
+	test("9. the batch: one POST of every row as one JSON array, to the table's URL with the key pair to skip on, its four headers and its time cap, its two keys vault stand-ins and the request naming the role's alone", () => {
 		const rec = recorder();
 		rec.sent(2, 9, 200, null);
 		rec.sent(4, 11, 200, 412);
@@ -395,7 +395,7 @@ describe("the run-line: the card's done list", () => {
 			url: "https://db.example.test/rest/v1/run_lines?on_conflict=run_key,seat",
 			headers: {
 				"Content-Type": "application/json",
-				apikey: "sb_publishable_test-stand-in",
+				apikey: "{{.RUN_LINE_APIKEY}}",
 				Authorization: `Bearer {{.${RUN_LINE_SECRET}}}`,
 				Prefer: "resolution=ignore-duplicates,return=minimal",
 			},

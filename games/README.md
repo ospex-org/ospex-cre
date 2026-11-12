@@ -21,7 +21,7 @@ is in it, since those live in the program, inside the fingerprint.
 | `*.test.ts` | `bun test`: the ABI pins, the four never-lines' wrapper halves, the chain reads, the tick, the worst case derived from the readers and the viability table (`budget.test.ts`), every game's entry within the bound on a stable 500-game list (`parity.test.ts`), the run-line's done list (`run-line.test.ts`) and its three never-lines (`never-run-line-*.test.ts`) |
 | `stand-in-sdk.ts` | a stand-in for the CRE SDK, so a test runs `main.ts`'s own handlers with a fake chain, enclave and reporter |
 | `config.production.example.json` | the config template the reproducible build writes from; every address a placeholder |
-| `secrets.yaml` | the four seat keys' names in the vault, and the run-line push's key |
+| `secrets.yaml` | the names in the vault of the four seat keys and of the run-line push's two keys |
 | `workflow.yaml` | the CRE target: `osgames2` on the onchain registry, beside the live `osgames`, never in its place |
 | `rehearsal/` | the fork delivery: the runs delivered through the production forwarder's own bytecode on a fork of Polygon, with its record |
 
@@ -134,8 +134,9 @@ record how each read ended through an observer it never asks anything (`../scori
 
 The rows go to `runtime.log`, one line each. Then, after the run, its report written or its error
 caught, one push carries them all as one JSON array to the database's Data API (`runLineUrl`, with the
-project's publishable key as `apikey` and the role's key, a vault secret the enclave fills, as the
-bearer), asking the database to skip any row whose (run key, seat) it already holds. The run key comes
+project's publishable key as `apikey` and the role's key as the bearer, both vault secrets the enclave
+fills, so the config holds no key), asking the database to skip any row whose (run key, seat) it
+already holds. The run key comes
 from the trigger and the workflow's name (the creation log's transaction and index, or the shard and the
 cron's scheduled time), so every node and every retry of one execution sends the same rows, and the
 table keeps them once. The push asks the enclave to give up after five seconds. It is never retried,
