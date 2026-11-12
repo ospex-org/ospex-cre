@@ -1,0 +1,21 @@
+{
+  "name": "osgames2",
+  "what": "v3's games workflow with the run-line, registered beside osgames under its own name; its id is what its own Chainlink reporter fixes. The addresses are the deploy's: the reporter as planned on 11 Nov 2026, before the registration, from the deployer's address and a salt through the CreateX factory's deployCreate3 (not from a nonce); the games set, the workflow owner, the secret owner (the same wallet) and the payout wallet are the live workflow's. The route is the run-line table's Data API URL. The committed template keeps its placeholders; this spec sets every value over it, and names the owner",
+  "workflow": "games",
+  "target": "production-settings",
+  "owner": "0x89fe160bBBe59eAF428f23F095B71E5C0EdCDfa3",
+  "configTemplate": "games/config.production.example.json",
+  "config": {
+    "receiverAddress": "0x4FAAE0DD3882F95D464BFf85441EA0946D3a6937",
+    "eventAddress": "0x1b424d0dDB5C4aa4551845898093ae8D58052fD3",
+    "secretOwner": "0x89fe160bBBe59eAF428f23F095B71E5C0EdCDfa3",
+    "payoutAddress": "0x5215b234F68159aE80699DA7C722BB949a4f399C",
+    "runLineUrl": "https://sqzvnqcghplgagktstbw.supabase.co/rest/v1/run_lines"
+  },
+  "tools": { "cre": "v1.22.0", "bun": "1.3.14" },
+  "expect": {
+    "config": "b845f3d347c4dfdbad302d79b69b59b505babd03706a65c4fd6b586780606092",
+    "binary": "5de5819df15a78af5928a6504cffe79bc3575ebb5ba824b435563ba580b2db46",
+    "id": "0x0025a0d42363aacf20a721fbb0fddd6cbe01c3a12a4489f1c9f4c42544784989"
+  }
+}
