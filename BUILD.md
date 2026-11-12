@@ -79,7 +79,7 @@ The live v3 workflow, `osgames`, is rebuilt from `build/v3-osgames.json` the sam
 that set its values (`ad8d194`, merged as `d8263c2`; main `1058f20` changed nothing under `games/` or
 `scoring/`). Later commits build `osgames2`, the workflow with the run-line, registered beside it under
 its own name: at those commits `games/workflow.yaml` names `osgames2`, so the fingerprint script refuses
-the `osgames` spec there, and `osgames2` gets its own spec at its deploy. The spec carries
+the `osgames` spec there, and `osgames2` has its own spec (the next section). The `osgames` spec carries
 the deploy's addresses (the reporter and the games set as the deploy script predicted them from the
 deployer's nonce on 31 Oct 2026, the workflow owner, the secret owner, which is the same wallet, and
 the payout wallet) and the hashes expected of them. The committed template keeps its placeholders;
@@ -114,6 +114,36 @@ on 27 Oct 2026 (Windows 11, Bun 1.3.14, CLI v1.22.0), with stand-in addresses: c
 in `AGREE` (`scoring/src/rule.ts`, `afterN` 2 to 3) moved the binary hash and the id, and restoring
 it brought both back.
 
+## The games workflow with the run-line
+
+`osgames2`, registered beside `osgames` on 12 Nov 2026, is rebuilt from `build/v3-osgames2.json` at
+the commit that adds that spec, or at a later one that changes nothing under `games/` or `scoring/`.
+The spec names the owner, so the command gives none:
+
+```bash
+(cd games && bun install --frozen-lockfile)
+bun build/fingerprint.ts build/v3-osgames2.json
+```
+
+Expected for `osgames2`:
+
+| | |
+|---|---|
+| config | `b845f3d347c4dfdbad302d79b69b59b505babd03706a65c4fd6b586780606092` (475 bytes) |
+| binary | `5de5819df15a78af5928a6504cffe79bc3575ebb5ba824b435563ba580b2db46` |
+| id | `0x0025a0d42363aacf20a721fbb0fddd6cbe01c3a12a4489f1c9f4c42544784989`, the id the registry holds |
+
+The spec sets five values over the template. The games set, the secret owner and the payout wallet
+are `osgames`'s, and so is the owner. The reporter is a second one, approved beside the first on
+12 Nov 2026: its address was planned on 11 Nov 2026, before the registration, from the deployer's
+address and a salt through the CreateX factory's `deployCreate3`, not from a nonce. The fifth value
+is the run-line's route, the table's Data API URL.
+
+This id was registered before it was published. The registry lists an id once, for the first linked
+owner that registers it, so the registration was sent from main at `1f9573c` with the spec in the
+working tree, and the spec was committed after the registry held the id. That commit changes nothing
+under `games/` or `scoring/`: the binary is `1f9573c`'s.
+
 ## CLI versions
 
 Two versions of the CRE CLI are used, each for its own commands.
@@ -143,6 +173,13 @@ Two versions of the CRE CLI are used, each for its own commands.
   310, and gives a different id. The script writes the config itself for that reason.
 * **The CLI's Brotli encoder is part of the build.** Python's Brotli (the C library 1.2.0) did not
   reproduce the compressed bytes at any quality from 0 to 11. Hash with the CLI.
+* **A deploy's usage report carries the workflow id.** On v1.22.0, signed in, `workflow deploy` sends
+  Chainlink a usage report when the command ends. The report carries the workflow id from the moment
+  the build is hashed, before anything is uploaded or registered (`cmd/workflow/deploy/deploy.go`,
+  `internal/telemetry/emitter.go`). `CRE_TELEMETRY_DISABLED=true` switches the report off, and
+  `osgames2` was registered with it set. `workflow hash` loads no sign-in and so sends no report
+  (`cmd/root.go`, `internal/telemetry/sender.go`): the fingerprint step is the same with or without
+  the switch.
 
 ## What has been checked, and where
 
@@ -158,7 +195,15 @@ On Windows 11, Bun 1.3.14, CLI v1.22.0, on 22 Oct 2026:
 On Linux, Bun 1.3.14, CLI v1.21.0, on 24 Oct 2026: one independent rebuild matched all three values
 above.
 
+On Windows 11, Bun 1.3.14, CLI v1.22.0, on 11 and 12 Nov 2026: `osgames2`'s three values, from main at
+`1f9573c` with the spec in the working tree, the tree the registration was sent from. A clean export
+of `1f9573c` gave the same binary hash under a stand-in reporter address.
+
+On Linux, Bun 1.3.14, CLI v1.22.0, on 11 Nov 2026: one independent rebuild from `1f9573c` matched
+`osgames2`'s three values.
+
 Not yet checked:
 
-* Linux with the pinned CLI v1.22.0. javy is a different binary there, and so is the CLI.
+* `osverify` on Linux with the pinned CLI v1.22.0: its Linux rebuild above used v1.21.0. javy is a
+  different binary there, and so is the CLI.
 * Any CLI after v1.22.0. A newer encoder could change the compressed bytes, and the id with them.
