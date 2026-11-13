@@ -188,7 +188,7 @@ fingerprint. The verifier reproduces the fingerprint and rehearses on a fork.
    lands at the address worked out offline. The same salt from another sender lands elsewhere. A
    creation that fails (a zero id, too little gas) leaves the address free, and the same salt then
    succeeds. The timelock's `approveReporter` is taken. A game created after it copies both
-   reporters, and a game from before keeps one. Last, the runtime code hash that the approval will
+   reporters, and a game from before keeps its own. Last, the runtime code hash that the approval will
    name is taken with the real id, on a fork whose upstream has been cut and read back as cut.
 
 **The rule.** From the moment the salt exists until the gate of step 4 passes, the salt, the planned
@@ -353,6 +353,8 @@ again with no node. The creation code hashes as the pinned build's. The node is 
 the factory's code hashes as pinned. The planned address and the proxy hold no code and have nonce
 0. The exact call's estimate is within the gas limit. The working wallet has nothing waiting. The
 priority fee is within the fee limit, and the gas limit times the fee limit is within the ceiling.
+`cast` is the build the trial copy ran with. Outside the block, the verifier holds the box's own
+lock on the working wallet for the send, and reads its ledger of attempts: none is unfinished.
 
 **The send** is one line, with the chain, the nonce just read, value 0, the gas limit and both fee
 limits on it. The gas limit is 1,000,000: the creation used 607,482 on 12 Nov 2026. The attempt is
@@ -482,7 +484,9 @@ on.
 **Stop.**
 
 * A check of the block says STOP, or the wallet answers on another chain: nothing is handed over.
-* An error from the schedule's line: type `schedule_state` before anything else.
+* An error from the schedule's line: type `schedule_state`, and look in the wallet for a request
+  still waiting, before anything else. A request left waiting can be signed later, and is then
+  sent. Two equal counts do not prove that nothing went out.
 * The execute fails because the operation is already done: someone ran it first. Make the same
   reads, and they decide. It is never a reason to schedule again, and the timelock refuses a second
   schedule of the same operation.
@@ -538,6 +542,7 @@ READY=yes
 want()   { if [ "$2" = "$3" ]; then echo "ok    $1"; else echo "STOP  $1: wanted ${3:0:90}, got ${2:0:90}"; READY=no; fi; }
 holds()  { local label="$1"; shift; if "$@" >/dev/null 2>&1; then echo "ok    $label"; else echo "STOP  $label"; READY=no; fi; }
 first()  { head -n 1 | cut -d' ' -f1; }
+cast_build() { cast --version 2>&1 | grep -o -E 'Commit SHA: [0-9a-f]+' | cut -d' ' -f3; }
 lower()  { printf '%s' "$1" | tr 'A-F' 'a-f'; }
 atmost() { "$PY" -c 'import sys; a, b = int(sys.argv[1], 0), int(sys.argv[2], 0); print("yes" if 0 <= a <= b else "no")' "$1" "$2" 2>/dev/null || echo no; }
 within() { "$PY" -c 'import sys; a, b, c = (int(x, 0) for x in sys.argv[1:4]); print("yes" if a > 0 and b > 0 and a * b <= c else "no")' "$1" "$2" "$3" 2>/dev/null || echo no; }
@@ -717,6 +722,7 @@ MAX_FEE_WEI='<the fee limit given for this send, in wei>'             # 12 Nov: 
 PRIORITY_FEE_WEI='<the priority fee given for this send, in wei>'
 CEILING_WEI='<the most this send may cost, in wei>'
 
+want 'cast is the build the trial copy ran with' "$(cast_build)" '<the commit of that cast build>'
 holds 'the checkout is clean' test -z "$(git status --porcelain 2>&1)"
 read -r CREATION_SALT < "$SALT_FILE"
 DEPLOYER_LC="$(lower "${DEPLOYER#0x}")"
@@ -794,6 +800,7 @@ MAX_FEE_WEI='<the fee limit given for this send, in wei>'
 PRIORITY_FEE_WEI='<the priority fee given for this send, in wei>'
 CEILING_WEI='<the most this send may cost, in wei>'
 
+want 'cast is the build the trial copy ran with' "$(cast_build)" '<the commit of that cast build>'
 INNER="$(cast calldata 'approveReporter(address,uint8,bytes32)' "$P" 1 "$CODE_HASH")"
 APPROVAL_SALT="$(cast keccak "$(cast abi-encode 'f(string,address)' 'approve reporter' "$P")")"
 SCHED="$(cast calldata 'schedule(address,uint256,bytes,bytes32,bytes32,uint256)' "$GAMES" 0 "$INNER" "$ZERO" "$APPROVAL_SALT" "$DELAY")"
@@ -874,6 +881,7 @@ INNER="$(cast calldata 'approveReporter(address,uint8,bytes32)' "$P" 1 "$CODE_HA
 APPROVAL_SALT="$(cast keccak "$(cast abi-encode 'f(string,address)' 'approve reporter' "$P")")"
 SCHED="$(cast calldata 'schedule(address,uint256,bytes,bytes32,bytes32,uint256)' "$GAMES" 0 "$INNER" "$ZERO" "$APPROVAL_SALT" "$DELAY")"
 EXEC="$(cast calldata 'execute(address,uint256,bytes,bytes32,bytes32)' "$GAMES" 0 "$INNER" "$ZERO" "$APPROVAL_SALT")"
+want 'cast is the build the trial copy ran with' "$(cast_build)" '<the commit of that cast build>'
 want 'the schedule call data is the one in the record (keccak)' "$(cast keccak "$SCHED" 2>&1 | first)" "$SCHED_KECCAK"
 want 'the execute call data is the one in the record (keccak)' "$(cast keccak "$EXEC" 2>&1 | first)" "$EXEC_KECCAK"
 want 'the node is on Polygon' "$(cast chain-id --rpc-url "$RPC" 2>&1 | first)" 137
