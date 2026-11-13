@@ -117,8 +117,8 @@ it brought both back.
 ## The games workflow with the run-line
 
 `osgames2`, registered beside `osgames` on 12 Nov 2026, is rebuilt from `build/v3-osgames2.json` at
-the commit that adds that spec, or at a later one that changes nothing under `games/` or `scoring/`.
-The spec names the owner, so the command gives none:
+the commit that adds that spec, or at a later one that changes no file the build reads under `games/`
+or `scoring/` (a README there is not one). The spec names the owner, so the command gives none:
 
 ```bash
 (cd games && bun install --frozen-lockfile)
@@ -143,6 +143,9 @@ This id was registered before it was published. The registry lists an id once, f
 owner that registers it, so the registration was sent from main at `1f9573c` with the spec in the
 working tree, and the spec was committed after the registry held the id. That commit changes nothing
 under `games/` or `scoring/`: the binary is `1f9573c`'s.
+
+The order that deploy ran in, step by step, and the procedure for the next version are in
+`DEPLOY.md`.
 
 ## CLI versions
 
@@ -194,6 +197,9 @@ On Windows 11, Bun 1.3.14, CLI v1.22.0, on 22 Oct 2026:
 
 On Linux, Bun 1.3.14, CLI v1.21.0, on 24 Oct 2026: one independent rebuild matched all three values
 above.
+
+On Linux, Bun 1.3.14, CLI v1.22.0, on 31 Oct 2026: one independent rebuild from main at `d8263c2`
+matched `osgames`'s three values.
 
 On Windows 11, Bun 1.3.14, CLI v1.22.0, on 11 and 12 Nov 2026: `osgames2`'s three values, from main at
 `1f9573c` with the spec in the working tree, the tree the registration was sent from. A clean export
