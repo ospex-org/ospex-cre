@@ -153,5 +153,5 @@ cd .. && cre workflow build ./games --target production-settings
 The live `osgames` is rebuilt from `build/v3-osgames.json` at its own commit, the way `BUILD.md`
 describes: the spec carries the deploy's addresses, the owner and the hashes expected of them; nothing
 in the committed template is a real address, the spec's values are set over it. `osgames2`, the
-workflow with the run-line, gets its own spec at its deploy, when the new reporter's address is
-predicted and the run-line's route is set.
+workflow with the run-line, is rebuilt from its own spec, `build/v3-osgames2.json`, written at its
+deploy on 11 and 12 Nov 2026. The order a new version is deployed in is in `../DEPLOY.md`.
