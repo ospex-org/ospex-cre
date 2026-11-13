@@ -117,8 +117,13 @@ it brought both back.
 ## The games workflow with the run-line
 
 `osgames2`, registered beside `osgames` on 12 Nov 2026, is rebuilt from `build/v3-osgames2.json` at
-the commit that adds that spec, or at a later one that changes no file the build reads under `games/`
-or `scoring/` (a README there is not one). The spec names the owner, so the command gives none:
+the commit that adds that spec, or at a later one that changes no input of the build. The inputs
+are the spec, the files the compile reads under `games/` and `scoring/`, `games/workflow.yaml` and
+the config template, `project.yaml`, `games/bun.lock` with the packages it fixes, the code under
+`build/` that writes the config and runs the hash, and the pinned tools. A commit that edits only a
+README changes none of them, and that case has been rebuilt (the last section). Any other
+later commit is compared with this list before its rebuild is called the registered one. The spec
+names the owner, so the command gives none:
 
 ```bash
 (cd games && bun install --frozen-lockfile)
@@ -207,6 +212,10 @@ of `1f9573c` gave the same binary hash under a stand-in reporter address.
 
 On Linux, Bun 1.3.14, CLI v1.22.0, on 11 Nov 2026: one independent rebuild from `1f9573c` matched
 `osgames2`'s three values.
+
+On Linux, Bun 1.3.14, CLI v1.22.0, on 13 Nov 2026: one independent rebuild matched `osgames2`'s
+three values at a commit that differs from `faf8a11` in no input of the build: under `games/` it
+changes one sentence of the README.
 
 Not yet checked:
 
